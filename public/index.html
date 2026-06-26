@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lodestone</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ====================== LOGIN ====================== -->
+  <div id="login" class="login-overlay">
+    <form id="login-form" class="login-card">
+      <div class="login-logo"><span class="diamond">◆</span> Lodestone</div>
+      <p class="login-sub">Minecraft server panel</p>
+      <input type="email" id="login-email" class="fc" placeholder="Email" autocomplete="username" />
+      <input type="password" id="login-pass" class="fc" placeholder="Password" autocomplete="current-password" />
+      <button type="submit" class="btn btn-pri">Log in</button>
+      <div id="login-error" class="login-error"></div>
+    </form>
+  </div>
+
+  <!-- ====================== APP ====================== -->
+  <div id="app" class="app hidden">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="side-logo"><span class="diamond">◆</span> Lodestone</div>
+
+      <nav class="nav">
+        <div class="nav-group">
+          <span class="nav-label">Overview</span>
+          <button class="nav-item" data-view="dashboard">
+            <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item active" data-view="servers">
+            <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1"/><circle cx="7" cy="17" r="1"/></svg>
+            <span>Servers</span>
+          </button>
+          <button class="nav-item" data-view="metrics">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 16l4-5 3 3 4-6"/></svg>
+            <span>Metrics</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-label">Operate</span>
+          <button class="nav-item" data-view="console">
+            <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
+            <span>Console</span>
+          </button>
+          <button class="nav-item" data-view="players">
+            <svg viewBox="0 0 24 24" class="ico"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 19c0-2.2-1-3.8-2.5-4.6"/></svg>
+            <span>Players</span>
+          </button>
+          <button class="nav-item" data-view="map">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>
+            <span>Map</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-label">Content</span>
+          <button class="nav-item" data-view="plugins">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M10 3v3M14 3v3M10 18v3M14 18v3M3 10h3M3 14h3M18 10h3M18 14h3"/><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+            <span>Plugins</span>
+          </button>
+          <button class="nav-item" data-view="modrinth">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+            <span>Modrinth</span>
+          </button>
+          <button class="nav-item" data-view="files">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            <span>Files</span>
+          </button>
+          <button class="nav-item" data-view="configs">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            <span>Configs</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-label">Maintenance</span>
+          <button class="nav-item" data-view="backups">
+            <svg viewBox="0 0 24 24" class="ico"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
+            <span>Backups</span>
+          </button>
+          <button class="nav-item" data-view="tasks">
+            <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span>Schedules</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-label">Settings</span>
+          <button class="nav-item" data-view="users">
+            <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>
+            <span>Users</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="side-foot">
+        <button id="btn-logout" class="btn btn-glass btn-sm">Log out</button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+
+      <!-- Top page header -->
+      <header class="ph">
+        <div class="ph-left">
+          <div id="server-select" class="server-select">
+            <button id="server-select-btn" class="server-select-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span id="server-select-label">No servers</span>
+              <svg class="server-select-arrow" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div id="server-select-menu" class="server-select-menu" role="listbox"></div>
+          </div>
+          <h1 id="page-title">Servers</h1>
+        </div>
+        <div class="ph-right">
+          <span id="status-pill" class="pill pill-offline">offline</span>
+          <button id="btn-start" class="btn btn-green btn-sm">Start</button>
+          <button id="btn-restart" class="btn btn-glass btn-sm">Restart</button>
+          <button id="btn-stop" class="btn btn-red btn-sm">Stop</button>
+        </div>
+      </header>
+
+      <!-- ===== Servers ===== -->
+      <section class="view active" data-view="servers">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Registered servers</span>
+            <div class="row-gap">
+              <button id="server-create" class="btn btn-pri btn-sm">✨ Create new</button>
+              <button id="server-add" class="btn btn-glass btn-sm">+ Register existing</button>
+            </div></div>
+          <div class="card-bd">
+            <p class="muted gap-b">The <strong>active</strong> server (highlighted) is the one Console, Players, Plugins, Configs and Backups act on.</p>
+            <div id="servers-list" class="servers-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Dashboard ===== -->
+      <section class="view" data-view="dashboard">
+
+        <!-- KPI tiles -->
+        <div class="kpi-grid">
+          <div class="kpi" id="kpi-status">
+            <div class="kpi-ico">
+              <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1"/><circle cx="7" cy="17" r="1"/></svg>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-label">Status</span>
+              <span class="kpi-val" id="dash-status">offline</span>
+              <span class="kpi-sub" id="dash-server-name">—</span>
+            </div>
+          </div>
+
+          <div class="kpi" id="kpi-players">
+            <div class="kpi-ico">
+              <svg viewBox="0 0 24 24" class="ico"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 19c0-2.2-1-3.8-2.5-4.6"/></svg>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-label">Players online</span>
+              <span class="kpi-val"><span id="stat-players">0</span><span id="stat-players-max" class="kpi-val-dim">/0</span></span>
+            </div>
+          </div>
+
+          <div class="kpi" id="kpi-tps">
+            <div class="kpi-ico">
+              <svg viewBox="0 0 24 24" class="ico"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 12l5-3"/><path d="M12 7v5"/></svg>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-label">Performance (TPS)</span>
+              <span class="kpi-val" id="stat-tps">—</span>
+            </div>
+          </div>
+
+          <div class="kpi" id="kpi-uptime">
+            <div class="kpi-ico">
+              <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-label">Uptime</span>
+              <span class="kpi-val" id="dash-uptime">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="g-dash">
+          <!-- Resources card -->
+          <div class="card">
+            <div class="card-hd"><span class="card-hd-title">Live resources</span>
+              <span class="card-hd-note">last ~5 min</span></div>
+            <div class="card-bd">
+              <div class="metric">
+                <div class="metric-top"><span>Server RAM</span><b><span id="stat-procmem">0</span> MB</b></div>
+                <canvas class="spark" id="spark-procmem"></canvas>
+              </div>
+              <div class="metric">
+                <div class="metric-top"><span>Server CPU</span><b><span id="stat-proccpu">0</span> %</b></div>
+                <canvas class="spark" id="spark-proccpu"></canvas>
+              </div>
+              <div class="metric">
+                <div class="metric-top"><span>System RAM</span><b><span id="stat-sysmem">0</span><span id="stat-sysmem-total"> / 0 GB</span></b></div>
+                <canvas class="spark" id="spark-sysmem"></canvas>
+              </div>
+              <div class="metric">
+                <div class="metric-top"><span>System CPU</span><b><span id="stat-syscpu">0</span> %</b></div>
+                <canvas class="spark" id="spark-syscpu"></canvas>
+              </div>
+              <div class="metric">
+                <div class="metric-top"><span>Disk usage</span><b><span id="stat-disk">—</span></b></div>
+                <div class="bar"><div class="bar-fill" id="disk-bar"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right column -->
+          <div class="dash-col">
+            <!-- Server info -->
+            <div class="card">
+              <div class="card-hd"><span class="card-hd-title">Server info</span></div>
+              <div class="card-bd">
+                <div class="kv"><span>Version</span><b id="info-version">—</b></div>
+                <div class="kv"><span>Jar</span><b id="info-jar">—</b></div>
+                <div class="kv"><span>Worlds</span><b id="info-worlds">—</b></div>
+                <div class="kv"><span>Folder</span><b id="info-dir" class="info-dir">—</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Metrics ===== -->
+      <section class="view" data-view="metrics">
+        <div class="metrics-toolbar">
+          <div class="seg" id="metrics-range">
+            <button class="seg-btn" data-range="hour">1h</button>
+            <button class="seg-btn active" data-range="6h">6h</button>
+            <button class="seg-btn" data-range="day">24h</button>
+            <button class="seg-btn" data-range="week">7d</button>
+          </div>
+          <span class="muted" id="metrics-note">Sampled every minute.</span>
+        </div>
+        <div class="metrics-grid">
+          <div class="card metric-card">
+            <div class="card-hd"><span class="card-hd-title">CPU</span><span class="card-hd-note" id="m-cpu-last">—</span></div>
+            <div class="card-bd"><canvas class="chart" id="chart-cpu"></canvas></div>
+          </div>
+          <div class="card metric-card">
+            <div class="card-hd"><span class="card-hd-title">Memory</span><span class="card-hd-note" id="m-mem-last">—</span></div>
+            <div class="card-bd"><canvas class="chart" id="chart-mem"></canvas></div>
+          </div>
+          <div class="card metric-card">
+            <div class="card-hd"><span class="card-hd-title">Players online</span><span class="card-hd-note" id="m-players-last">—</span></div>
+            <div class="card-bd"><canvas class="chart" id="chart-players"></canvas></div>
+          </div>
+          <div class="card metric-card">
+            <div class="card-hd"><span class="card-hd-title">World size</span><span class="card-hd-note" id="m-world-last">—</span></div>
+            <div class="card-bd"><canvas class="chart" id="chart-world"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Console ===== -->
+      <section class="view" data-view="console">
+        <div class="card no-pad">
+          <div id="console" class="console"></div>
+          <form id="cmd-form" class="cmd-bar">
+            <span class="cmd-prompt">&gt;</span>
+            <input type="text" id="cmd-input" placeholder="Type a command (e.g. say hi, list, time set day)" autocomplete="off" />
+            <button type="submit" class="btn btn-pri btn-sm">Send</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ===== Players ===== -->
+      <section class="view" data-view="players">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Online players</span>
+            <button id="players-refresh" class="btn btn-glass btn-xs">Refresh</button></div>
+          <div class="card-bd"><div id="players-list" class="players-list"></div></div>
+        </div>
+        <div class="card gap-top">
+          <div class="card-hd"><span class="card-hd-title">Manual player action</span></div>
+          <div class="card-bd">
+            <div class="manual-player">
+              <input type="text" id="manual-player-name" class="fc" placeholder="Name" />
+              <button class="btn btn-glass btn-sm" data-paction="op">OP</button>
+              <button class="btn btn-glass btn-sm" data-paction="deop">DeOP</button>
+              <button class="btn btn-glass btn-sm" data-paction="kick">Kick</button>
+              <button class="btn btn-red btn-sm" data-paction="ban">Ban</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Crafty-style list management: whitelist / operators / banned -->
+        <div class="pl-grid gap-top">
+          <div class="card">
+            <div class="card-hd">
+              <span class="card-hd-title">Whitelist</span>
+              <label class="check pl-toggle"><input type="checkbox" id="wl-toggle" /><span>Enabled</span></label>
+            </div>
+            <div class="card-bd">
+              <form class="pl-add" data-kind="whitelist">
+                <input type="text" class="fc fc-sm pl-input" placeholder="Add player…" />
+                <button type="submit" class="btn btn-pri btn-sm">Add</button>
+              </form>
+              <div id="wl-list" class="pl-list"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-hd"><span class="card-hd-title">Operators</span></div>
+            <div class="card-bd">
+              <form class="pl-add" data-kind="op">
+                <input type="text" class="fc fc-sm pl-input" placeholder="Add operator…" />
+                <button type="submit" class="btn btn-pri btn-sm">Add</button>
+              </form>
+              <div id="op-list" class="pl-list"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-hd"><span class="card-hd-title">Banned players</span></div>
+            <div class="card-bd">
+              <form class="pl-add" data-kind="ban">
+                <input type="text" class="fc fc-sm pl-input" placeholder="Ban player…" />
+                <button type="submit" class="btn btn-red btn-sm">Ban</button>
+              </form>
+              <div id="ban-list" class="pl-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Plugins ===== -->
+      <section class="view" data-view="plugins">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Plugins</span>
+            <div class="row-gap">
+              <label class="btn btn-pri btn-sm">Upload .jar<input type="file" id="plugin-upload" accept=".jar" hidden /></label>
+              <button id="plugins-refresh" class="btn btn-glass btn-xs">Refresh</button>
+            </div>
+          </div>
+          <div class="card-bd">
+            <p class="muted gap-b">After uploading or deleting, <strong>restart the server</strong> to apply.</p>
+            <div id="plugins-list" class="file-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Configs ===== -->
+      <section class="view" data-view="configs">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Config editor</span>
+            <select id="config-select" class="fc fc-sm"></select></div>
+          <div class="card-bd">
+            <p class="muted gap-b">A timestamped <code>.bak</code> is saved before overwriting. Requires a restart.</p>
+            <textarea id="config-editor" class="config-editor" spellcheck="false"></textarea>
+            <div class="panel-foot">
+              <button id="config-save" class="btn btn-pri btn-sm">Save</button>
+              <span id="config-msg" class="muted"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Files ===== -->
+      <section class="view" data-view="files">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">File manager</span>
+            <div class="row-gap">
+              <label class="btn btn-pri btn-sm">Upload<input type="file" id="file-upload" multiple hidden /></label>
+              <button id="file-mkdir" class="btn btn-glass btn-sm">+ Folder</button>
+              <button id="files-refresh" class="btn btn-glass btn-xs">Refresh</button>
+            </div>
+          </div>
+          <div class="card-bd">
+            <div class="fm-bar">
+              <button id="fm-up" class="btn btn-glass btn-xs">⬆ Up</button>
+              <span class="fm-crumb" id="fm-path">/</span>
+            </div>
+            <div id="fm-list" class="fm-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Schedules ===== -->
+      <section class="view" data-view="tasks">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Scheduled tasks</span>
+            <button id="task-add" class="btn btn-pri btn-sm">+ New task</button></div>
+          <div class="card-bd">
+            <p class="muted gap-b">Run a command, restart, or backup automatically on a cron schedule. Times use the panel machine's local time.</p>
+            <div id="tasks-list" class="file-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Backups ===== -->
+      <section class="view" data-view="backups">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Local backups</span>
+            <button id="backup-now" class="btn btn-pri btn-sm">+ Backup now</button></div>
+          <div class="card-bd">
+            <p class="muted gap-b">Compresses the worlds into a .zip. If the server is online it runs <code>save-off/save-all</code> during the copy.</p>
+            <div id="backup-status" class="muted gap-b"></div>
+            <div id="backups-list" class="file-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Modrinth ===== -->
+      <section class="view" data-view="modrinth">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Browse content (Modrinth)</span>
+            <span id="modrinth-compat" class="compat-pill"></span>
+          </div>
+          <div class="card-bd">
+            <form id="modrinth-form" class="modrinth-toolbar">
+              <input type="text" id="modrinth-q" class="fc fc-sm mt-search" placeholder="Search…" />
+              <select id="modrinth-sort" class="fc fc-sm">
+                <option value="downloads">Most downloaded</option>
+                <option value="follows">Most followed</option>
+                <option value="relevance">Best match</option>
+                <option value="updated">Recently updated</option>
+                <option value="newest">Newest</option>
+              </select>
+              <select id="modrinth-category" class="fc fc-sm">
+                <option value="">All categories</option>
+              </select>
+              <button type="submit" class="btn btn-pri btn-sm">Search</button>
+            </form>
+            <div id="modrinth-results" class="modrinth-results"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Map ===== -->
+      <section class="view" data-view="map">
+        <div class="card no-pad">
+          <div class="card-hd"><span class="card-hd-title">World map</span>
+            <button id="map-open" class="btn btn-glass btn-xs">Open in new tab ↗</button></div>
+          <div id="map-wrap" class="map-wrap"></div>
+        </div>
+      </section>
+
+      <!-- ===== Users ===== -->
+      <section class="view" data-view="users">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Users</span>
+            <button id="user-add" class="btn btn-pri btn-sm">+ Add user</button></div>
+          <div class="card-bd">
+            <p class="muted gap-b">Anyone listed here can log in with their email and password, and manage this list.</p>
+            <div id="users-list" class="file-list"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ====================== SERVER REGISTER / EDIT MODAL ====================== -->
+  <div id="server-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-hd">
+        <span id="server-modal-title">Register server</span>
+        <button id="server-modal-close" class="modal-x">×</button>
+      </div>
+      <div class="modal-bd">
+        <label class="field">
+          <span>Name</span>
+          <input type="text" id="sf-name" class="fc" placeholder="My survival server" />
+        </label>
+        <label class="field">
+          <span>Server folder</span>
+          <div class="row-gap">
+            <input type="text" id="sf-dir" class="fc" placeholder="C:\Servers\My Server" />
+            <button id="sf-browse" class="btn btn-glass btn-sm" type="button">Browse…</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Server jar</span>
+          <select id="sf-jar" class="fc"><option value="">— pick the folder first —</option></select>
+        </label>
+        <label class="field">
+          <span>Java args</span>
+          <input type="text" id="sf-args" class="fc" placeholder="-Xmx4G -Xms4G" />
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>MC version (optional)</span>
+            <input type="text" id="sf-mcver" class="fc" placeholder="1.21.1" />
+          </label>
+          <label class="field">
+            <span>Worlds (for backups)</span>
+            <input type="text" id="sf-worlds" class="fc" placeholder="world, world_nether, world_the_end" />
+          </label>
+        </div>
+        <div id="sf-error" class="login-error"></div>
+      </div>
+      <div class="modal-ft">
+        <button id="sf-cancel" class="btn btn-glass btn-sm" type="button">Cancel</button>
+        <button id="sf-save" class="btn btn-pri btn-sm" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== FOLDER BROWSER MODAL ====================== -->
+  <div id="fs-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-hd">
+        <span>Pick the server folder</span>
+        <button id="fs-modal-close" class="modal-x">×</button>
+      </div>
+      <div class="modal-bd">
+        <div class="fs-path"><span id="fs-current">—</span></div>
+        <div id="fs-list" class="fs-list"></div>
+        <div id="fs-jars" class="fs-jars muted"></div>
+      </div>
+      <div class="modal-ft">
+        <button id="fs-cancel" class="btn btn-glass btn-sm" type="button">Cancel</button>
+        <button id="fs-use" class="btn btn-pri btn-sm" type="button">Use this folder</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== USER ADD / EDIT MODAL ====================== -->
+  <div id="user-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-hd">
+        <span id="user-modal-title">Add user</span>
+        <button id="user-modal-close" class="modal-x">×</button>
+      </div>
+      <div class="modal-bd">
+        <label class="field">
+          <span>Name (optional)</span>
+          <input type="text" id="uf-name" class="fc" placeholder="Steve" />
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input type="email" id="uf-email" class="fc" placeholder="user@example.com" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span id="uf-pass-label">Password</span>
+          <input type="password" id="uf-pass" class="fc" placeholder="At least 4 characters" autocomplete="new-password" />
+        </label>
+        <div id="uf-error" class="login-error"></div>
+      </div>
+      <div class="modal-ft">
+        <button id="uf-cancel" class="btn btn-glass btn-sm" type="button">Cancel</button>
+        <button id="uf-save" class="btn btn-pri btn-sm" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== CREATE SERVER MODAL ====================== -->
+  <div id="create-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-hd">
+        <span>Create a new server</span>
+        <button id="create-modal-close" class="modal-x">×</button>
+      </div>
+      <div class="modal-bd">
+        <p class="muted gap-b">Lodestone downloads the server jar for you and accepts the Minecraft EULA. A new folder is created inside the parent folder you choose.</p>
+        <label class="field">
+          <span>Name</span>
+          <input type="text" id="cf-name" class="fc" placeholder="My new server" />
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Type</span>
+            <select id="cf-type" class="fc">
+              <option value="paper">Paper (plugins)</option>
+              <option value="purpur">Purpur (plugins)</option>
+              <option value="fabric">Fabric (mods)</option>
+              <option value="vanilla">Vanilla</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Minecraft version</span>
+            <select id="cf-version" class="fc"><option value="">loading…</option></select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Parent folder (the new server folder is created inside)</span>
+          <div class="row-gap">
+            <input type="text" id="cf-parent" class="fc" placeholder="C:\Servers" />
+            <button id="cf-browse" class="btn btn-glass btn-sm" type="button">Browse…</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Java args</span>
+          <input type="text" id="cf-args" class="fc" placeholder="-Xmx4G -Xms4G" value="-Xmx4G -Xms4G" />
+        </label>
+        <label class="check">
+          <input type="checkbox" id="cf-eula" />
+          <span>I accept the <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer">Minecraft EULA</a></span>
+        </label>
+        <div id="cf-error" class="login-error"></div>
+      </div>
+      <div class="modal-ft">
+        <button id="cf-cancel" class="btn btn-glass btn-sm" type="button">Cancel</button>
+        <button id="cf-save" class="btn btn-pri btn-sm" type="button">Download &amp; create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== TASK MODAL ====================== -->
+  <div id="task-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-hd">
+        <span id="task-modal-title">New task</span>
+        <button id="task-modal-close" class="modal-x">×</button>
+      </div>
+      <div class="modal-bd">
+        <label class="field">
+          <span>Name</span>
+          <input type="text" id="tf-name" class="fc" placeholder="Nightly restart" />
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Server</span>
+            <select id="tf-server" class="fc"></select>
+          </label>
+          <label class="field">
+            <span>Action</span>
+            <select id="tf-type" class="fc">
+              <option value="restart">Restart</option>
+              <option value="backup">Backup</option>
+              <option value="command">Run command</option>
+            </select>
+          </label>
+        </div>
+        <label class="field" id="tf-command-field" style="display:none">
+          <span>Command (without leading /)</span>
+          <input type="text" id="tf-command" class="fc" placeholder="say Saving the world..." />
+        </label>
+        <label class="field">
+          <span>Schedule (cron)</span>
+          <input type="text" id="tf-cron" class="fc" placeholder="0 4 * * *" />
+        </label>
+        <div class="cron-presets">
+          <button type="button" class="chip-btn" data-cron="0 * * * *">Hourly</button>
+          <button type="button" class="chip-btn" data-cron="0 4 * * *">Daily 4am</button>
+          <button type="button" class="chip-btn" data-cron="0 */6 * * *">Every 6h</button>
+          <button type="button" class="chip-btn" data-cron="0 3 * * 0">Weekly</button>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="tf-enabled" checked />
+          <span>Enabled</span>
+        </label>
+        <div id="tf-error" class="login-error"></div>
+      </div>
+      <div class="modal-ft">
+        <button id="tf-cancel" class="btn btn-glass btn-sm" type="button">Cancel</button>
+        <button id="tf-save" class="btn btn-pri btn-sm" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== FILE EDITOR MODAL ====================== -->
+  <div id="fileedit-modal" class="modal-overlay hidden">
+    <div class="modal modal-lg">
+      <div class="modal-hd">
+        <span id="fileedit-title">Edit file</span>
+        <button id="fileedit-close" class="modal-x">×</button>
+      </div>
+      <div class="modal-bd">
+        <textarea id="fileedit-area" class="config-editor" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-ft">
+        <button id="fileedit-cancel" class="btn btn-glass btn-sm" type="button">Cancel</button>
+        <button id="fileedit-save" class="btn btn-pri btn-sm" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

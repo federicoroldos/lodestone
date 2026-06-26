@@ -1,0 +1,22 @@
+{
+  "name": "lodestone",
+  "version": "1.0.0",
+  "description": "Lodestone - lightweight web panel to manage a Minecraft (Spigot) server on Windows",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "pidusage": "^3.0.2",
+    "ws": "^8.18.0"
+  }
+}
