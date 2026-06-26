@@ -1291,6 +1291,11 @@ async function loadMetricsView() {
   } catch (e) { toast(e.message, true); }
 }
 
+// Auto-refresh the charts every minute while the Metrics view is open.
+setInterval(() => {
+  if ($('.view[data-view="metrics"]').classList.contains('active')) loadMetricsView();
+}, 60000);
+
 $('#metrics-range').addEventListener('click', (e) => {
   const b = e.target.closest('.seg-btn');
   if (!b) return;
