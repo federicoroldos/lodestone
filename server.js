@@ -1042,7 +1042,7 @@ app.post('/api/playerlists/:kind/:op', async (req, res) => {
 const METRICS_PATH = path.join(__dirname, 'metrics.json');
 const METRICS_INTERVAL_MS = 60 * 1000;          // sample every minute
 const METRICS_RETAIN_MS = 7 * 24 * 3600 * 1000; // keep 7 days
-const WORLD_SIZE_EVERY = 5;                      // recompute world size every ~5 samples
+const WORLD_SIZE_EVERY = 5;                      // recompute world size every ~5 min
 
 let metrics = {};            // { [serverId]: [ [t, cpu, memMB, players, worldMB], ... ] }
 let metricsDirty = false;
