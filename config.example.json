@@ -1,0 +1,53 @@
+{
+  "appName": "Lodestone",
+  "serverDir": "",
+  "jar": "",
+  "javaArgs": [
+    "-Xmx4G",
+    "-Xms4G"
+  ],
+  "mcVersion": "",
+  "stopTimeoutSeconds": 30,
+  "panelPort": 2121,
+  "panelHost": "0.0.0.0",
+  "jwtSecret": "CHANGE-THIS-SECRET-TO-SOMETHING-LONG-AND-RANDOM",
+  "sessionHours": 168,
+  "consoleHistoryLines": 500,
+  "playerListIntervalSeconds": 30,
+  "watchdog": {
+    "enabled": false,
+    "maxRestarts": 3,
+    "windowMinutes": 10
+  },
+  "scheduledRestart": {
+    "enabled": false,
+    "cron": "0 4 * * *",
+    "warnMinutes": [
+      5,
+      1
+    ]
+  },
+  "backups": {
+    "dir": "",
+    "retainCount": 10,
+    "scheduledEnabled": false,
+    "scheduledCron": "0 3 * * *",
+    "worlds": [
+      "world",
+      "world_nether",
+      "world_the_end"
+    ]
+  },
+  "discord": {
+    "webhookUrl": "",
+    "notifyOnCrash": true,
+    "notifyOnFull": true,
+    "notifyOnJoinLeave": false
+  },
+  "map": {
+    "url": ""
+  },
+  "servers": [],
+  "activeServerId": null,
+  "users": []
+}
