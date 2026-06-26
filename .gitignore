@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# local config — contains secrets (jwtSecret, password hashes) and machine paths
+config.json
+
+# runtime data
+metrics.json
+
+# logs
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
