@@ -261,10 +261,12 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
             <div className="space-y-1.5">
               <Label>{t('servers.fieldType')}</Label>
               <select className="flex h-9 w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50" value={form.type} onChange={f('type')}>
+                <option value="vanilla">{t('servers.typeVanilla')}</option>
+                <option value="spigot">{t('servers.typeSpigot')}</option>
                 <option value="paper">{t('servers.typePaper')}</option>
                 <option value="purpur">{t('servers.typePurpur')}</option>
                 <option value="fabric">{t('servers.typeFabric')}</option>
-                <option value="vanilla">{t('servers.typeVanilla')}</option>
+                <option value="forge">{t('servers.typeForge')}</option>
               </select>
             </div>
             <div className="space-y-1.5">
