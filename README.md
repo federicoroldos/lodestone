@@ -1,115 +1,159 @@
-# Lodestone
+<div align="center">
 
-A lightweight web panel to manage a Minecraft (Spigot/Paper) server on Windows.
+# ◆ Lodestone
 
-One small Node.js process gives you a browser dashboard with:
+### A beautiful, self-hosted web panel for your Minecraft servers on Windows
 
-- **Register multiple servers from the UI** (with a built-in folder browser) and switch the *active* one
-- **Start / Stop / Restart** each server (graceful stop, with a kill-timeout fallback)
-- **Live console** over WebSocket, plus a command input
-- **Players** list with op / kick / ban / whitelist actions
-- **Plugins** manager: upload, delete, and one-click install from **Modrinth**
-- **Config editor** for `server.properties` and any `.yml` / `.yaml` (a timestamped `.bak` is saved before every overwrite)
-- **Backups**: zip your worlds on demand or on a schedule, with retention
-- **Live resources**: server + system RAM/CPU sparklines, and TPS (if EssentialsX/Paper is present)
-- **Watchdog** (auto-restart on crash, with a crash-loop guard) and **scheduled restarts**
-- **Discord** webhook notifications (crash, server full, optional join/leave)
-- **World map** tab that embeds BlueMap/Dynmap (see the BlueMap guide below)
+One small Node.js process turns any Spigot / Paper / Purpur / Fabric / Forge server
+into a clean browser dashboard — start it, watch the console, manage players,
+install plugins, edit files, schedule backups, and reach it from anywhere.
 
----
+![Node](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)
+![No build step](https://img.shields.io/badge/Frontend-Zero%20build%20step-8B5CF6)
+![License](https://img.shields.io/badge/Use-Personal%20%2F%20Self--hosted-22C55E)
 
-## 1. Requirements
-
-- **Node.js 18 or newer** — <https://nodejs.org/> (the LTS installer is fine). Verify with `node -v`.
-- **Java** must be installed and on your `PATH` — the panel launches the server with `java -jar ...`. Verify with `java -version`. Use the Java version your server jar requires.
-- A Spigot/Paper server jar already set up in its own folder (with `eula.txt` accepted, etc.).
+</div>
 
 ---
 
-## 2. Quick start
+## ✨ What you get
 
-1. Open `config.json` and set at least `password` (see section 3). You no longer need to set the
-   server folder by hand — you register servers from the UI (see section 2.1).
-2. Double-click **`start-panel.bat`**.
-   - On the first run it automatically runs `npm install` to fetch dependencies.
-   - It then starts the panel and prints the URL.
-3. Open **<http://localhost:2121>** in your browser and log in with your password.
+| | Feature | What it does |
+|---|---|---|
+| 🖥️ | **Multi-server** | Register existing servers *or* **create a brand-new one** from the panel — it downloads the jar for you. Run several at once and switch the *active* one. |
+| ▶️ | **Lifecycle control** | Start / Stop / Restart with a graceful stop and a kill-timeout fallback. |
+| 📟 | **Live console** | Real-time output over WebSocket, colour-coded by level, with a command input. |
+| 📊 | **Dashboard & Metrics** | KPI tiles (status, players, TPS, uptime), live RAM/CPU/disk sparklines, and **7 days of history** (CPU, memory, players, world size). |
+| 👥 | **Player management** | Online list with op / kick / ban, plus full **whitelist / ops / bans** that you can edit **even while the server is offline**. |
+| 🧩 | **Plugins & mods** | Upload / delete jars, or **one-click install from Modrinth** — auto-detects your loader and Minecraft version. |
+| 🗂️ | **File manager** | Browse, edit, upload, download, rename and delete files — safely sandboxed to each server's folder. |
+| ⚙️ | **Config editor** | Quick edit of `server.properties` and any `.yml` / `.yaml` (a timestamped `.bak` is saved first). |
+| 💾 | **Backups** | Zip your worlds on demand or on a schedule, with retention and one-click download. |
+| ⏰ | **Schedules** | Per-server cron tasks (run a command, restart, or back up) plus scheduled restarts with in-game warnings. |
+| 🛡️ | **Watchdog** | Auto-restart on crash, with a crash-loop guard so it never spins forever. |
+| 🗺️ | **World map** | Embeds BlueMap / Dynmap right inside the panel. |
+| 🔔 | **Discord** | Webhook alerts for crashes, a full server, and optional join / leave. |
+| 🔐 | **Multi-user login** | Email + password accounts (hashed), signed sessions, and a Users tab to manage who has access. |
+| 🌍 | **Reach it anywhere** | Works great over your LAN or **Tailscale** — no port-forwarding, nothing exposed to the public internet. |
 
-### 2.1. Registering servers (Servers tab)
+---
 
-The **Servers** tab (first item in the sidebar) is where you manage your servers:
+## 🚀 Quick start
 
-- **+ Register server** opens a form. Type a name, click **Browse…** to pick the server
-  folder with the built-in folder browser, choose the server jar (auto-detected from the
-  folder), and set the Java args (e.g. `-Xmx4G -Xms4G`). Save.
-- Each registered server shows its status and has **Start / Stop / Restart** buttons, so you
-  can run several servers at once (each must use a different port in its own `server.properties`).
-- One server is the **active** one (highlighted). The Console, Players, Plugins, Configs and
-  Backups tabs all act on the active server. Switch it with **Set active** or the dropdown in
-  the top-right header.
+> **You need:** [**Node.js 18+**](https://nodejs.org/) and **Java** on your `PATH` (whatever version your server jar needs).
+> Verify with `node -v` and `java -version`.
 
-> **Auto-migration:** if you already had the old single-server `config.json` (with `serverDir`/`jar`),
-> the panel converts it into a registered server automatically on first start — nothing to do.
+1. **Set a secret.** Open `config.json` and change `jwtSecret` to a long random string.
+   *(Don't have a `config.json` yet? Copy `config.example.json` to `config.json`.)*
+2. **Launch.** Double-click **`start-panel.bat`**.
+   - First run installs dependencies automatically (`npm install`).
+   - Then it starts the panel and prints the URL.
+3. **Open** **<http://localhost:2121>** and log in.
+   - Default account on a fresh install: **`fede212yt@gmail.com`** / the password is `changeme123` unless you migrated from an older `password` setting. **Change it in the Users tab right away.**
 
-Prefer the command line? From this folder:
+Prefer the terminal?
 
 ```bat
-npm install      :: only needed the first time
-npm start        :: same as "node server.js"
+npm install   :: first time only
+npm start     :: same as: node server.js
 ```
 
-Leave the window open while you want the panel running. Press `Ctrl+C` to stop the **panel**.
-Stopping the panel does **not** stop the Minecraft server — stop that from the panel's Stop button (this is intentional, so a panel restart doesn't drop your players).
+> 💡 Keep the window open while the panel runs. `Ctrl+C` stops the **panel only** —
+> your Minecraft servers keep running, so restarting the panel never drops your players.
 
 ---
 
-## 3. Configuration (`config.json`)
+## 🧭 A tour of the panel
 
-Everything is hand-editable in `config.json`. Restart the panel after editing it.
+The sidebar is grouped so everything has an obvious home:
+
+#### Overview
+- **Dashboard** — status, players, TPS and uptime at a glance, with live resource sparklines.
+- **Servers** — your home base. **✨ Create new** downloads a fresh Paper/Purpur/Vanilla/Fabric server, or **+ Register existing** points Lodestone at a folder you already have (with a built-in folder browser). Each server has Start / Stop / Restart and a **Set active** toggle.
+- **Metrics** — historical graphs over the last hour / 6 h / day / week.
+
+#### Operate
+- **Console** — live output + command line.
+- **Players** — who's online and the whitelist / ops / bans (editable offline too).
+- **Map** — your BlueMap/Dynmap embedded.
+
+#### Content
+- **Plugins** — upload or delete jars.
+- **Modrinth** — search and install plugins/mods that match your server.
+- **Files** — a full file manager for the active server's folder.
+- **Configs** — quick editor for `server.properties` and YAML files.
+
+#### Maintenance
+- **Backups** — create, download, delete; set a schedule and retention.
+- **Schedules** — per-server cron jobs (command / restart / backup).
+
+#### Settings
+- **Users** — add, edit and remove the people who can log in.
+
+> The **active** server (highlighted on the Servers tab, and shown in the top-left dropdown)
+> is the one Console, Players, Plugins, Files, Configs and Backups act on.
+
+---
+
+## ✨ Creating a server (no manual download needed)
+
+On the **Servers** tab click **✨ Create new**:
+
+1. Pick a type — **Paper**, **Purpur**, **Vanilla** or **Fabric**.
+2. Choose the Minecraft version (the list is fetched live from each project).
+3. Pick a parent folder, give it a name, set Java args (e.g. `-Xmx4G -Xms4G`).
+4. Accept the Minecraft EULA and create.
+
+Lodestone downloads the correct jar, writes `eula.txt`, registers the server and you're ready to start it. 🎉
+
+---
+
+## ⚙️ Configuration (`config.json`)
+
+Most things are managed from the UI, but everything lives in `config.json` and is hand-editable. **Restart the panel after editing it.**
 
 | Key | Meaning |
 | --- | --- |
-| `appName` | Display name / Discord bot username. |
-| `servers` | Array of registered servers (managed from the **Servers** tab — you rarely edit this by hand). Each entry: `id`, `name`, `dir`, `jar`, `javaArgs`, `mcVersion`, `stopTimeoutSeconds`, `worlds`, `watchdog`. |
-| `activeServerId` | The `id` of the server the panel views act on by default (set via the UI). |
-| `panelPort` | **Port** the panel listens on (default `2121`). |
-| `panelHost` | `0.0.0.0` = reachable on your LAN/Tailscale; `127.0.0.1` = this PC only. |
-| `password` | **Login password.** Change it before exposing the panel. |
-| `jwtSecret` | A long random string used to sign sessions. **Change it** to anything long and random. |
-| `sessionHours` | How long a login stays valid (default 168 = 7 days). |
-| `playerListIntervalSeconds` | How often the panel polls `list`/`tps`. |
+| `appName` | Display name / Discord webhook username. |
+| `panelPort` | Port the panel listens on (default **`2121`**). |
+| `panelHost` | `0.0.0.0` = reachable on LAN/Tailscale · `127.0.0.1` = this PC only. |
+| `jwtSecret` | **Long random string** that signs login sessions — change it. Changing it logs everyone out. |
+| `sessionHours` | How long a login stays valid (default `168` = 7 days). |
+| `consoleHistoryLines` | Console scrollback kept per server (default `500`). |
+| `playerListIntervalSeconds` | How often the panel polls `list` / `tps`. |
+| `servers[]` | Registered servers (managed from the Servers tab). |
+| `activeServerId` | The server the views act on by default. |
+| `users[]` | Login accounts (managed from the Users tab; passwords are hashed). |
+| `backups` · `scheduledRestart` · `discord` · `map` · `tasks[]` | See below. |
 
-> Per-server settings (folder, jar, Java args, MC version, worlds, watchdog) live **inside each
-> `servers[]` entry** and are best edited from the Servers tab's **Edit** button. The legacy
-> top-level `serverDir`/`jar`/`javaArgs` keys are only read once, to migrate an old config.
+<details>
+<summary><strong>🛡️ Watchdog</strong> — auto-restart on crash (per server)</summary>
 
-### Change the password / port
-
-Edit `password` (and ideally `jwtSecret`) and/or `panelPort` in `config.json`, then restart the panel.
-Changing `jwtSecret` logs everyone out (existing sessions become invalid), which is exactly what you want after sharing a link.
-
-### Watchdog (auto-restart on crash) — per server
-
-Each `servers[]` entry has its own `watchdog`, edited from the Servers tab's **Edit** button:
+Each server has its own watchdog, edited from the Servers tab's **Edit** button:
 
 ```json
 "watchdog": { "enabled": true, "maxRestarts": 3, "windowMinutes": 10 }
 ```
 
-If that server exits **unexpectedly** (not via the Stop button), the panel relaunches it after 5s.
-If it crashes `maxRestarts` times within `windowMinutes`, the panel stops relaunching to avoid a crash-loop and notifies Discord.
+If the server exits **unexpectedly** (not via Stop), Lodestone relaunches it after 5 s.
+If it crashes `maxRestarts` times within `windowMinutes`, it stops relaunching to avoid a crash-loop and pings Discord.
+</details>
 
-### Scheduled restart (active server)
+<details>
+<summary><strong>⏰ Scheduled restart</strong> (active server)</summary>
 
 ```json
 "scheduledRestart": { "enabled": true, "cron": "0 4 * * *", "warnMinutes": [5, 1] }
 ```
 
-Cron is standard 5-field (`min hour day month weekday`). `0 4 * * *` = every day at 04:00.
+Standard 5-field cron (`min hour day month weekday`). `0 4 * * *` = every day at 04:00.
 Players get in-game `say` warnings at each `warnMinutes` mark before the restart.
-The scheduled restart and scheduled backup act on the **active** server.
+For finer control, use the **Schedules** tab to attach command/restart/backup jobs to *specific* servers.
+</details>
 
-### Backups
+<details>
+<summary><strong>💾 Backups</strong></summary>
 
 ```json
 "backups": {
@@ -121,11 +165,13 @@ The scheduled restart and scheduled backup act on the **active** server.
 }
 ```
 
-- `worlds` are the folders (relative to `serverDir`) zipped into each backup.
-- If the server is online, the panel runs `save-off` + `save-all flush` during the copy, then `save-on`.
-- `retainCount` keeps only the newest N zips. Backups can also be created on demand from the **Backups** tab.
+- `worlds` are the folders (relative to the server dir) zipped into each backup.
+- If the server is online, Lodestone runs `save-off` + `save-all flush` during the copy, then `save-on`.
+- `retainCount` keeps only the newest N zips **per server**. Make backups any time from the **Backups** tab.
+</details>
 
-### Discord notifications (webhook)
+<details>
+<summary><strong>🔔 Discord notifications</strong></summary>
 
 ```json
 "discord": {
@@ -136,80 +182,91 @@ The scheduled restart and scheduled backup act on the **active** server.
 }
 ```
 
-To get a webhook URL: in Discord, **Server Settings → Integrations → Webhooks → New Webhook**, pick a channel, **Copy Webhook URL**, and paste it as `webhookUrl`. Leave it empty (`""`) to disable Discord entirely.
+Get a URL in Discord → **Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**.
+Leave `webhookUrl` empty (`""`) to disable Discord entirely.
+</details>
 
-### Map
+<details>
+<summary><strong>🗺️ Map</strong></summary>
 
 ```json
 "map": { "url": "http://localhost:8100" }
 ```
 
-The **Map** tab embeds this URL in an iframe. Leave it `""` until you've set up BlueMap (next section). If empty, the panel falls back to `http://<this-host>:8100`.
+The **Map** tab embeds this URL. Leave it `""` until you've set up BlueMap (next section);
+if empty, the panel falls back to `http://<this-host>:8100`.
+</details>
 
 ---
 
-## 4. World map with BlueMap
+## 🗺️ World map with BlueMap
 
-> **Heads-up:** this installs a plugin **into your real server** and opens a local web port (default `8100`). It's a normal, well-known plugin, but it does touch your server folder — do it deliberately.
+> **Heads-up:** this installs a plugin **into your real server** and opens a local web port (default `8100`). It's a well-known plugin, but it does touch your server folder — do it deliberately.
 
-1. Download the **Spigot/Paper** build of BlueMap from <https://modrinth.com/plugin/bluemap> (you can also search "BlueMap" in the panel's **Modrinth** tab and install it there).
-2. Put the jar in `serverDir\plugins\` (the Modrinth install does this for you) and **restart the server**.
-3. On first start BlueMap asks you to accept its download of game textures. Open `serverDir\plugins\BlueMap\core.conf` and set `accept-download: true`, then restart the server again.
-4. BlueMap renders the world and serves a live map at **<http://localhost:8100>**. The first full render of a large world can take a while.
-5. Set `"map": { "url": "http://localhost:8100" }` in `config.json` and restart the panel. The **Map** tab will now show the map.
+1. Install **BlueMap** from the panel's **Modrinth** tab (or download the Spigot/Paper build from <https://modrinth.com/plugin/bluemap>) and **restart the server**.
+2. On first start BlueMap asks you to accept its texture download: open `<serverDir>\plugins\BlueMap\core.conf`, set `accept-download: true`, and restart again.
+3. BlueMap serves a live map at **<http://localhost:8100>** (the first render of a big world takes a while).
+4. Set `"map": { "url": "http://localhost:8100" }` and restart the panel — the **Map** tab now shows it.
 
-To reach the map from another device, use your LAN IP or Tailscale IP instead of `localhost` (e.g. `http://100.x.y.z:8100`).
-(Dynmap works the same way — just point `map.url` at its port, usually `8123`.)
-
----
-
-## 5. Remote access with Tailscale (recommended)
-
-Tailscale gives every device a private, encrypted IP so you can reach the panel from anywhere **without port-forwarding** or exposing anything to the public internet.
-
-1. Install Tailscale on the **server PC**: <https://tailscale.com/download/windows>. Sign in (Google/GitHub/email).
-2. Install Tailscale on each device you'll use to manage the server (phone, laptop) and sign in with the **same account**.
-3. On the server PC, find its Tailscale IP: run `tailscale ip -4` (or check the Tailscale tray icon). It looks like `100.x.y.z`.
-4. Make sure `config.json` has `"panelHost": "0.0.0.0"` so the panel listens on all interfaces, then restart the panel.
-5. From any of your devices, open **`http://100.x.y.z:2121`** and log in.
-
-Tips:
-- Keep `panelHost` at `0.0.0.0` for LAN + Tailscale, or set it to `127.0.0.1` if you want the panel reachable **only** through an SSH/Tailscale tunnel.
-- Windows Firewall may prompt the first time the panel binds the port — allow it on private networks.
-- For the BlueMap tab to work remotely, set `map.url` to the Tailscale IP (`http://100.x.y.z:8100`).
+To view remotely, use your LAN/Tailscale IP instead of `localhost` (e.g. `http://100.x.y.z:8100`).
+Dynmap works the same way — point `map.url` at its port (usually `8123`).
 
 ---
 
-## 6. Security notes
+## 🌍 Remote access with Tailscale (recommended)
 
-- The panel is protected by a single password and a signed (JWT) session — **change `password` and `jwtSecret`** before sharing any link.
-- Prefer Tailscale or your LAN over exposing the port to the public internet. There is no rate-limiting or 2FA.
-- The config editor only allows `server.properties` and `.yml`/`.yaml` files inside the active server's folder; plugin upload only accepts `.jar`. These are deliberate guardrails — don't loosen them unless you understand the risk.
-- The **folder browser** (used when registering a server) lets the logged-in user list directories anywhere on the machine. It's read-only (it never deletes or writes) and requires a valid session, but it's another reason to keep the panel behind a password and Tailscale/LAN rather than the public internet.
+Tailscale gives every device a private, encrypted IP, so you can reach the panel from anywhere **without port-forwarding** or exposing anything publicly.
+
+1. Install Tailscale on the **server PC** (<https://tailscale.com/download/windows>) and sign in.
+2. Install it on your phone/laptop and sign in with the **same account**.
+3. On the server PC, run `tailscale ip -4` to get its `100.x.y.z` address.
+4. Make sure `config.json` has `"panelHost": "0.0.0.0"`, then restart the panel.
+5. From any device, open **`http://100.x.y.z:2121`** and log in.
+
+> Windows Firewall may prompt the first time the panel binds the port — allow it on private networks.
 
 ---
 
-## 7. Troubleshooting
+## 🔒 Security notes
+
+- Logins use email + password (hashed with scrypt) and a signed JWT session. **Change `jwtSecret`** and remove the default account's password before sharing any link.
+- Prefer Tailscale or your LAN over exposing the port to the public internet. There's no rate-limiting or 2FA.
+- The **Files** manager and **Configs** editor are sandboxed to each server's folder (with a path-traversal guard); plugin upload only accepts `.jar`.
+- The **folder browser** (used when registering/creating a server) can list directories anywhere on the machine. It's read-only and needs a valid session — another reason to keep the panel behind a password and Tailscale/LAN.
+
+---
+
+## 🩺 Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
 | `Node.js was not found` | Install Node 18+ and reopen the `.bat`. |
-| Server won't start, "Jar not found" | Check `serverDir` and `jar` in `config.json` (double backslashes!). |
-| Console shows a Java error immediately | Run `java -version`; install/repair Java or adjust `javaArgs`. |
-| TPS always shows `—` | TPS needs EssentialsX or Paper's `/tps`. Without them it stays blank — everything else still works. |
+| Server won't start, "Jar not found" | Check the server's folder and jar on the Servers tab (Edit). |
+| Java error immediately on start | Run `java -version`; install/repair Java or adjust the Java args. |
+| TPS always shows `—` | TPS needs EssentialsX or Paper's `/tps`. Everything else still works without it. |
 | Can't reach the panel from another device | Use the LAN/Tailscale IP (not `localhost`), confirm `panelHost` is `0.0.0.0`, and allow the port in Windows Firewall. |
 | Map tab is blank | BlueMap must be installed, rendered, and `map.url` set. Large worlds take time to render. |
 
 ---
 
-## 8. Project layout
+## 🗂️ Project layout
 
 ```
-config.json        # all settings (hand-edited)
-server.js          # Node backend: REST API + WebSocket + server process manager
-start-panel.bat    # Windows launcher (installs deps on first run, then starts)
+config.json          # all settings + registered servers + users (git-ignored; has secrets)
+config.example.json  # template to copy when starting fresh
+metrics.json         # rolling 7-day metrics history (git-ignored)
+server.js            # Node backend: REST API + WebSocket + per-server process manager
+start-panel.bat      # Windows launcher (installs deps on first run, then starts)
 public/
-  index.html       # UI
-  style.css        # Material-style dark theme
-  app.js           # frontend logic
+  index.html         # the whole UI (single page)
+  style.css          # dark theme
+  app.js             # frontend logic
 ```
+
+---
+
+<div align="center">
+
+**Lodestone** — made for running Minecraft servers without the headache. ◆
+
+</div>
