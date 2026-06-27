@@ -105,7 +105,7 @@ function ModrinthResults({ compat, projectType, onInstalled }) {
             <option key={c} value={c}>{c.replace(/-/g, ' ').replace(/\b\w/g, m => m.toUpperCase())}</option>
           ))}
         </select>
-        <Button type="submit" variant="default" size="sm">
+        <Button type="submit" variant="default">
           <Search className="h-3.5 w-3.5" />
           {t('modrinth.search')}
         </Button>

@@ -111,7 +111,8 @@
         "invalidCfId": "That is not a valid CurseForge project id or slug.",
         "invalidCfLoader": "Unknown CurseForge loader.",
         "cfModNotFound": "CurseForge project not found.",
-        "cfLookupFailed": "Could not reach CurseForge right now."
+        "cfLookupFailed": "Could not reach CurseForge right now.",
+        "invalidMapUrl": "That is not a valid http(s) URL for the map."
       },
       "nav": {
         "groupOverview": "Overview",
@@ -140,7 +141,21 @@
         "expandTitle": "Expand sidebar (Ctrl+B)",
         "collapseTitle": "Collapse sidebar (Ctrl+B)",
         "collapseLabel": "Collapse",
-        "logout": "Log out"
+        "logout": "Log out",
+        "settings": "Settings",
+        "settingsTitle": "Settings"
+      },
+      "settings": {
+        "title": "Settings",
+        "language": "Language",
+        "languageDesc": "Choose how the panel looks to you.",
+        "hotkeys": "Hotkeys",
+        "hotkeyToggleSidebar": "Toggle sidebar",
+        "hotkeyToggleSidebarHint": "Expand or collapse the sidebar",
+        "hotkeyConsoleHistory": "Console command history",
+        "hotkeyConsoleHistoryHint": "Browse previously sent commands in the Console",
+        "hotkeyCloseMenu": "Close menu",
+        "hotkeyCloseMenuHint": "Dismiss open dropdowns and overlays"
       },
       "header": {
         "start": "Start",
@@ -215,6 +230,8 @@
         "mcVersionPlaceholder": "1.21.1",
         "fieldWorlds": "Worlds (for backups)",
         "worldsPlaceholder": "world, world_nether",
+        "fieldMapUrl": "Map URL (optional)",
+        "mapUrlPlaceholder": "http://localhost:8100",
         "defaultJavaArgs": "-Xmx4G -Xms4G",
         "defaultWorlds": "world, world_nether, world_the_end",
         "pickFolderTitle": "Pick the server folder",
@@ -312,7 +329,22 @@
       "mapView": {
         "configureFirst": "Configure the map (BlueMap/Dynmap) first.",
         "title": "World map",
-        "openInNewTab": "Open in new tab"
+        "openInNewTab": "Open in new tab",
+        "notConfiguredTitle": "No map URL configured",
+        "notConfiguredBody": "Set the URL of your BlueMap, Dynmap, Squaremap or Pl3xMap web panel for this server. The map is loaded directly from there inside an iframe.",
+        "configure": "Configure map",
+        "settings": "Map settings",
+        "urlLabel": "Map URL",
+        "urlPlaceholder": "http://localhost:8100",
+        "urlHint": "Use http(s) only. Leave empty to disable the map.",
+        "saved": "Map URL saved",
+        "loadFailed": "The map server could not be reached at that URL.",
+        "presetHeading": "Presets",
+        "presetBlueMap": "BlueMap (8100)",
+        "presetDynmap": "Dynmap (8123)",
+        "presetSquaremap": "Squaremap (8080)",
+        "presetPl3xMap": "Pl3xMap (8080)",
+        "presetCustom": "Custom"
       },
       "plugins": {
         "title": "Plugins",
@@ -394,6 +426,7 @@
         "groupGameplay": "Gameplay",
         "groupPerformance": "Performance",
         "groupWorld": "World",
+        "groupAdvanced": "Advanced",
         "groupOther": "Other",
         "issuesTitle": "Issues",
         "issuesEmpty": "No issues.",
@@ -410,9 +443,9 @@
         "historyConfirmTitle": "Restore {file}?",
         "historyConfirmBody": "Restoring replaces the current file with `{backup}`. A fresh backup of the current state is created first, so you can undo this.",
         "historyRestoredToast": "Restored from {backup}.",
-        "advancedKeys": "Advanced keys",
         "badgeRestart": "Restart required",
         "badgeHotReload": "Hot-reload",
+        "groupAdvancedEmpty": "No .xml or extra .properties files.",
         "switchToRaw": "Switch to raw",
         "switchToFriendly": "Switch to friendly",
         "friendlyEmpty": "This file has no friendly form yet. Use the raw editor.",
@@ -643,7 +676,8 @@
         "invalidCfId": "Ese no es un id o slug válido de proyecto de CurseForge.",
         "invalidCfLoader": "Loader de CurseForge desconocido.",
         "cfModNotFound": "Proyecto de CurseForge no encontrado.",
-        "cfLookupFailed": "No se pudo contactar a CurseForge ahora mismo."
+        "cfLookupFailed": "No se pudo contactar a CurseForge ahora mismo.",
+        "invalidMapUrl": "Esa no es una URL http(s) válida para el mapa."
       },
       "nav": {
         "groupOverview": "General",
@@ -672,7 +706,21 @@
         "expandTitle": "Expandir barra (Ctrl+B)",
         "collapseTitle": "Plegar barra (Ctrl+B)",
         "collapseLabel": "Plegar",
-        "logout": "Cerrar sesión"
+        "logout": "Cerrar sesión",
+        "settings": "Ajustes",
+        "settingsTitle": "Ajustes"
+      },
+      "settings": {
+        "title": "Ajustes",
+        "language": "Idioma",
+        "languageDesc": "Elegí cómo querés ver el panel.",
+        "hotkeys": "Atajos de teclado",
+        "hotkeyToggleSidebar": "Plegar/desplegar la barra",
+        "hotkeyToggleSidebarHint": "Plegar o desplegar la barra lateral",
+        "hotkeyConsoleHistory": "Historial de la consola",
+        "hotkeyConsoleHistoryHint": "Recorrer comandos enviados en la Consola",
+        "hotkeyCloseMenu": "Cerrar menú",
+        "hotkeyCloseMenuHint": "Cerrar menús y overlays abiertos"
       },
       "header": {
         "start": "Iniciar",
@@ -747,6 +795,8 @@
         "mcVersionPlaceholder": "1.21.1",
         "fieldWorlds": "Mundos (para copias)",
         "worldsPlaceholder": "world, world_nether",
+        "fieldMapUrl": "URL del mapa (opcional)",
+        "mapUrlPlaceholder": "http://localhost:8100",
         "defaultJavaArgs": "-Xmx4G -Xms4G",
         "defaultWorlds": "world, world_nether, world_the_end",
         "pickFolderTitle": "Elige la carpeta del servidor",
@@ -844,7 +894,22 @@
       "mapView": {
         "configureFirst": "Configura primero el mapa (BlueMap/Dynmap).",
         "title": "Mapa del mundo",
-        "openInNewTab": "Abrir en nueva pestaña"
+        "openInNewTab": "Abrir en nueva pestaña",
+        "notConfiguredTitle": "No hay URL de mapa configurada",
+        "notConfiguredBody": "Define la URL del panel web de BlueMap, Dynmap, Squaremap o Pl3xMap para este servidor. El mapa se carga directamente desde ahí dentro de un iframe.",
+        "configure": "Configurar mapa",
+        "settings": "Ajustes del mapa",
+        "urlLabel": "URL del mapa",
+        "urlPlaceholder": "http://localhost:8100",
+        "urlHint": "Solo http(s). Déjalo vacío para desactivar el mapa.",
+        "saved": "URL del mapa guardada",
+        "loadFailed": "No se pudo contactar el servidor de mapas en esa URL.",
+        "presetHeading": "Preajustes",
+        "presetBlueMap": "BlueMap (8100)",
+        "presetDynmap": "Dynmap (8123)",
+        "presetSquaremap": "Squaremap (8080)",
+        "presetPl3xMap": "Pl3xMap (8080)",
+        "presetCustom": "Personalizado"
       },
       "plugins": {
         "title": "Plugins",
@@ -919,7 +984,62 @@
       "configs": {
         "title": "Editor de configs",
         "hint": "Se guarda un .bak con marca de tiempo antes de sobrescribir. Requiere reiniciar.",
-        "savedToast": "Guardado (.bak creado). Reinicia para aplicar."
+        "savedToast": "Guardado (.bak creado). Reinicia para aplicar.",
+        "bannerRestart": "Has guardado `{file}`. Reinicia el servidor activo para aplicar los cambios.",
+        "bannerRestartNow": "Reiniciar ahora",
+        "bannerDismiss": "Descartar",
+        "groupGameplay": "Jugabilidad",
+        "groupPerformance": "Rendimiento",
+        "groupWorld": "Mundo",
+        "groupAdvanced": "Avanzado",
+        "groupOther": "Otros",
+        "issuesTitle": "Problemas",
+        "issuesEmpty": "No hay problemas.",
+        "diffTitle": "Cambios en {file}",
+        "diffAdded": "añadidas",
+        "diffRemoved": "eliminadas",
+        "diffUnchanged": "sin cambios",
+        "diffShowUnchanged": "Mostrar líneas sin cambios",
+        "diffSave": "Guardar cambios",
+        "diffCancel": "Cancelar",
+        "historyTitle": "Historial",
+        "historyEmpty": "Sin versiones anteriores.",
+        "historyRestore": "Restaurar",
+        "historyConfirmTitle": "¿Restaurar {file}?",
+        "historyConfirmBody": "Restaurar reemplaza el archivo actual por `{backup}`. Antes se hace una copia de seguridad del estado actual, así que puedes deshacer.",
+        "historyRestoredToast": "Restaurado desde {backup}.",
+        "badgeRestart": "Requiere reiniciar",
+        "badgeHotReload": "Recarga en caliente",
+        "groupAdvancedEmpty": "No hay archivos .xml ni .properties adicionales.",
+        "switchToRaw": "Cambiar a editor sin procesar",
+        "switchToFriendly": "Cambiar a vista amigable",
+        "friendlyEmpty": "Este archivo aún no tiene vista amigable. Usa el editor sin procesar.",
+        "restartErrorToast": "Error al reiniciar: {error}",
+        "restartSuccessToast": "Reinicio solicitado.",
+        "field": {
+          "max-players":          { "label": "Máx. jugadores", "description": "Número máximo de jugadores que pueden conectarse al servidor a la vez." },
+          "gamemode":             { "label": "Modo de juego por defecto", "description": "El modo de juego en el que entran los jugadores nuevos al unirse." },
+          "difficulty":           { "label": "Dificultad", "description": "Qué tan difícil es el mundo: mobs hostiles, hambre y daño." },
+          "pvp":                  { "label": "Jugador contra jugador", "description": "Activado, los jugadores pueden hacerse daño. Desactívalo para un servidor de construcción pacífico." },
+          "hardcore":             { "label": "Hardcore", "description": "Los jugadores son baneados del servidor al morir." },
+          "motd":                 { "label": "Mensaje del día del servidor", "description": "Texto que se muestra en la lista de servidores de Minecraft, debajo del nombre." },
+          "white-list":           { "label": "Lista blanca", "description": "Solo los jugadores añadidos a la lista blanca pueden unirse." },
+          "allow-flight":         { "label": "Permitir vuelo", "description": "Permite a los jugadores volar en modo supervivencia. Útil para construir al estilo creativo en servidores survival." },
+          "spawn-protection":     { "label": "Radio de protección del spawn", "description": "Los bloques en este radio alrededor del spawn solo pueden romperse por operadores. Pon 0 para desactivarlo." },
+
+          "view-distance":        { "label": "Distancia de visión", "description": "Cuántos chunks alrededor de cada jugador se cargan. Más alto se ve mejor pero consume más recursos." },
+          "simulation-distance":  { "label": "Distancia de simulación", "description": "A qué distancia siguen tickeando mobs, redstone y la lógica del juego. Más bajo que la distancia de visión ahorra CPU." },
+          "max-tick-time":        { "label": "Tiempo máx. de tick (ms)", "description": "Si un solo tick tarda más que esto, el watchdog cierra el servidor para recuperarse." },
+          "max-world-size":       { "label": "Tamaño máx. del mundo (bloques)", "description": "Límite duro del borde del overworld. Los chunks nuevos dejan de generarse pasado este radio." },
+
+          "server-port":          { "label": "Puerto del servidor", "description": "Puerto TCP en el que escucha el servidor. Por defecto 25565. Cámbialo si ejecutas varios servidores en la misma máquina." },
+          "online-mode":          { "label": "Modo en línea (autenticar)", "description": "Verifica a los jugadores contra los servidores de Mojang. Desactívalo solo para un servidor privado sin conexión." },
+          "enable-command-block": { "label": "Bloques de comandos", "description": "Permite que los bloques de comandos colocados en el mundo ejecuten comandos." },
+          "level-name":           { "label": "Nombre de la carpeta del mundo", "description": "Carpeta dentro de la raíz del servidor que contiene los datos del mundo. Renombrarla crea un mundo nuevo." },
+          "level-seed":           { "label": "Semilla del mundo", "description": "Semilla usada para generar el mundo. Déjala en blanco para usar la semilla actual." },
+          "level-type":           { "label": "Tipo de mundo", "description": "Forma del mundo: por defecto, plano, amplificado, biomas grandes, etc." },
+          "generate-structures":  { "label": "Generar estructuras", "description": "Si aldeas, templos, fortalezas y otras estructuras aparecen en los chunks nuevos." }
+        }
       },
       "backups": {
         "title": "Copias locales",

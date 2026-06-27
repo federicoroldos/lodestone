@@ -2,16 +2,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useServer } from '@/context/ServerContext';
 
-export function useWebSocket({ onLine, onHistory, onStatus, onStats, onConnChange } = {}) {
+export function useWebSocket({ onLine, onHistory, onStatus, onStats, onServer, onConnChange } = {}) {
   const { token } = useAuth();
-  const { updateStatus, setActiveServerId, wsRef } = useServer();
+  const { updateStatus, setActiveServerId, setServers, wsRef } = useServer();
   const reconnectTimer = useRef(null);
   const mountedRef = useRef(true);
 
   // Keep latest callbacks in refs so the WS handler always calls current version
-  const callbacksRef = useRef({ onLine, onHistory, onStatus, onStats, onConnChange });
+  const callbacksRef = useRef({ onLine, onHistory, onStatus, onStats, onServer, onConnChange });
   useEffect(() => {
-    callbacksRef.current = { onLine, onHistory, onStatus, onStats, onConnChange };
+    callbacksRef.current = { onLine, onHistory, onStatus, onStats, onServer, onConnChange };
   });
 
   const sendMessage = useCallback((msg) => {
@@ -52,6 +52,12 @@ export function useWebSocket({ onLine, onHistory, onStatus, onStats, onConnChang
           callbacksRef.current.onStatus?.(msg.status);
         } else if (msg.type === 'stats') {
           callbacksRef.current.onStats?.(msg.stats);
+        } else if (msg.type === 'server' && msg.server) {
+          // Server metadata (name, dir, mapUrl, ...) changed on another
+          // client or in the backend. Merge it into the local list so
+          // derived state (active server, mapUrl) updates without a refetch.
+          setServers((prev) => prev.map((s) => s.id === msg.server.id ? { ...s, ...msg.server } : s));
+          callbacksRef.current.onServer?.(msg.server);
         }
       };
 

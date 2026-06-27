@@ -197,6 +197,19 @@ function migrateConfig() {
     config.activeServerId = config.servers[0].id;
     changed = true;
   }
+  // Propagate the legacy global `config.map.url` into each existing server
+  // (only for servers that don't already have a mapUrl set), then drop the
+  // global field. Per-server mapUrl is the source of truth from now on.
+  if (config.map && typeof config.map.url === 'string' && config.map.url) {
+    for (const s of config.servers) {
+      if (!s.mapUrl) s.mapUrl = config.map.url;
+    }
+    delete config.map;
+    changed = true;
+  }
+  for (const s of config.servers) {
+    if (typeof s.mapUrl !== 'string') s.mapUrl = '';
+  }
   if (!config.backups) {
     config.backups = { dir: path.join(os.homedir(), 'mc-backups'), maxCount: 10, maxSizeMB: 0 };
     changed = true;
@@ -1371,6 +1384,7 @@ function serverWithStatus(s) {
     mcVersion: s.mcVersion,
     worlds: s.worlds,
     watchdog: s.watchdog,
+    mapUrl: s.mapUrl || '',
     active: s.id === config.activeServerId,
     hasGenerated: hasGeneratedContent(s),
     status: m.statusPayload(),
@@ -1409,6 +1423,8 @@ function validateServerInput(body, user) {
   let worlds = body.worlds;
   if (typeof worlds === 'string') worlds = worlds.split(',').map((w) => w.trim()).filter(Boolean);
   if (!Array.isArray(worlds) || !worlds.length) worlds = ['world', 'world_nether', 'world_the_end'];
+  const mapUrl = normalizeMapUrl(body.mapUrl);
+  if (mapUrl === null) return { error: eKey('errors.invalidMapUrl') };
   return {
     value: {
       name,
@@ -1418,8 +1434,24 @@ function validateServerInput(body, user) {
       worlds,
       mcVersion: String(body.mcVersion || '').trim(),
       stopTimeoutSeconds: Number(body.stopTimeoutSeconds) || 30,
+      mapUrl,
     },
   };
+}
+
+// Accept an empty string (clears the map) or a http(s) URL. Returns the
+// normalized URL, or null if the input is non-empty but not a valid URL.
+function normalizeMapUrl(raw) {
+  if (raw === undefined || raw === null) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.toString().replace(/\/$/, '');
+  } catch (_) {
+    return null;
+  }
 }
 
 app.post('/api/servers', (req, res) => {
@@ -1453,6 +1485,21 @@ app.put('/api/servers/:id', (req, res) => {
     };
   }
   saveConfig(config);
+  res.json({ ok: true, server: serverWithStatus(s) });
+});
+
+// Update only the map URL for a server. The map URL is a panel-UI concern
+// (it's just a link to the web map the user wants to embed) so it can be
+// changed while the Minecraft server is running — unlike the rest of the
+// server settings, which require the server to be stopped.
+app.put('/api/servers/:id/map', (req, res) => {
+  const s = findServer(req.params.id);
+  if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
+  const mapUrl = normalizeMapUrl((req.body || {}).mapUrl);
+  if (mapUrl === null) return res.status(400).json({ error: tErr(req.user, 'errors.invalidMapUrl') });
+  s.mapUrl = mapUrl;
+  saveConfig(config);
+  globalBroadcast({ type: 'server', server: serverWithStatus(s) });
   res.json({ ok: true, server: serverWithStatus(s) });
 });
 
@@ -1836,7 +1883,8 @@ function editableFiles(dir) {
   for (const e of entries) {
     if (!e.isFile()) continue;
     const lower = e.name.toLowerCase();
-    if (lower === 'server.properties' || lower.endsWith('.yml') || lower.endsWith('.yaml')) {
+    if (lower.endsWith('.yml') || lower.endsWith('.yaml')
+        || lower.endsWith('.xml') || lower.endsWith('.properties')) {
       allowed.push(e.name);
     }
   }
