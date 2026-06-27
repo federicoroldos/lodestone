@@ -12,6 +12,7 @@ import { SpinningCube } from '@/components/shared/SpinningCube';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { ControlBar } from '@/components/layout/ControlBar';
+import { FirstStartDialog } from '@/components/shared/FirstStartDialog';
 import { DashboardView } from '@/views/DashboardView';
 import { ServersView } from '@/views/ServersView';
 import { MetricsView } from '@/views/MetricsView';
@@ -26,15 +27,43 @@ import { BackupsView } from '@/views/BackupsView';
 import { TasksView } from '@/views/TasksView';
 import { UsersView } from '@/views/UsersView';
 
+// Views that touch the server's on-disk content (plugins, mods, configs, files).
+// Navigating into any of them while the active server has never been started
+// triggers the "Start the server first" prompt so mods/plugins install into a
+// fully generated folder tree instead of a half-empty one.
+const CONTENT_VIEWS = ['plugins', 'modrinth', 'files', 'configs'];
+
+function dismissedKey(serverId) {
+  return `ls-fs-dismissed:${serverId || ''}`;
+}
+
+function isDismissed(serverId) {
+  if (!serverId) return false;
+  try { return sessionStorage.getItem(dismissedKey(serverId)) === '1'; }
+  catch (_) { return false; }
+}
+
+function markDismissed(serverId) {
+  if (!serverId) return;
+  try { sessionStorage.setItem(dismissedKey(serverId), '1'); } catch (_) {}
+}
+
 function AppShell({ onLoggedIn }) {
   const { token, user, setUser, isLoggedIn } = useAuth();
-  const { servers, setServers, activeServerId, setActiveServerId, updateStatus, setMapUrl, wsRef } = useServer();
+  const { servers, setServers, activeServerId, setActiveServerId, getServerStatus, updateStatus, setMapUrl, wsRef } = useServer();
   const api = useApi();
   const t = useT();
 
   const [currentView, setCurrentView] = useState('servers');
   const [consoleLines, setConsoleLines] = useState([]);
   const [connState, setConnState] = useState('connecting');
+
+  // Bumped whenever the active server transitions to "online" after a
+  // first-start prompt, so the current view re-mounts and re-fetches its data
+  // (the auto-generated files only exist once the server is fully up).
+  const [viewNonce, setViewNonce] = useState(0);
+  const [firstStart, setFirstStart] = useState({ open: false, pendingView: null, starting: false });
+  const awaitingFirstStart = useRef(false);
 
   // Boot: load /api/me if we have a token but no user yet
   useEffect(() => {
@@ -84,6 +113,16 @@ function AppShell({ onLoggedIn }) {
       if (msg.serverId !== activeServerId) return;
       setConsoleLines(msg.lines || []);
     }, [activeServerId]),
+    onStatus: useCallback((msg) => {
+      if (!msg) return;
+      updateStatus(msg);
+      if (msg.serverId === activeServerId && msg.status === 'online' && awaitingFirstStart.current) {
+        awaitingFirstStart.current = false;
+        setViewNonce(n => n + 1);
+        toast.success(t('firstStart.onlineToast'));
+        loadServers();
+      }
+    }, [activeServerId, updateStatus, t]),
     onStats: useCallback((stats) => {
       // Pass to dashboard if it's the active listener
       if (window.__dashOnStats) window.__dashOnStats(stats);
@@ -118,7 +157,50 @@ function AppShell({ onLoggedIn }) {
   }
 
   function navigate(view) {
-    setCurrentView(view);
+    if (!CONTENT_VIEWS.includes(view)) {
+      setCurrentView(view);
+      return;
+    }
+    const active = servers.find(s => s.id === activeServerId);
+    if (!active || active.hasGenerated || isDismissed(active.id)) {
+      setCurrentView(view);
+      return;
+    }
+    const liveStatus = getServerStatus(active.id);
+    if (liveStatus && liveStatus.status && liveStatus.status !== 'offline') {
+      setCurrentView(view);
+      return;
+    }
+    setFirstStart({ open: true, pendingView: view, starting: false });
+  }
+
+  function closeFirstStart() {
+    setFirstStart({ open: false, pendingView: null, starting: false });
+  }
+
+  async function startFromFirstStart() {
+    if (!activeServerId) { closeFirstStart(); return; }
+    markDismissed(activeServerId);
+    setFirstStart(prev => ({ ...prev, starting: true }));
+    awaitingFirstStart.current = true;
+    const pendingView = firstStart.pendingView;
+    try {
+      await api('/api/server/start', { method: 'POST' });
+      setCurrentView(pendingView);
+      closeFirstStart();
+      toast(t('firstStart.startingToast'));
+      loadServers();
+    } catch (e) {
+      awaitingFirstStart.current = false;
+      toast.error(e.message);
+      setFirstStart(prev => ({ ...prev, starting: false }));
+    }
+  }
+
+  function continueFromFirstStart() {
+    if (activeServerId) markDismissed(activeServerId);
+    setCurrentView(firstStart.pendingView);
+    closeFirstStart();
   }
 
   const views = {
@@ -148,12 +230,20 @@ function AppShell({ onLoggedIn }) {
         <div className="relative z-10 flex min-h-screen flex-1 min-w-0 flex-col">
           <Header currentView={currentView} />
           <main className="flex-1 p-5 pb-28">
-            <div className="view-enter" key={currentView}>
+            <div className="view-enter" key={`${currentView}:${viewNonce}`}>
               {views[currentView] || null}
             </div>
           </main>
         </div>
       </div>
+      <FirstStartDialog
+        open={firstStart.open}
+        onOpenChange={(o) => { if (!o) closeFirstStart(); }}
+        serverName={servers.find(s => s.id === activeServerId)?.name}
+        starting={firstStart.starting}
+        onStartNow={startFromFirstStart}
+        onContinueAnyway={continueFromFirstStart}
+      />
       <ControlBar
         onServerSwitch={handleSetActive}
         onStart={() => serverAction('start')}

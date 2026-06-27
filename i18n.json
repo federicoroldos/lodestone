@@ -238,6 +238,13 @@
         "downloading": "Downloading…",
         "downloadAndCreate": "Download & create",
         "createdToast": "Server created",
+        "phaseResolving": "Resolving download URL…",
+        "phaseDownloading": "Downloading server jar",
+        "phaseInstallingForge": "Installing Forge…",
+        "phaseFinalizing": "Finalizing…",
+        "progressBytes": "{received} / {total}",
+        "progressBytesUnknown": "{received} downloaded",
+        "progressPercent": "{pct}%",
         "updatedToast": "Server updated",
         "registeredToast": "Server registered",
         "removeTitle": "Remove server",
@@ -487,6 +494,14 @@
         "offline": "offline",
         "starting": "starting",
         "stopping": "stopping"
+      },
+      "firstStart": {
+        "title": "Start the server first",
+        "description": "\"{name}\" has never been started. Start it once so the server can auto-generate its world, structure, and config files. Installing plugins or mods before the first start can leave them without the folders and files they need.",
+        "startNow": "Start now",
+        "continueAnyway": "Continue anyway",
+        "startingToast": "Starting server… content will appear once it's online",
+        "onlineToast": "Server is online — refreshing"
       }
     },
     "es": {
@@ -724,6 +739,13 @@
         "downloading": "Descargando…",
         "downloadAndCreate": "Descargar y crear",
         "createdToast": "Servidor creado",
+        "phaseResolving": "Resolviendo URL de descarga…",
+        "phaseDownloading": "Descargando el jar del servidor",
+        "phaseInstallingForge": "Instalando Forge…",
+        "phaseFinalizing": "Finalizando…",
+        "progressBytes": "{received} / {total}",
+        "progressBytesUnknown": "{received} descargados",
+        "progressPercent": "{pct}%",
         "updatedToast": "Servidor actualizado",
         "registeredToast": "Servidor registrado",
         "removeTitle": "Quitar servidor",

@@ -2,16 +2,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useServer } from '@/context/ServerContext';
 
-export function useWebSocket({ onLine, onHistory, onStats, onConnChange } = {}) {
+export function useWebSocket({ onLine, onHistory, onStatus, onStats, onConnChange } = {}) {
   const { token } = useAuth();
   const { updateStatus, setActiveServerId, wsRef } = useServer();
   const reconnectTimer = useRef(null);
   const mountedRef = useRef(true);
 
   // Keep latest callbacks in refs so the WS handler always calls current version
-  const callbacksRef = useRef({ onLine, onHistory, onStats, onConnChange });
+  const callbacksRef = useRef({ onLine, onHistory, onStatus, onStats, onConnChange });
   useEffect(() => {
-    callbacksRef.current = { onLine, onHistory, onStats, onConnChange };
+    callbacksRef.current = { onLine, onHistory, onStatus, onStats, onConnChange };
   });
 
   const sendMessage = useCallback((msg) => {
@@ -49,6 +49,7 @@ export function useWebSocket({ onLine, onHistory, onStats, onConnChange } = {}) 
           callbacksRef.current.onLine?.(msg);
         } else if (msg.type === 'status') {
           updateStatus(msg.status);
+          callbacksRef.current.onStatus?.(msg.status);
         } else if (msg.type === 'stats') {
           callbacksRef.current.onStats?.(msg.stats);
         }
