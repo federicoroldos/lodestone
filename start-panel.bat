@@ -30,6 +30,20 @@ if not exist "node_modules" (
   )
 )
 
+REM --- Build the frontend on every launch so source edits always take effect ---
+REM  (Set LODESTONE_SKIP_BUILD=1 before running to skip and serve the existing bundle.)
+if "%LODESTONE_SKIP_BUILD%"=="1" (
+  echo Skipping frontend build (LODESTONE_SKIP_BUILD=1).
+) else (
+  echo Building frontend...
+  call npm run build
+  if errorlevel 1 (
+    echo [ERROR] Frontend build failed. Check the output above for details.
+    pause
+    exit /b 1
+  )
+)
+
 REM --- Seed config.json from the template on first run (never overwrite an existing one) ---
 if not exist "config.json" (
   if exist "config.example.json" (
@@ -48,6 +62,12 @@ if not exist "config.json" (
     pause
     exit /b 1
   )
+)
+
+REM --- Kill any previous panel instance still holding the port ---
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr "0.0.0.0:2121 " 2^>nul') do (
+  echo Stopping previous panel instance (PID %%p^)...
+  taskkill /f /pid %%p >nul 2>nul
 )
 
 echo.
