@@ -301,8 +301,13 @@
         "listEmpty": "Empty.",
         "actionPardon": "Pardon",
         "actionRemove": "Remove",
-        "actionApplied": "{action} → {name}",
-        "listOp": "{kind} {op}: {name}"
+        "actionApplied": "{action}: {name}",
+        "listOp": "{kind} {op}: {name}",
+        "opped": "Opped {name}",
+        "deopped": "De-opped {name}",
+        "kicked": "Kicked {name}",
+        "banned": "Banned {name}",
+        "pardoned": "Pardoned {name}"
       },
       "mapView": {
         "configureFirst": "Configure the map (BlueMap/Dynmap) first.",
@@ -828,8 +833,13 @@
         "listEmpty": "Vacío.",
         "actionPardon": "Perdonar",
         "actionRemove": "Quitar",
-        "actionApplied": "{action} → {name}",
-        "listOp": "{kind} {op}: {name}"
+        "actionApplied": "{action}: {name}",
+        "listOp": "{kind} {op}: {name}",
+        "opped": "{name} ahora es operador",
+        "deopped": "{name} ya no es operador",
+        "kicked": "{name} expulsado",
+        "banned": "{name} baneado",
+        "pardoned": "{name} perdonado"
       },
       "mapView": {
         "configureFirst": "Configura primero el mapa (BlueMap/Dynmap).",

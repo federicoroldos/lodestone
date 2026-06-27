@@ -5,8 +5,18 @@ import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useApi } from '@/hooks/useApi';
 import { useServer } from '@/context/ServerContext';
+import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { RefreshCw, X } from 'lucide-react';
+
+// Friendly, terse confirmation per player action (e.g. "Kicked Steve").
+const ACTION_MSG = {
+  op: 'players.opped',
+  deop: 'players.deopped',
+  kick: 'players.kicked',
+  ban: 'players.banned',
+  pardon: 'players.pardoned',
+};
 
 function PlayerChip({ name, onAction }) {
   return (
@@ -78,6 +88,7 @@ function AddPlayerForm({ kind, onAdd, placeholder, buttonLabel, buttonVariant = 
 
 export function PlayersView() {
   const api = useApi();
+  const t = useT();
   const { activeServerId, statuses } = useServer();
   const status = activeServerId ? (statuses[activeServerId] || {}) : {};
   const players = status.players || [];
@@ -97,7 +108,7 @@ export function PlayersView() {
   async function playerAction(action, name) {
     try {
       await api(`/api/players/${action}`, { method: 'POST', body: { name } });
-      toast.success(`${action} → ${name}`);
+      toast.success(t(ACTION_MSG[action] || 'players.actionApplied', { action, name }));
       if (['ban', 'op', 'deop'].includes(action)) setTimeout(loadLists, 1200);
     } catch (e) { toast.error(e.message); }
   }
@@ -106,7 +117,7 @@ export function PlayersView() {
     try {
       const r = await api(`/api/playerlists/${kind}/${op}`, { method: 'POST', body: { name } });
       if (r?.error) { toast.error(r.error); return; }
-      toast.success(r?.note || `${kind} ${op}: ${name}`);
+      toast.success(r?.note || t('players.listOp', { kind, op, name }));
       loadLists();
       setTimeout(loadLists, 1200);
     } catch (e) { toast.error(e.message); }
@@ -115,7 +126,7 @@ export function PlayersView() {
   async function toggleWhitelist(e) {
     try {
       const r = await api('/api/whitelist/toggle', { method: 'POST', body: { enabled: e.target.checked } });
-      toast.success(r?.note || `Whitelist ${e.target.checked ? 'enabled' : 'disabled'}`);
+      toast.success(r?.note || t(e.target.checked ? 'players.whitelistEnabled' : 'players.whitelistDisabled'));
       loadLists();
     } catch (e) { toast.error(e.message); loadLists(); }
   }
@@ -161,12 +172,12 @@ export function PlayersView() {
             />
             {['op', 'deop', 'kick'].map(a => (
               <Button key={a} variant="glass" size="sm" onClick={() => {
-                if (!manualName.trim()) { toast.error('Enter a name'); return; }
+                if (!manualName.trim()) { toast.error(t('players.enterName')); return; }
                 playerAction(a, manualName.trim());
               }}>{a.toUpperCase()}</Button>
             ))}
             <Button variant="destructive" size="sm" onClick={() => {
-              if (!manualName.trim()) { toast.error('Enter a name'); return; }
+              if (!manualName.trim()) { toast.error(t('players.enterName')); return; }
               playerAction('ban', manualName.trim());
             }}>Ban</Button>
           </div>

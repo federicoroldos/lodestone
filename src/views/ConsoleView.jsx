@@ -52,22 +52,48 @@ export function ConsoleView({ lines, onCommand }) {
   const [showJump, setShowJump] = useState(false);
   const consoleRef = useRef(null);
   const prevLenRef = useRef(0);
+  // Whether the user is currently pinned to the bottom. Tracked from real
+  // scroll events so the decision to auto-scroll doesn't depend on measuring
+  // the viewport *after* new lines have already grown it (the old bug: a batch
+  // of lines or one long wrapped line pushed the distance past the threshold,
+  // and auto-scroll silently stopped).
+  const atBottomRef = useRef(true);
 
-  useEffect(() => {
-    if (!consoleRef.current) return;
+  const handleScroll = useCallback(() => {
     const el = consoleRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = el.clientHeight > 0 && dist < 120;
+    atBottomRef.current = nearBottom;
+    setShowJump(!nearBottom);
+  }, []);
+
+  // Stick to the live tail as new lines arrive, unless the user scrolled up.
+  useEffect(() => {
+    const el = consoleRef.current;
+    if (!el) return;
     const prevLen = prevLenRef.current;
     prevLenRef.current = lines.length;
 
     // Force-scroll when history loads (initial mount or server switch):
-    // lines jumped from 0 → many, equivalent to main's scrollConsole(true).
+    // lines jumped from 0 → many.
     const historyLoaded = prevLen === 0 && lines.length > 0;
-    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const nearBottom = el.clientHeight > 0 && dist < 120;
-
-    setShowJump(!nearBottom && !historyLoaded);
-    if (historyLoaded || (autoscroll && nearBottom)) el.scrollTop = el.scrollHeight;
+    if (historyLoaded || (autoscroll && atBottomRef.current)) {
+      el.scrollTop = el.scrollHeight;
+      atBottomRef.current = true;
+      setShowJump(false);
+    }
   }, [lines, autoscroll]);
+
+  // Re-enabling autoscroll snaps back to the bottom immediately.
+  useEffect(() => {
+    if (!autoscroll) return;
+    const el = consoleRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true;
+    setShowJump(false);
+  }, [autoscroll]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -117,7 +143,7 @@ export function ConsoleView({ lines, onCommand }) {
         </div>
       </CardHeader>
 
-      <div ref={consoleRef} className="console-area relative">
+      <div ref={consoleRef} onScroll={handleScroll} className="console-area relative">
         {displayLines.map((line, i) => {
           const level = line.level || detectLevel(line.text) || '';
           return (
