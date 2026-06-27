@@ -34,7 +34,7 @@ install plugins, edit files, schedule backups, and reach it from anywhere.
 | 🛡️ | **Watchdog** | Auto-restart on crash, with a crash-loop guard so it never spins forever. |
 | 🗺️ | **World map** | Embeds BlueMap / Dynmap right inside the panel. |
 | 🔔 | **Discord** | Webhook alerts for crashes, a full server, and optional join / leave. |
-| 🔐 | **Multi-user login** | Email + password accounts (hashed), signed sessions, and a Users tab to manage who has access. |
+| 🔐 | **Multi-user login** | Username + password accounts (hashed), signed sessions, and a Users tab to manage who has access. |
 | 🌍 | **Reach it anywhere** | Works great over your LAN or **Tailscale** — no port-forwarding, nothing exposed to the public internet. |
 
 ---
@@ -44,13 +44,11 @@ install plugins, edit files, schedule backups, and reach it from anywhere.
 > **You need:** [**Node.js 18+**](https://nodejs.org/) and **Java** on your `PATH` (whatever version your server jar needs).
 > Verify with `node -v` and `java -version`.
 
-1. **Set a secret.** Open `config.json` and change `jwtSecret` to a long random string.
-   *(Don't have a `config.json` yet? Copy `config.example.json` to `config.json`.)*
-2. **Launch.** Double-click **`start-panel.bat`**.
+1. **Launch.** Double-click **`start-panel.bat`**.
    - First run installs dependencies automatically (`npm install`).
-   - Then it starts the panel and prints the URL.
-3. **Open** **<http://localhost:2121>** and log in.
-   - Default account on a fresh install: **`fede212yt@gmail.com`** / the password is `changeme123` unless you migrated from an older `password` setting. **Change it in the Users tab right away.**
+   - It also creates `config.json` for you (with a freshly generated `jwtSecret`) and prints the URL.
+2. **Open** **<http://localhost:2121>** and log in.
+   - Default account on a fresh install: **`admin`** / **`admin`** (also printed in the console window). **Change the password in the Users tab right away.**
 
 Prefer the terminal?
 
@@ -229,7 +227,7 @@ Tailscale gives every device a private, encrypted IP, so you can reach the panel
 
 ## 🔒 Security notes
 
-- Logins use email + password (hashed with scrypt) and a signed JWT session. **Change `jwtSecret`** and remove the default account's password before sharing any link.
+- Logins use username + password (hashed with scrypt) and a signed JWT session. `jwtSecret` is generated automatically on first run. **Change the default `admin` password** before sharing any link.
 - Prefer Tailscale or your LAN over exposing the port to the public internet. There's no rate-limiting or 2FA.
 - The **Files** manager and **Configs** editor are sandboxed to each server's folder (with a path-traversal guard); plugin upload only accepts `.jar`.
 - The **folder browser** (used when registering/creating a server) can list directories anywhere on the machine. It's read-only and needs a valid session — another reason to keep the panel behind a password and Tailscale/LAN.

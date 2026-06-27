@@ -58,8 +58,9 @@ on a browser refresh; backend edits need a panel restart.
   `list` / `tps` on an interval.
 
 ### Auth
-- Users live in `config.users[]` as `{ id, email, name, passwordHash }`. Passwords are
-  hashed with **scrypt** (`salt:hash`), compared with `timingSafeEqual`.
+- Users live in `config.users[]` as `{ id, username, name, passwordHash }` (an optional
+  `email` field is reserved for a future opt-in feature and is not used for login). Passwords
+  are hashed with **scrypt** (`salt:hash`), compared with `timingSafeEqual`.
 - Login (`POST /api/login`) returns a **JWT** signed with `config.jwtSecret`. All `/api/*`
   routes except `/api/login` require `Authorization: Bearer <token>` (or `?token=` for
   downloads / the WebSocket). `userFromToken` re-resolves the live user, so deleting a user

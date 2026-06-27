@@ -11,9 +11,20 @@
   <!-- ====================== LOGIN ====================== -->
   <div id="login" class="login-overlay">
     <form id="login-form" class="login-card">
-      <div class="login-logo"><span class="diamond">◆</span> Lodestone</div>
+      <div class="login-logo">
+        <span class="logo-mark">
+          <svg viewBox="0 0 32 32">
+            <rect class="lode-block" x="3.5" y="3.5" width="25" height="25" rx="6.5"/>
+            <circle class="lode-ring" cx="16" cy="16" r="8.5"/>
+            <path class="lode-n" d="M16 8 L18.4 16 L13.6 16 Z"/>
+            <path class="lode-s" d="M16 24 L18.4 16 L13.6 16 Z"/>
+            <circle class="lode-core" cx="16" cy="16" r="1.7"/>
+          </svg>
+        </span>
+        <span class="logo-word">Lodestone</span>
+      </div>
       <p class="login-sub">Minecraft server panel</p>
-      <input type="email" id="login-email" class="fc" placeholder="Email" autocomplete="username" />
+      <input type="text" id="login-username" class="fc" placeholder="Username" autocomplete="username" />
       <input type="password" id="login-pass" class="fc" placeholder="Password" autocomplete="current-password" />
       <button type="submit" class="btn btn-pri">Log in</button>
       <div id="login-error" class="login-error"></div>
@@ -549,8 +560,8 @@
           <input type="text" id="uf-name" class="fc" placeholder="Steve" />
         </label>
         <label class="field">
-          <span>Email</span>
-          <input type="email" id="uf-email" class="fc" placeholder="user@example.com" autocomplete="off" />
+          <span>Username</span>
+          <input type="text" id="uf-username" class="fc" placeholder="steve" autocomplete="off" />
         </label>
         <label class="field">
           <span id="uf-pass-label">Password</span>
