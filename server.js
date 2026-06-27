@@ -38,8 +38,24 @@ const jwt = require('jsonwebtoken');
 // ---------------------------------------------------------------------------
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 
+// A fresh JWT secret used whenever none is set or the template placeholder is
+// still in place. Keeping it long and random means tokens can't be forged.
+function freshSecret() {
+  return crypto.randomBytes(48).toString('hex');
+}
+
+// First run has no config.json (it's git-ignored). Bootstrap one from the
+// committed template so the panel starts on a plain `node server.js` / double
+// click, with a generated jwtSecret instead of the insecure placeholder.
 function loadConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    const template = JSON.parse(fs.readFileSync(CONFIG_EXAMPLE_PATH, 'utf8'));
+    template.jwtSecret = freshSecret();
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(template, null, 2), 'utf8');
+    console.log(`[lodestone] Created config.json from template at ${CONFIG_PATH}`);
+  }
   const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
   return JSON.parse(raw);
 }
@@ -81,17 +97,25 @@ function verifyPassword(pw, stored) {
 function findUser(id) {
   return (config.users || []).find((u) => u.id === id) || null;
 }
-function findUserByEmail(email) {
-  const e = String(email || '').trim().toLowerCase();
-  return (config.users || []).find((u) => u.email.toLowerCase() === e) || null;
+function findUserByUsername(username) {
+  const u = String(username || '').trim().toLowerCase();
+  return (config.users || []).find((x) => String(x.username || '').toLowerCase() === u) || null;
 }
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name || '' };
+  // `email` is optional and reserved for a future opt-in "associate an email"
+  // feature; it has no effect on login.
+  return { id: u.id, username: u.username, name: u.name || '', email: u.email || '' };
 }
 
 // Migrate a legacy single-server config (serverDir/jar/...) into config.servers[].
 function migrateConfig() {
   let changed = false;
+  // Never run with a missing or placeholder JWT secret (e.g. config.example.json
+  // copied by hand): replace it with a real random one so tokens are secure.
+  if (!config.jwtSecret || config.jwtSecret === 'CHANGE-THIS-SECRET-TO-SOMETHING-LONG-AND-RANDOM') {
+    config.jwtSecret = freshSecret();
+    changed = true;
+  }
   if (!Array.isArray(config.servers)) {
     config.servers = [];
     if (config.serverDir) {
@@ -129,12 +153,14 @@ function migrateConfig() {
     changed = true;
   }
   // Migrate the legacy single global password into a first user account.
+  // On a fresh install this is the default admin / admin login (printed to the
+  // console at startup until the password is changed).
   if (!Array.isArray(config.users) || !config.users.length) {
     config.users = [{
       id: genId(),
-      email: 'fede212yt@gmail.com',
+      username: 'admin',
       name: 'Admin',
-      passwordHash: hashPassword(config.password || 'changeme123'),
+      passwordHash: hashPassword(config.password || 'admin'),
     }];
     delete config.password;
     changed = true;
@@ -2113,9 +2139,27 @@ function doScheduledRestart(m) {
 
 setupSchedulers();
 
+// Print the default login banner while the admin account still uses the
+// default "admin" password, so a first-time user knows how to get in. The
+// notice disappears automatically once the password is changed.
+function printDefaultCredsNotice() {
+  const admin = findUserByUsername('admin');
+  if (!admin || !verifyPassword('admin', admin.passwordHash)) return;
+  const url = `http://localhost:${config.panelPort}`;
+  console.log('');
+  console.log('  ============================================================');
+  console.log('   Default login (change it after first sign-in):');
+  console.log('       Username: admin');
+  console.log('       Password: admin');
+  console.log(`   Open ${url} and log in.`);
+  console.log('  ============================================================');
+  console.log('');
+}
+
 server.listen(config.panelPort, config.panelHost, () => {
   log(`${config.appName} listening on http://${config.panelHost}:${config.panelPort}`);
   log(`Registered servers: ${config.servers.length}`);
+  printDefaultCredsNotice();
 });
 
 // Clean shutdown
