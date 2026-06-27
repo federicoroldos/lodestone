@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Toaster } from 'sonner';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useServer } from '@/context/ServerContext';
@@ -13,6 +12,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { ControlBar } from '@/components/layout/ControlBar';
 import { FirstStartDialog } from '@/components/shared/FirstStartDialog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardView } from '@/views/DashboardView';
 import { ServersView } from '@/views/ServersView';
 import { MetricsView } from '@/views/MetricsView';
@@ -63,6 +63,7 @@ function AppShell({ onLoggedIn }) {
   // (the auto-generated files only exist once the server is fully up).
   const [viewNonce, setViewNonce] = useState(0);
   const [firstStart, setFirstStart] = useState({ open: false, pendingView: null, starting: false });
+  const [confirmRestart, setConfirmRestart] = useState(false);
   const awaitingFirstStart = useRef(false);
 
   // Boot: load /api/me if we have a token but no user yet
@@ -142,14 +143,20 @@ function AppShell({ onLoggedIn }) {
     } catch (e) { toast.error(e.message); }
   }
 
-  async function serverAction(action) {
+  async function runServerAction(action) {
     const endpoint = action === 'start' ? '/api/server/start' :
                      action === 'stop'  ? '/api/server/stop' :
                      '/api/server/restart';
-    if (action === 'restart' && !confirm(t('header.restartConfirm'))) return;
     try {
       await api(endpoint, { method: 'POST' });
     } catch (e) { toast.error(e.message); }
+  }
+
+  function serverAction(action) {
+    // Restart is disruptive (kicks everyone) — confirm with the app's own
+    // dialog instead of the browser's native confirm box.
+    if (action === 'restart') { setConfirmRestart(true); return; }
+    runServerAction(action);
   }
 
   function handleCommand(cmd) {
@@ -243,6 +250,14 @@ function AppShell({ onLoggedIn }) {
         starting={firstStart.starting}
         onStartNow={startFromFirstStart}
         onContinueAnyway={continueFromFirstStart}
+      />
+      <ConfirmDialog
+        open={confirmRestart}
+        onOpenChange={setConfirmRestart}
+        title={t('header.restart')}
+        description={t('header.restartConfirm')}
+        confirmLabel={t('header.restart')}
+        onConfirm={() => runServerAction('restart')}
       />
       <ControlBar
         onServerSwitch={handleSetActive}

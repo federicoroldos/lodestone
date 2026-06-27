@@ -875,24 +875,14 @@ app.post('/api/login', async (req, res) => {
   // Decide which language to use for this session:
   //   - An explicit `lang` field on the body (manual switcher before login) wins.
   //   - Otherwise, if the user already has a language set, keep it.
-  //   - Otherwise, geolocate the client IP and map country → language, then
-  //     persist that first-time detection on the user record so it sticks.
+  //   - Otherwise, fall back to the default (English).
   let chosen = i18n.normalizeLang(lang);
   if (chosen === i18n.DEFAULT_LANG && i18n.SUPPORTED_LANGS.includes(user.language)) {
     chosen = user.language;
   }
-  if (chosen === i18n.DEFAULT_LANG) {
-    const ip = pickRequestIp(req, clientIp);
-    const geo = await geolocateIp(ip);
-    if (geo && geo.country) {
-      const detected = i18n.countryToLanguage(geo.country);
-      if (detected !== user.language) {
-        user.language = detected;
-        saveConfig(config);
-      }
-      chosen = detected;
-    }
-  }
+  // The panel defaults to English. We only ever switch away from it when the
+  // user explicitly picks a language (this request's `lang`, or one they saved
+  // before) — no IP geolocation guessing, so the default stays predictable.
   user.language = chosen;
 
   res.json({ token: signToken(user), user: publicUser(user) });
