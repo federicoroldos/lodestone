@@ -114,6 +114,20 @@ function migrateConfig() {
     changed = true;
   }
   if (!config.backups) config.backups = { dir: path.join(os.homedir(), 'mc-backups'), retainCount: 10 };
+  // Ensure optional feature blocks always exist, so legacy configs that predate
+  // them don't crash code paths that read e.g. config.discord.notifyOnJoinLeave.
+  if (!config.discord || typeof config.discord !== 'object') {
+    config.discord = { webhookUrl: '', notifyOnCrash: true, notifyOnFull: true, notifyOnJoinLeave: false };
+    changed = true;
+  }
+  if (!config.map || typeof config.map !== 'object') {
+    config.map = { url: '' };
+    changed = true;
+  }
+  if (!config.scheduledRestart || typeof config.scheduledRestart !== 'object') {
+    config.scheduledRestart = { enabled: false, cron: '0 4 * * *', warnMinutes: [5, 1] };
+    changed = true;
+  }
   // Migrate the legacy single global password into a first user account.
   if (!Array.isArray(config.users) || !config.users.length) {
     config.users = [{
@@ -574,7 +588,10 @@ ensureManagers();
 // ---------------------------------------------------------------------------
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+// Body limit is deliberately larger than MAX_EDIT_BYTES (2 MB): a 2 MB file
+// JSON-encoded (with escaping) plus the path field exceeds 2 MB, so a tighter
+// limit would reject saving files that are within the edit size cap.
+app.use(express.json({ limit: '8mb' }));
 
 // --- auth ---
 function signToken(user) {
@@ -609,12 +626,37 @@ function authMiddleware(req, res, next) {
   next();
 }
 
+// Simple in-memory login throttle: max attempts per IP within a rolling window.
+// Successful logins clear the counter. Keeps brute-forcing impractical without
+// any external dependency (zero-config).
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginAttempts = new Map(); // ip -> { count, first }
+
+function loginThrottle(ip) {
+  const now = Date.now();
+  const rec = loginAttempts.get(ip);
+  if (!rec || now - rec.first > LOGIN_WINDOW_MS) {
+    loginAttempts.set(ip, { count: 0, first: now });
+    return { blocked: false };
+  }
+  return { blocked: rec.count >= LOGIN_MAX_ATTEMPTS, rec };
+}
+
 app.post('/api/login', (req, res) => {
+  const ip = req.ip || (req.socket && req.socket.remoteAddress) || 'unknown';
+  const { blocked, rec } = loginThrottle(ip);
+  if (blocked) {
+    return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
+  }
   const { email, password } = req.body || {};
   const user = findUserByEmail(email);
   if (!user || !verifyPassword(password, user.passwordHash)) {
+    const cur = rec || loginAttempts.get(ip);
+    if (cur) cur.count++;
     return res.status(401).json({ error: 'Wrong email or password' });
   }
+  loginAttempts.delete(ip); // reset on success
   res.json({ token: signToken(user), user: publicUser(user) });
 });
 
@@ -1125,7 +1167,9 @@ async function sampleMetrics() {
 setInterval(sampleMetrics, METRICS_INTERVAL_MS);
 setTimeout(sampleMetrics, 4000); // first sample shortly after boot
 setInterval(saveMetrics, 5 * 60 * 1000);
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveMetrics(); process.exit(0); });
+// Note: SIGINT/SIGTERM are handled by shutdown() at the bottom of this file,
+// which flushes metrics before exiting — don't register a second exiting
+// handler here or it would pre-empt shutdown().
 
 const METRICS_RANGES = { hour: 3600e3, '6h': 6 * 3600e3, day: 24 * 3600e3, week: 7 * 24 * 3600e3 };
 app.get('/api/metrics', (req, res) => {
@@ -2077,6 +2121,7 @@ server.listen(config.panelPort, config.panelHost, () => {
 // Clean shutdown
 function shutdown() {
   log('Shutting down panel...');
+  saveMetrics();
   const running = [...managers.values()].filter((m) => m.isRunning());
   if (running.length) {
     log(`${running.length} Minecraft server(s) still running; leaving them alive. Stop them from the panel if you meant to.`);
