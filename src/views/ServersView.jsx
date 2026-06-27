@@ -8,13 +8,15 @@ import { StatusPill } from '@/components/shared/StatusPill';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useServer } from '@/context/ServerContext';
 import { useApi } from '@/hooks/useApi';
+import { useT } from '@/context/I18nContext';
 import { fmtUptime } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus } from 'lucide-react';
+import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
   const api = useApi();
+  const t = useT();
   const [current, setCurrent] = useState('');
   const [entries, setEntries] = useState({ path: '', dirs: [], drives: [], jars: [] });
 
@@ -38,14 +40,14 @@ function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Pick the server folder</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t('servers.pickFolderTitle')}</DialogTitle></DialogHeader>
         <div className="px-5 pt-2 pb-0">
-          <p className="text-xs font-mono text-muted-foreground mb-3 truncate">{current || 'This PC (drives)'}</p>
+          <p className="text-xs font-mono text-muted-foreground mb-3 truncate">{current || t('servers.thisPcDrives')}</p>
           <div className="border border-border rounded-md overflow-hidden max-h-64 overflow-y-auto">
             {entries.path && (
               <button type="button" onClick={() => navigate(entries.parent || '')}
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:bg-secondary border-b border-border">
-                ⬆ ..
+                {t('servers.up')}
               </button>
             )}
             {(entries.drives || []).map(d => (
@@ -62,17 +64,17 @@ function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
             ))}
           </div>
           {entries.jars?.length > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">Jars here: {entries.jars.join(', ')}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t('servers.jarsHere', { list: entries.jars.join(', ') })}</p>
           )}
         </div>
         <DialogFooter>
-          <Button variant="glass" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="glass" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button variant="default" onClick={() => {
-            if (!current) { toast.error('Navigate into a folder first'); return; }
+            if (!current) { toast.error(t('servers.navigateFirst')); return; }
             onSelect(current, entries.jars || []);
             onOpenChange(false);
           }}>
-            Use this folder
+            {t('servers.useThisFolder')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -82,6 +84,7 @@ function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
 
 function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers }) {
   const api = useApi();
+  const t = useT();
   const [form, setForm] = useState({ name: '', dir: '', jar: '', javaArgs: '-Xmx4G -Xms4G', mcVersion: '', worlds: 'world, world_nether, world_the_end' });
   const [jars, setJars] = useState([]);
   const [error, setError] = useState('');
@@ -123,7 +126,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
     try {
       if (server?.id) await api(`/api/servers/${server.id}`, { method: 'PUT', body: form });
       else await api('/api/servers', { method: 'POST', body: form });
-      onSaved(server ? 'Server updated' : 'Server registered');
+      onSaved(server ? t('servers.updatedToast') : t('servers.registeredToast'));
       onOpenChange(false);
     } catch (e) { setError(e.message); }
   }
@@ -135,53 +138,53 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{server ? 'Edit server' : 'Register server'}</DialogTitle>
+            <DialogTitle>{server ? t('servers.editTitle') : t('servers.registerTitle')}</DialogTitle>
           </DialogHeader>
           <div className="px-5 py-4 space-y-4">
             <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={f('name')} placeholder="My survival server" />
+              <Label>{t('servers.fieldName')}</Label>
+              <Input value={form.name} onChange={f('name')} placeholder={t('servers.namePlaceholder')} />
             </div>
             <div className="space-y-1.5">
-              <Label>Server folder</Label>
+              <Label>{t('servers.fieldFolder')}</Label>
               <div className="flex gap-2">
-                <Input value={form.dir} onChange={f('dir')} placeholder="C:\Servers\My Server" className="flex-1" />
+                <Input value={form.dir} onChange={f('dir')} placeholder={t('servers.folderPlaceholder')} className="flex-1" />
                 <Button variant="glass" size="sm" type="button" onClick={() => setFsOpen(true)}>
                   <FolderOpen className="h-3.5 w-3.5" />
-                  Browse…
+                  {t('servers.browse')}
                 </Button>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Server jar</Label>
+              <Label>{t('servers.fieldJar')}</Label>
               <select
                 className="flex h-9 w-full items-center rounded-md border border-input bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
                 value={form.jar}
                 onChange={f('jar')}
               >
-                {jars.length === 0 && <option value="">— pick the folder first —</option>}
+                {jars.length === 0 && <option value="">{t('servers.jarPlaceholder')}</option>}
                 {jars.map(j => <option key={j} value={j}>{j}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label>Java args</Label>
-              <Input value={form.javaArgs} onChange={f('javaArgs')} placeholder="-Xmx4G -Xms4G" />
+              <Label>{t('servers.fieldJavaArgs')}</Label>
+              <Input value={form.javaArgs} onChange={f('javaArgs')} placeholder={t('servers.javaArgsPlaceholder')} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>MC version (optional)</Label>
-                <Input value={form.mcVersion} onChange={f('mcVersion')} placeholder="1.21.1" />
+                <Label>{t('servers.fieldMcVersion')}</Label>
+                <Input value={form.mcVersion} onChange={f('mcVersion')} placeholder={t('servers.mcVersionPlaceholder')} />
               </div>
               <div className="space-y-1.5">
-                <Label>Worlds (for backups)</Label>
-                <Input value={form.worlds} onChange={f('worlds')} placeholder="world, world_nether" />
+                <Label>{t('servers.fieldWorlds')}</Label>
+                <Input value={form.worlds} onChange={f('worlds')} placeholder={t('servers.worldsPlaceholder')} />
               </div>
             </div>
             {error && <p className="text-xs text-status-error">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="glass" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button variant="default" onClick={save}>Save</Button>
+            <Button variant="glass" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button variant="default" onClick={save}>{t('common.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -208,6 +211,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
 
 function CreateServerModal({ open, onOpenChange, onCreated }) {
   const api = useApi();
+  const t = useT();
   const [form, setForm] = useState({ name: '', type: 'paper', mcVersion: '', parentDir: '', javaArgs: '-Xmx4G -Xms4G', eula: false });
   const [versions, setVersions] = useState([]);
   const [error, setError] = useState('');
@@ -227,11 +231,11 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
   }
 
   async function create() {
-    if (!form.eula) { setError('You must accept the Minecraft EULA'); return; }
+    if (!form.eula) { setError(t('errors.eulaRequired')); return; }
     setLoading(true); setError('');
     try {
       await api('/api/create', { method: 'POST', body: form });
-      onCreated('Server created');
+      onCreated(t('servers.createdToast'));
       onOpenChange(false);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -246,57 +250,63 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Create a new server</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t('servers.createTitle')}</DialogTitle></DialogHeader>
         <div className="px-5 py-4 space-y-4">
-          <p className="text-xs text-muted-foreground">Lodestone downloads the server jar for you and accepts the Minecraft EULA. A new folder is created inside the parent folder you choose.</p>
+          <p className="text-xs text-muted-foreground">{t('servers.createIntro')}</p>
           <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input value={form.name} onChange={f('name')} placeholder="My new server" />
+            <Label>{t('servers.fieldName')}</Label>
+            <Input value={form.name} onChange={f('name')} placeholder={t('servers.namePlaceholderCreate')} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Type</Label>
+              <Label>{t('servers.fieldType')}</Label>
               <select className="flex h-9 w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50" value={form.type} onChange={f('type')}>
-                <option value="paper">Paper (plugins)</option>
-                <option value="purpur">Purpur (plugins)</option>
-                <option value="fabric">Fabric (mods)</option>
-                <option value="vanilla">Vanilla</option>
+                <option value="paper">{t('servers.typePaper')}</option>
+                <option value="purpur">{t('servers.typePurpur')}</option>
+                <option value="fabric">{t('servers.typeFabric')}</option>
+                <option value="vanilla">{t('servers.typeVanilla')}</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label>Minecraft version</Label>
+              <Label>{t('servers.fieldMcVersionCreate')}</Label>
               <select className="flex h-9 w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50" value={form.mcVersion} onChange={f('mcVersion')}>
-                {versions.length === 0 && <option value="">loading…</option>}
+                {versions.length === 0 && <option value="">{t('servers.loadingVersions')}</option>}
                 {versions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Parent folder</Label>
+            <Label>{t('servers.fieldParent')}</Label>
             <div className="flex gap-2">
-              <Input value={form.parentDir} onChange={f('parentDir')} placeholder="C:\Servers" className="flex-1" />
+              <Input value={form.parentDir} onChange={f('parentDir')} placeholder={t('servers.parentPlaceholder')} className="flex-1" />
               <Button variant="glass" size="sm" type="button" onClick={async () => {
                 const data = await api(`/api/pick-folder?defaultPath=${encodeURIComponent(form.parentDir)}`);
                 if (data?.path) setForm(f => ({ ...f, parentDir: data.path }));
               }}>
-                <FolderOpen className="h-3.5 w-3.5" />Browse…
+                <FolderOpen className="h-3.5 w-3.5" />{t('servers.browse')}
               </Button>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Java args</Label>
-            <Input value={form.javaArgs} onChange={f('javaArgs')} placeholder="-Xmx4G -Xms4G" />
+            <Label>{t('servers.fieldJavaArgs')}</Label>
+            <Input value={form.javaArgs} onChange={f('javaArgs')} placeholder={t('servers.javaArgsPlaceholder')} />
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={form.eula} onChange={f('eula')} className="accent-primary" />
-            <span className="text-muted-foreground">I accept the <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer" className="text-primary hover:underline">Minecraft EULA</a></span>
+            <span className="text-muted-foreground">{(() => {
+              const txt = t('servers.eula');
+              const link = t('servers.eulaLink');
+              const i = txt.indexOf(link);
+              if (i < 0) return txt;
+              return <>{txt.slice(0, i)}<a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer" className="text-primary hover:underline">{link}</a>{txt.slice(i + link.length)}</>;
+            })()}</span>
           </label>
           {error && <p className="text-xs text-status-error">{error}</p>}
         </div>
         <DialogFooter>
-          <Button variant="glass" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="glass" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button variant="default" onClick={create} disabled={loading}>
-            {loading ? 'Downloading…' : 'Download & create'}
+            {loading ? t('servers.downloading') : t('servers.downloadAndCreate')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -306,6 +316,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
 
 export function ServersView({ onSetActive, onRefresh }) {
   const api = useApi();
+  const t = useT();
   const { servers, activeServerId, statuses } = useServer();
   const [registerOpen, setRegisterOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -320,7 +331,7 @@ export function ServersView({ onSetActive, onRefresh }) {
       else if (act === 'active') onSetActive(s.id);
       else if (act === 'delete') {
         await api(`/api/servers/${s.id}`, { method: 'DELETE' });
-        toast.success('Server removed');
+        toast.success(t('servers.removedToast'));
         onRefresh?.();
       }
     } catch (e) { toast.error(e.message); }
@@ -330,34 +341,38 @@ export function ServersView({ onSetActive, onRefresh }) {
     <div className="space-y-5">
       <Card>
         <CardHeader>
-          <CardTitle>Registered servers</CardTitle>
+          <CardTitle>{t('servers.registeredTitle')}</CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" />
-              Create new
+              {t('servers.createNew')}
             </Button>
             <Button variant="glass" size="sm" onClick={() => { setEditServer(null); setRegisterOpen(true); }}>
-              + Register existing
+              {t('servers.registerExisting')}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">
-            The <strong className="text-foreground">active</strong> server is the one Console, Players, Plugins, Configs and Backups act on.
-          </p>
+          <p className="text-xs text-muted-foreground mb-4">{(() => {
+            const txt = t('servers.activeExplainer', { active: t('servers.activeLabel') });
+            const active = t('servers.activeLabel');
+            const i = txt.indexOf(active);
+            if (i < 0) return txt;
+            return <>{txt.slice(0, i)}<strong className="text-foreground">{active}</strong>{txt.slice(i + active.length)}</>;
+          })()}</p>
           {servers.length === 0 ? (
-            <EmptyState message="No servers registered yet. Click Create new or Register existing." />
+            <EmptyState message={t('servers.empty')} />
           ) : (
-            <div className="overflow-x-auto -mx-5 px-5">
+            <div className="overflow-x-auto -mx-5">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    <th className="py-2 text-left">Server</th>
-                    <th className="py-2 text-left">Status</th>
-                    <th className="py-2 text-left">Players</th>
-                    <th className="py-2 text-left hidden sm:table-cell">Uptime</th>
-                    <th className="py-2 text-left hidden sm:table-cell">Version</th>
-                    <th className="py-2 text-right">Actions</th>
+                    <th className="py-2 pl-4 text-left">{t('servers.colServer')}</th>
+                    <th className="py-2 text-left">{t('servers.colStatus')}</th>
+                    <th className="py-2 text-left">{t('servers.colPlayers')}</th>
+                    <th className="py-2 text-left hidden sm:table-cell">{t('servers.colUptime')}</th>
+                    <th className="py-2 text-left hidden sm:table-cell">{t('servers.colVersion')}</th>
+                    <th className="py-2 pr-4 text-right">{t('servers.colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,17 +382,17 @@ export function ServersView({ onSetActive, onRefresh }) {
                     const isActive = s.id === activeServerId;
                     return (
                       <tr key={s.id} className={cn('border-b border-border/50 last:border-0 transition-colors', isActive && 'bg-primary/5')}>
-                        <td className="py-3 pr-4">
+                        <td className="py-3 pl-4 pr-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-border bg-muted/30">
-                              <span className="text-muted-foreground">▣</span>
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-border bg-muted/30 text-muted-foreground">
+                              <Server className="h-4 w-4" />
                             </div>
                             <div>
                               <div className="flex items-center gap-1.5 font-medium text-foreground">
                                 <span className="hover:text-primary cursor-pointer" onClick={() => onSetActive(s.id)}>
                                   {s.name}
                                 </span>
-                                {isActive && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary border border-primary/25">active</span>}
+                                {isActive && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary border border-primary/25">{t('servers.activeLabel')}</span>}
                               </div>
                               <div className="text-xs text-muted-foreground/70 font-mono truncate max-w-[180px]">{s.dir || ''}</div>
                             </div>
@@ -385,20 +400,20 @@ export function ServersView({ onSetActive, onRefresh }) {
                         </td>
                         <td className="py-3 pr-4"><StatusPill status={st.status} /></td>
                         <td className="py-3 pr-4 tabular-nums text-muted-foreground">
-                          {running ? `${st.playerCount}/${st.maxPlayers || '?'}` : '—'}
+                          {running ? `${st.playerCount}/${st.maxPlayers || '?'}` : t('common.dashPlaceholder')}
                         </td>
                         <td className="py-3 pr-4 hidden sm:table-cell tabular-nums text-muted-foreground">
-                          {running ? (fmtUptime(st.uptimeMs) || '0m') : '—'}
+                          {running ? (fmtUptime(st.uptimeMs) || '0m') : t('common.dashPlaceholder')}
                         </td>
-                        <td className="py-3 pr-4 hidden sm:table-cell text-muted-foreground">{s.mcVersion || '—'}</td>
-                        <td className="py-3">
+                        <td className="py-3 pr-4 hidden sm:table-cell text-muted-foreground">{s.mcVersion || t('common.dashPlaceholder')}</td>
+                        <td className="py-3 pr-4">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon-xs" title="Start" disabled={running} onClick={() => action('start', s)}><Play className="h-3.5 w-3.5 text-status-online" /></Button>
-                            <Button variant="ghost" size="icon-xs" title="Restart" onClick={() => action('restart', s)}><RotateCcw className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="icon-xs" title="Stop" disabled={!running} onClick={() => action('stop', s)}><Square className="h-3.5 w-3.5 text-status-error" /></Button>
-                            <Button variant="ghost" size="icon-xs" title="Set active" disabled={isActive} onClick={() => action('active', s)}><Star className={cn('h-3.5 w-3.5', isActive && 'text-primary fill-primary')} /></Button>
-                            <Button variant="ghost" size="icon-xs" title="Edit" onClick={() => { setEditServer(s); setRegisterOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="icon-xs" title="Remove" onClick={() => setConfirmDelete(s)}><Trash2 className="h-3.5 w-3.5 text-status-error" /></Button>
+                            <Button variant="ghost" size="icon-xs" title={t('servers.btnStart')} disabled={running} onClick={() => action('start', s)}><Play className="h-3.5 w-3.5 text-status-online" /></Button>
+                            <Button variant="ghost" size="icon-xs" title={t('servers.btnRestart')} onClick={() => action('restart', s)}><RotateCcw className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon-xs" title={t('servers.btnStop')} disabled={!running} onClick={() => action('stop', s)}><Square className="h-3.5 w-3.5 text-status-error" /></Button>
+                            <Button variant="ghost" size="icon-xs" title={t('servers.btnSetActive')} disabled={isActive} onClick={() => action('active', s)}><Star className={cn('h-3.5 w-3.5', isActive && 'text-primary fill-primary')} /></Button>
+                            <Button variant="ghost" size="icon-xs" title={t('servers.btnEdit')} onClick={() => { setEditServer(s); setRegisterOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon-xs" title={t('servers.btnRemove')} onClick={() => setConfirmDelete(s)}><Trash2 className="h-3.5 w-3.5 text-status-error" /></Button>
                           </div>
                         </td>
                       </tr>
@@ -427,11 +442,24 @@ export function ServersView({ onSetActive, onRefresh }) {
       {confirmDelete && (
         <Dialog open onOpenChange={() => setConfirmDelete(null)}>
           <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Remove server</DialogTitle></DialogHeader>
-            <p className="px-5 py-3 text-sm text-muted-foreground">Remove <strong className="text-foreground">"{confirmDelete.name}"</strong> from the panel? Server files are <em>not</em> deleted.</p>
+            <DialogHeader><DialogTitle>{t('servers.removeTitle')}</DialogTitle></DialogHeader>
+            <p className="px-5 py-3 text-sm text-muted-foreground">{(() => {
+              const notWord = t('servers.removeBodyEm');
+              const txt = t('servers.removeBody', { name: confirmDelete.name, not: notWord });
+              const ni = txt.indexOf(confirmDelete.name);
+              const emi = txt.indexOf(notWord);
+              if (ni < 0 && emi < 0) return txt;
+              const out = [];
+              if (ni >= 0) out.push(txt.slice(0, ni));
+              if (ni >= 0) out.push(<strong key="n" className="text-foreground">{confirmDelete.name}</strong>);
+              if (ni >= 0) out.push(txt.slice(ni + confirmDelete.name.length, emi >= 0 ? emi : undefined));
+              if (emi >= 0) out.push(<em key="e">{notWord}</em>);
+              if (emi >= 0) out.push(txt.slice(emi + notWord.length));
+              return out;
+            })()}</p>
             <DialogFooter>
-              <Button variant="glass" onClick={() => setConfirmDelete(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={() => { action('delete', confirmDelete); setConfirmDelete(null); }}>Remove</Button>
+              <Button variant="glass" onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
+              <Button variant="destructive" onClick={() => { action('delete', confirmDelete); setConfirmDelete(null); }}>{t('common.remove')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

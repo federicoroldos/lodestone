@@ -9,6 +9,7 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: [
+          'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
           'SF Pro Display',
@@ -16,6 +17,21 @@ module.exports = {
           'Helvetica Neue',
           'Arial',
           'sans-serif',
+        ],
+        display: [
+          'Inter',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'SF Pro Display',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+        brand: [
+          '"Press Start 2P"',
+          '"Pixelify Sans"',
+          'ui-monospace',
+          'monospace',
         ],
         mono: [
           'SF Mono',

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { useT } from '@/context/I18nContext';
 
 const STATUS_VARIANTS = {
   online:   'bg-status-online/10 text-status-online border border-status-online/20',
@@ -8,6 +9,7 @@ const STATUS_VARIANTS = {
 };
 
 export function StatusPill({ status = 'offline', className }) {
+  const t = useT();
   return (
     <span className={cn(
       'inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
@@ -15,7 +17,7 @@ export function StatusPill({ status = 'offline', className }) {
       className
     )}>
       <StatusDot status={status} />
-      {status}
+      {t(`status.${status}`, { defaultValue: status })}
     </span>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useApi } from '@/hooks/useApi';
 import { useServer } from '@/context/ServerContext';
+import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +29,7 @@ function hexToRgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-function ChartCanvas({ points, metricKey, color, fmt, minMax, range }) {
+function ChartCanvas({ points, metricKey, color, fmt, minMax, range, noDataText }) {
   const ref = useRef(null);
 
   function fmtTime(t) {
@@ -55,7 +56,7 @@ function ChartCanvas({ points, metricKey, color, fmt, minMax, range }) {
 
     if (!points.length) {
       ctx.fillStyle = text3; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
-      ctx.fillText('No data yet — sampled every minute.', W / 2, H / 2);
+      ctx.fillText(noDataText, W / 2, H / 2);
       return;
     }
 
@@ -86,21 +87,22 @@ function ChartCanvas({ points, metricKey, color, fmt, minMax, range }) {
     ctx.fillStyle = text3; ctx.font = '10px system-ui';
     ctx.textAlign = 'left'; ctx.fillText(fmtTime(t0), padL, H - 7);
     ctx.textAlign = 'right'; ctx.fillText(fmtTime(t1), W - padR, H - 7);
-  }, [points, metricKey, color, range]);
+  }, [points, metricKey, color, range, noDataText]);
 
   return <canvas ref={ref} className="h-48 w-full" />;
 }
 
 const RANGES = [
-  { key: 'hour', label: '1h' },
-  { key: '6h',   label: '6h' },
-  { key: 'day',  label: '24h' },
-  { key: 'week', label: '7d' },
+  { key: 'hour', labelKey: 'metrics.range1h' },
+  { key: '6h',   labelKey: 'metrics.range6h' },
+  { key: 'day',  labelKey: 'metrics.range24h' },
+  { key: 'week', labelKey: 'metrics.range7d' },
 ];
 
 export function MetricsView() {
   const api = useApi();
   const { activeServerId } = useServer();
+  const t = useT();
   const [range, setRange] = useState('6h');
   const [points, setPoints] = useState([]);
 
@@ -117,10 +119,10 @@ export function MetricsView() {
   const last = points[points.length - 1];
 
   const charts = [
-    { key: 'cpu', label: 'CPU', lastVal: last ? last.cpu + '%' : '—', color: '#4f8cff', fmt: v => Math.round(v) + '%', minMax: 100 },
-    { key: 'mem', label: 'Memory', lastVal: last ? fmtMB(last.mem) : '—', color: '#36c275', fmt: fmtMB },
-    { key: 'players', label: 'Players online', lastVal: last ? String(last.players) : '—', color: '#f0a23b', fmt: v => Math.round(v), minMax: 4 },
-    { key: 'world', label: 'World size', lastVal: last ? fmtMB(last.world) : '—', color: '#6f9fff', fmt: fmtMB },
+    { key: 'cpu', label: t('metrics.chartCpu'), lastVal: last ? last.cpu + '%' : t('common.dashPlaceholder'), color: '#4f8cff', fmt: v => Math.round(v) + '%', minMax: 100 },
+    { key: 'mem', label: t('metrics.chartMemory'), lastVal: last ? fmtMB(last.mem) : t('common.dashPlaceholder'), color: '#36c275', fmt: fmtMB },
+    { key: 'players', label: t('metrics.chartPlayers'), lastVal: last ? String(last.players) : t('common.dashPlaceholder'), color: '#f0a23b', fmt: v => Math.round(v), minMax: 4 },
+    { key: 'world', label: t('metrics.chartWorldSize'), lastVal: last ? fmtMB(last.world) : t('common.dashPlaceholder'), color: '#6f9fff', fmt: fmtMB },
   ];
 
   return (
@@ -139,11 +141,11 @@ export function MetricsView() {
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {r.label}
+              {t(r.labelKey)}
             </button>
           ))}
         </div>
-        <span className="text-xs text-muted-foreground">Sampled every minute.</span>
+        <span className="text-xs text-muted-foreground">{t('metrics.sampledEveryMinute')}</span>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -154,7 +156,7 @@ export function MetricsView() {
               <span className="text-xs text-muted-foreground">{c.lastVal}</span>
             </CardHeader>
             <CardContent>
-              <ChartCanvas points={points} metricKey={c.key} color={c.color} fmt={c.fmt} minMax={c.minMax} range={range} />
+              <ChartCanvas points={points} metricKey={c.key} color={c.color} fmt={c.fmt} minMax={c.minMax} range={range} noDataText={t('metrics.noData')} />
             </CardContent>
           </Card>
         ))}

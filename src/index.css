@@ -119,6 +119,10 @@
     @apply bg-background text-foreground font-sans;
     font-size: var(--text-base);
     line-height: 1.5;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   ::-webkit-scrollbar {
     width: 6px;
@@ -183,6 +187,38 @@
   animation: shimmer 2.5s var(--duration-slow) linear infinite;
 }
 
+/* Brand wordmark — "Press Start 2P" pixel-craft font for the Lodestone logotype */
+.brand-wordmark {
+  font-family: 'Press Start 2P', 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: hsl(var(--foreground));
+  text-shadow: 0 1px 0 hsl(200 30% 0% / 0.55);
+  white-space: nowrap;
+  /* Keep the pixel art crisp at small sizes */
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* Brand icon — the Lodestone block face as a static pixel-art tile.
+   `pixelated` keeps the original 16x16 texture sharp at any rendered size. */
+.brand-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  background-image: url(/resources/lodestone_face.png);
+  background-size: cover;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px hsl(200 8% 100% / 0.06),
+    inset 0 0 0 2px hsl(200 30% 0% / 0.35),
+    0 1px 0 hsl(200 30% 0% / 0.4);
+  flex: none;
+}
+
 /* 3D spinning Lodestone cube (pure CSS, pixel-art texture on all 6 faces) */
 .ls-cube-scene {
   width: var(--cube-size, 96px);
@@ -240,8 +276,74 @@
   from { transform: rotateX(-22deg) rotateY(0deg); }
   to   { transform: rotateX(-22deg) rotateY(360deg); }
 }
+
+/* Login screen: stronger directional shading so the 3D form reads more clearly
+   over the grayscale card. Higher specificity than the base per-face rules. */
+.login-card .ls-cube__face--front  { filter: brightness(1.10); --face-shade: linear-gradient(160deg, hsl(0 0% 100% / 0.12), hsl(0 0% 0% / 0.16)); }
+.login-card .ls-cube__face--right  { filter: brightness(0.55); --face-shade: linear-gradient(90deg,  hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.38)); }
+.login-card .ls-cube__face--left   { filter: brightness(0.78); --face-shade: linear-gradient(270deg, hsl(0 0% 0% / 0.06), hsl(0 0% 0% / 0.22)); }
+.login-card .ls-cube__face--top    { filter: brightness(1.50); --face-shade: linear-gradient(180deg, hsl(0 0% 100% / 0.20), hsl(0 0% 0% / 0.05)); }
+.login-card .ls-cube__face--bottom { filter: brightness(0.34); --face-shade: linear-gradient(0deg,   hsl(0 0% 0% / 0.42), hsl(0 0% 0% / 0.12)); }
+.login-card .ls-cube__face--back   { filter: brightness(0.45); --face-shade: linear-gradient(160deg, hsl(0 0% 0% / 0.10), hsl(0 0% 0% / 0.30)); }
 @media (prefers-reduced-motion: reduce) {
   .ls-cube { animation: none; transform: rotateX(-22deg) rotateY(-32deg); }
+}
+
+/* Login → app-shell handoff: the small card cube grows, fades, and flies
+   to the centre of the viewport, where the (5% opacity) background cube
+   lives in the AppShell. JS sets --cube-dx / --cube-dy / --cube-scale
+   from the cube's getBoundingClientRect on successful login. */
+.cube-login-anim {
+  will-change: transform, opacity, filter;
+  transform: translate(0, 0) scale(1);
+  opacity: 1;
+  filter: grayscale(100%);
+  transition:
+    transform 900ms var(--ease-out),
+    opacity 900ms var(--ease-out),
+    filter 900ms var(--ease-out);
+}
+.cube-login-anim--play {
+  transform: translate(var(--cube-dx), var(--cube-dy)) scale(var(--cube-scale));
+  opacity: 0;
+  filter: grayscale(0%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cube-login-anim {
+    transition: opacity 220ms ease;
+  }
+  .cube-login-anim--play {
+    transform: none;
+    opacity: 0;
+  }
+}
+
+/* Login card fades out as the cube leaves it. */
+.login-card-leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 700ms var(--ease-out);
+}
+
+/* AppShell fades in on mount, with a grayscale-to-color filter so the
+   handoff from the (grayscale) login screen doesn't snap. */
+@keyframes app-shell-enter {
+  from {
+    opacity: 0;
+    filter: grayscale(100%);
+  }
+  to {
+    opacity: 1;
+    filter: grayscale(0%);
+  }
+}
+.app-shell-enter {
+  animation: app-shell-enter 900ms var(--ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell-enter {
+    animation: none;
+  }
 }
 
 /* Fade-in view animation */

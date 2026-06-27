@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useServer } from '@/context/ServerContext';
 import { useApi } from '@/hooks/useApi';
+import { useT } from '@/context/I18nContext';
 import { fmtUptime, fmtBytes } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { KpiTile } from '@/components/shared/KpiTile';
@@ -60,6 +61,8 @@ const MAX_SPARK = 150;
 export function DashboardView({ active }) {
   const { activeServerId, statuses, servers } = useServer();
   const api = useApi();
+  const t = useT();
+  const dash = t('common.dashPlaceholder');
   const status = activeServerId ? (statuses[activeServerId] || { status: 'offline' }) : { status: 'offline' };
   const server = servers.find(s => s.id === activeServerId);
 
@@ -86,7 +89,7 @@ export function DashboardView({ active }) {
   }, [active, onStats]);
 
   const running = status.status !== 'offline';
-  const uptime = running ? fmtUptime(status.uptimeMs) : '—';
+  const uptime = running ? fmtUptime(status.uptimeMs) : dash;
 
   const kpiTone = {
     online: 'online', starting: 'warn', stopping: 'warn', offline: 'neutral',
@@ -102,27 +105,27 @@ export function DashboardView({ active }) {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <KpiTile
           icon={Server}
-          label="Status"
-          value={status.status}
-          sub={server?.name || '—'}
+          label={t('dashboard.status')}
+          value={t(`status.${status.status}`)}
+          sub={server?.name || dash}
           tone={kpiTone}
         />
         <KpiTile
           icon={Users}
-          label="Players online"
+          label={t('dashboard.playersOnline')}
           value={`${status.playerCount || 0}`}
-          sub={`/ ${status.maxPlayers || 0} max`}
+          sub={t('dashboard.playersOnlineSub', { max: status.maxPlayers || 0, maxWord: t('common.maxWord') })}
           tone="primary"
         />
         <KpiTile
           icon={Activity}
-          label="Performance (TPS)"
-          value={status.tps != null && running ? status.tps.toFixed(1) : '—'}
+          label={t('dashboard.tps')}
+          value={status.tps != null && running ? status.tps.toFixed(1) : dash}
           tone={tpsTone}
         />
         <KpiTile
           icon={Clock}
-          label="Uptime"
+          label={t('dashboard.uptime')}
           value={uptime}
           tone="neutral"
         />
@@ -132,41 +135,41 @@ export function DashboardView({ active }) {
         {/* Live resources */}
         <Card className="xl:col-span-3">
           <CardHeader>
-            <CardTitle>Live resources</CardTitle>
-            <span className="text-xs text-muted-foreground">last ~5 min</span>
+            <CardTitle>{t('dashboard.liveResources')}</CardTitle>
+            <span className="text-xs text-muted-foreground">{t('dashboard.last5min')}</span>
           </CardHeader>
           <CardContent>
             <MetricRow
-              label="Server RAM"
+              label={t('dashboard.serverRam')}
               value={stats ? Math.round(stats.procMem / 1048576) : 0}
-              unit="MB"
+              unit={t('common.unitMB')}
               data={sparkRef.current.procmem}
             />
             <MetricRow
-              label="Server CPU"
+              label={t('dashboard.serverCpu')}
               value={stats ? (stats.procCpu || 0).toFixed(0) : 0}
-              unit="%"
+              unit={t('common.unitPercent')}
               data={sparkRef.current.proccpu}
             />
             <MetricRow
-              label="System RAM"
-              value={stats ? `${(stats.memSystemUsed / 1073741824).toFixed(1)} / ${(stats.memSystemTotal / 1073741824).toFixed(1)} GB` : '—'}
+              label={t('dashboard.systemRam')}
+              value={stats ? `${(stats.memSystemUsed / 1073741824).toFixed(1)} / ${(stats.memSystemTotal / 1073741824).toFixed(1)} ${t('common.unitGB')}` : dash}
               unit=""
               data={sparkRef.current.sysmem}
             />
             <MetricRow
-              label="System CPU"
+              label={t('dashboard.systemCpu')}
               value={stats ? (stats.cpuSystem || 0).toFixed(0) : 0}
-              unit="%"
+              unit={t('common.unitPercent')}
               data={sparkRef.current.syscpu}
             />
             {stats?.disk?.total && (
               <div className="mt-2">
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">Disk usage</span>
+                  <span className="text-muted-foreground">{t('dashboard.disk')}</span>
                   <span className="font-medium text-foreground tabular-nums">
                     {((stats.disk.total - stats.disk.free) / 1073741824).toFixed(0)} /&nbsp;
-                    {(stats.disk.total / 1073741824).toFixed(0)} GB
+                    {(stats.disk.total / 1073741824).toFixed(0)} {t('common.unitGB')}
                   </span>
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -187,13 +190,13 @@ export function DashboardView({ active }) {
 
         {/* Server info */}
         <Card className="xl:col-span-2">
-          <CardHeader><CardTitle>Server info</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('dashboard.serverInfo')}</CardTitle></CardHeader>
           <CardContent className="space-y-0 p-0">
             {[
-              { label: 'Version', value: server?.mcVersion || '—' },
-              { label: 'Jar', value: server?.jar || '—' },
-              { label: 'Worlds', value: server?.worlds?.join(', ') || '—' },
-              { label: 'Folder', value: server?.dir || '—' },
+              { label: t('dashboard.version'), value: server?.mcVersion || dash },
+              { label: t('dashboard.jar'), value: server?.jar || dash },
+              { label: t('dashboard.worlds'), value: server?.worlds?.join(', ') || dash },
+              { label: t('dashboard.folder'), value: server?.dir || dash },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-start justify-between gap-3 px-5 py-2.5 border-b border-border last:border-0 text-sm">
                 <span className="text-muted-foreground shrink-0">{label}</span>

@@ -32,6 +32,7 @@ const pidusage = require('pidusage');
 const archiver = require('archiver');
 const cron = require('node-cron');
 const jwt = require('jsonwebtoken');
+const i18n = require('./i18n.cjs');
 
 // ---------------------------------------------------------------------------
 // Config
@@ -86,7 +87,7 @@ function findUserByEmail(email) {
   return (config.users || []).find((u) => u.email.toLowerCase() === e) || null;
 }
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name || '' };
+  return { id: u.id, email: u.email, name: u.name || '', language: i18n.normalizeLang(u.language) };
 }
 
 // Migrate a legacy single-server config (serverDir/jar/...) into config.servers[].
@@ -275,15 +276,15 @@ class ServerManager {
 
   start() {
     if (this.isRunning()) {
-      return { ok: false, error: 'The server is already running.' };
+      return { ok: false, error: eKey('errors.alreadyRunning') };
     }
     const d = this.desc();
-    if (!d.dir) return { ok: false, error: 'This server has no folder configured.' };
-    if (!d.jar) return { ok: false, error: 'This server has no jar configured.' };
-    if (!fs.existsSync(d.dir)) return { ok: false, error: `Server folder not found: ${d.dir}` };
+    if (!d.dir) return { ok: false, error: eKey('errors.noFolderConfigured') };
+    if (!d.jar) return { ok: false, error: eKey('errors.noJarConfigured') };
+    if (!fs.existsSync(d.dir)) return { ok: false, error: eKey('errors.folderNotFound', { path: d.dir }) };
     const jarPath = path.join(d.dir, d.jar);
     if (!fs.existsSync(jarPath)) {
-      return { ok: false, error: `Jar not found: ${jarPath}` };
+      return { ok: false, error: eKey('errors.jarMissing', { path: jarPath }) };
     }
 
     const args = [...(d.javaArgs || []), '-jar', d.jar, 'nogui'];
@@ -432,7 +433,7 @@ class ServerManager {
 
   sendCommand(cmd, silent = false) {
     if (!this.proc || !this.proc.stdin.writable) {
-      return { ok: false, error: 'The server is not running.' };
+      return { ok: false, error: eKey('errors.notRunning') };
     }
     const trimmed = String(cmd).replace(/[\r\n]+$/, '');
     if (!silent) this.pushLine(`> ${trimmed}`, 'cmd');
@@ -446,7 +447,7 @@ class ServerManager {
 
   stop(force = false) {
     if (!this.isRunning()) {
-      return { ok: false, error: 'The server is not running.' };
+      return { ok: false, error: eKey('errors.notRunning') };
     }
     this.manualStop = true;
     if (force) {
@@ -582,9 +583,124 @@ ensureManagers();
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 
+// ---------------------------------------------------------------------------
+// Language detection (login IP → country → en/es) and translated errors
+// ---------------------------------------------------------------------------
+
+// Resolves a tag like "es-AR" or "es" to one of the supported languages.
+function langFromAcceptLanguage(header) {
+  if (!header || typeof header !== 'string') return null;
+  const tags = header.split(',').map((s) => {
+    const [tag, ...rest] = s.trim().split(';');
+    const q = rest.find((p) => p.trim().startsWith('q='));
+    const qv = q ? parseFloat(q.split('=')[1]) : 1;
+    return { tag: tag.toLowerCase(), q: Number.isFinite(qv) ? qv : 1 };
+  }).sort((a, b) => b.q - a.q);
+  for (const { tag } of tags) {
+    const base = tag.split('-')[0];
+    if (i18n.SUPPORTED_LANGS.includes(base)) return base;
+  }
+  return null;
+}
+
+// Treat loopback and private/ULA addresses as "no public IP" — geolocation
+// would be useless and the user is most likely sitting at the panel itself.
+function isPrivateOrLoopback(ip) {
+  if (!ip) return true;
+  const s = String(ip).trim();
+  if (s === '::1' || s === '::ffff:127.0.0.1') return true;
+  if (s.startsWith('127.')) return true;
+  if (/^10\./.test(s)) return true;
+  if (/^192\.168\./.test(s)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(s)) return true;
+  if (/^169\.254\./.test(s)) return true;
+  if (/^fc[0-9a-f]{2}:/i.test(s)) return true;
+  if (/^fe[89ab][0-9a-f]:/i.test(s)) return true;
+  return false;
+}
+
+function pickRequestIp(req, bodyClientIp) {
+  // Prefer the IP the browser chose to report (it knows its real public IP,
+  // the server only sees 127.0.0.1 when the panel runs on localhost). Fall
+  // back to the socket IP, then to the X-Forwarded-For header so the panel
+  // works behind a reverse proxy that sets it.
+  if (bodyClientIp && !isPrivateOrLoopback(bodyClientIp)) return bodyClientIp;
+  const xff = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  if (xff && !isPrivateOrLoopback(xff)) return xff;
+  const sock = req.socket && (req.socket.remoteAddress || '');
+  if (sock) {
+    // Node returns IPv6-mapped IPv4 as "::ffff:1.2.3.4" — strip the prefix.
+    const cleaned = sock.replace(/^::ffff:/i, '');
+    return cleaned;
+  }
+  return '';
+}
+
+// ipwho.is is free, HTTPS, no key. Cache results for 24h so a single panel
+// login doesn't pay the round-trip on every refresh. Failure is silent and
+// degrades to the user's stored language (or the default).
+const GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const geoCache = new Map();
+
+async function geolocateIp(ip) {
+  if (!ip || isPrivateOrLoopback(ip)) return null;
+  const cached = geoCache.get(ip);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3500);
+    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, {
+      headers: { 'User-Agent': 'Lodestone-Panel/1.0' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const value = (d && d.success !== false && d.country_code) ? { country: String(d.country_code).toUpperCase() } : null;
+    geoCache.set(ip, { value, expires: Date.now() + GEO_CACHE_TTL_MS });
+    return value;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Decide which language to use for a user. Order:
+//   1. user.language (already set explicitly or on a previous login)
+//   2. body.lang / Accept-Language header (manual override for this request)
+//   3. geolocate the client IP and map country → language
+//   4. default ('en')
+function pickUserLanguage(user, req, body) {
+  if (user && user.language && i18n.SUPPORTED_LANGS.includes(user.language)) return user.language;
+  if (body && i18n.SUPPORTED_LANGS.includes(body.lang)) return body.lang;
+  const al = langFromAcceptLanguage(req.headers['accept-language']);
+  if (al) return al;
+  return i18n.DEFAULT_LANG;
+}
+
+// Convenience: translate a key for the user's language, falling back to en
+// automatically. `user` may be null on the login endpoint itself.
+function tErr(user, key, vars) {
+  const lang = (user && user.language) || i18n.DEFAULT_LANG;
+  return i18n.t(lang, key, vars);
+}
+
+// Build a structured error object: { __i18n: true, key, vars }. Routes pass
+// this through `localizeErr(user, err)` to get a translated message. Plain
+// strings pass through unchanged so ad-hoc messages (e.g. "HTTP 500") still
+// work.
+function eKey(key, vars) {
+  return { __i18n: true, key, vars: vars || null };
+}
+
+function localizeErr(user, err) {
+  if (err && typeof err === 'object' && err.__i18n) return tErr(user, err.key, err.vars || undefined);
+  if (err && typeof err === 'object' && err.key) return tErr(user, err.key, err.vars || undefined);
+  return String(err == null ? '' : err);
+}
+
 // --- auth ---
 function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email }, config.jwtSecret, {
+  return jwt.sign({ sub: user.id, email: user.email, lang: i18n.normalizeLang(user.language) }, config.jwtSecret, {
     expiresIn: `${config.sessionHours || 168}h`,
   });
 }
@@ -609,18 +725,42 @@ function authMiddleware(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : (req.query.token || '');
   const user = userFromToken(token);
   if (!user) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: tErr(user, 'errors.unauthorized') });
   }
   req.user = user;
   next();
 }
 
-app.post('/api/login', (req, res) => {
-  const { email, password } = req.body || {};
+app.post('/api/login', async (req, res) => {
+  const { email, password, clientIp, lang } = req.body || {};
   const user = findUserByEmail(email);
   if (!user || !verifyPassword(password, user.passwordHash)) {
-    return res.status(401).json({ error: 'Wrong email or password' });
+    return res.status(401).json({ error: tErr({ language: lang }, 'errors.wrongCredentials') });
   }
+
+  // Decide which language to use for this session:
+  //   - An explicit `lang` field on the body (manual switcher before login) wins.
+  //   - Otherwise, if the user already has a language set, keep it.
+  //   - Otherwise, geolocate the client IP and map country → language, then
+  //     persist that first-time detection on the user record so it sticks.
+  let chosen = i18n.normalizeLang(lang);
+  if (chosen === i18n.DEFAULT_LANG && i18n.SUPPORTED_LANGS.includes(user.language)) {
+    chosen = user.language;
+  }
+  if (chosen === i18n.DEFAULT_LANG) {
+    const ip = pickRequestIp(req, clientIp);
+    const geo = await geolocateIp(ip);
+    if (geo && geo.country) {
+      const detected = i18n.countryToLanguage(geo.country);
+      if (detected !== user.language) {
+        user.language = detected;
+        saveConfig(config);
+      }
+      chosen = detected;
+    }
+  }
+  user.language = chosen;
+
   res.json({ token: signToken(user), user: publicUser(user) });
 });
 
@@ -637,6 +777,19 @@ function normalizeEmail(email) {
 
 app.get('/api/me', (req, res) => res.json(publicUser(req.user)));
 
+// Manual language switch — the user can change it any time from the header.
+app.put('/api/me/language', (req, res) => {
+  const next = i18n.normalizeLang((req.body || {}).language);
+  if (!i18n.SUPPORTED_LANGS.includes(next)) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.langInvalid') });
+  }
+  if (req.user.language !== next) {
+    req.user.language = next;
+    saveConfig(config);
+  }
+  res.json({ user: publicUser(req.user) });
+});
+
 app.get('/api/users', (req, res) => {
   res.json({ users: (config.users || []).map(publicUser) });
 });
@@ -644,11 +797,11 @@ app.get('/api/users', (req, res) => {
 app.post('/api/users', (req, res) => {
   const { email, name, password } = req.body || {};
   const e = normalizeEmail(email);
-  if (!e || !e.includes('@')) return res.status(400).json({ error: 'A valid email is required' });
+  if (!e || !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailRequired') });
   if (typeof password !== 'string' || password.length < 4) {
-    return res.status(400).json({ error: 'Password must be at least 4 characters' });
+    return res.status(400).json({ error: tErr(req.user, 'errors.passwordTooShort') });
   }
-  if (findUserByEmail(e)) return res.status(400).json({ error: 'That email is already registered' });
+  if (findUserByEmail(e)) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
   const user = { id: genId(), email: e, name: String(name || '').trim(), passwordHash: hashPassword(password) };
   config.users.push(user);
   saveConfig(config);
@@ -657,19 +810,19 @@ app.post('/api/users', (req, res) => {
 
 app.put('/api/users/:id', (req, res) => {
   const user = findUser(req.params.id);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
   const { email, name, password } = req.body || {};
   if (email !== undefined) {
     const e = normalizeEmail(email);
-    if (!e || !e.includes('@')) return res.status(400).json({ error: 'A valid email is required' });
+    if (!e || !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailRequired') });
     const clash = findUserByEmail(e);
-    if (clash && clash.id !== user.id) return res.status(400).json({ error: 'That email is already registered' });
+    if (clash && clash.id !== user.id) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
     user.email = e;
   }
   if (name !== undefined) user.name = String(name || '').trim();
   if (password !== undefined && password !== '') {
     if (typeof password !== 'string' || password.length < 4) {
-      return res.status(400).json({ error: 'Password must be at least 4 characters' });
+      return res.status(400).json({ error: tErr(req.user, 'errors.passwordTooShort') });
     }
     user.passwordHash = hashPassword(password);
   }
@@ -679,9 +832,9 @@ app.put('/api/users/:id', (req, res) => {
 
 app.delete('/api/users/:id', (req, res) => {
   const user = findUser(req.params.id);
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  if (config.users.length <= 1) return res.status(400).json({ error: 'Cannot delete the last user' });
-  if (user.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
+  if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
+  if (config.users.length <= 1) return res.status(400).json({ error: tErr(req.user, 'errors.cannotDeleteLastUser') });
+  if (user.id === req.user.id) return res.status(400).json({ error: tErr(req.user, 'errors.cannotDeleteSelf') });
   config.users = config.users.filter((u) => u.id !== user.id);
   saveConfig(config);
   res.json({ ok: true });
@@ -959,7 +1112,7 @@ app.get('/api/pick-folder', (req, res) => {
     else r = pickFolderLinux(def);
 
     if (r.error) {
-      return res.status(500).json({ error: `Folder picker not available (${r.error.message}).` });
+      return res.status(500).json({ error: tErr(req.user, 'errors.pickFolderUnavailable', { error: r.error.message }) });
     }
     if (r.status === 0) {
       const out = (r.stdout || '').toString().replace(/\r?\n$/, '');
@@ -1011,22 +1164,22 @@ app.get('/api/servers', (req, res) => {
   });
 });
 
-function validateServerInput(body) {
+function validateServerInput(body, user) {
   const name = String(body.name || '').trim();
   const dir = String(body.dir || '').trim();
   let jar = String(body.jar || '').trim();
-  if (!name) return { error: 'A name is required.' };
-  if (!dir) return { error: 'A server folder is required.' };
-  if (!fs.existsSync(dir)) return { error: `Folder does not exist: ${dir}` };
-  if (!fs.statSync(dir).isDirectory()) return { error: 'That path is not a folder.' };
+  if (!name) return { error: eKey('errors.nameRequired') };
+  if (!dir) return { error: eKey('errors.folderRequired') };
+  if (!fs.existsSync(dir)) return { error: eKey('errors.folderDoesNotExist', { path: dir }) };
+  if (!fs.statSync(dir).isDirectory()) return { error: eKey('errors.notAFolder') };
   // Auto-detect the jar if not supplied and exactly one exists.
   if (!jar) {
     const jars = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.jar'));
     if (jars.length === 1) jar = jars[0];
-    else if (jars.length === 0) return { error: 'No .jar found in that folder; pick the server jar.' };
-    else return { error: 'Multiple .jar files found; pick the server jar.' };
+    else if (jars.length === 0) return { error: eKey('errors.noJar') };
+    else return { error: eKey('errors.multipleJars') };
   } else if (!fs.existsSync(path.join(dir, jar))) {
-    return { error: `Jar not found in folder: ${jar}` };
+    return { error: eKey('errors.jarNotFound', { name: jar }) };
   }
   let javaArgs = body.javaArgs;
   if (typeof javaArgs === 'string') {
@@ -1050,8 +1203,8 @@ function validateServerInput(body) {
 }
 
 app.post('/api/servers', (req, res) => {
-  const v = validateServerInput(req.body || {});
-  if (v.error) return res.status(400).json({ error: v.error });
+  const v = validateServerInput(req.body || {}, req.user);
+  if (v.error) return res.status(400).json({ error: localizeErr(req.user, v.error) });
   const entry = {
     id: genId(),
     watchdog: { enabled: false, maxRestarts: 3, windowMinutes: 10 },
@@ -1066,11 +1219,11 @@ app.post('/api/servers', (req, res) => {
 
 app.put('/api/servers/:id', (req, res) => {
   const s = findServer(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Server not found' });
+  if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const m = getManager(s.id);
-  if (m.isRunning()) return res.status(409).json({ error: 'Stop the server before editing it.' });
-  const v = validateServerInput(req.body || {});
-  if (v.error) return res.status(400).json({ error: v.error });
+  if (m.isRunning()) return res.status(409).json({ error: tErr(req.user, 'errors.stopBeforeEdit') });
+  const v = validateServerInput(req.body || {}, req.user);
+  if (v.error) return res.status(400).json({ error: localizeErr(req.user, v.error) });
   Object.assign(s, v.value);
   if (req.body.watchdog && typeof req.body.watchdog === 'object') {
     s.watchdog = {
@@ -1085,9 +1238,9 @@ app.put('/api/servers/:id', (req, res) => {
 
 app.delete('/api/servers/:id', (req, res) => {
   const s = findServer(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Server not found' });
+  if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const m = getManager(s.id);
-  if (m.isRunning()) return res.status(409).json({ error: 'Stop the server before removing it.' });
+  if (m.isRunning()) return res.status(409).json({ error: tErr(req.user, 'errors.stopBeforeRemove') });
   config.servers = config.servers.filter((x) => x.id !== s.id);
   managers.delete(s.id);
   if (config.activeServerId === s.id) {
@@ -1099,24 +1252,31 @@ app.delete('/api/servers/:id', (req, res) => {
 
 app.post('/api/active', (req, res) => {
   const id = req.body && req.body.serverId;
-  if (!findServer(id)) return res.status(404).json({ error: 'Server not found' });
+  if (!findServer(id)) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   config.activeServerId = id;
   saveConfig(config);
   res.json({ ok: true, activeServerId: id });
 });
 
-app.post('/api/servers/:id/start', (req, res) => res.json(getManagerOr404(req, res, (m) => m.start())));
-app.post('/api/servers/:id/stop', (req, res) => res.json(getManagerOr404(req, res, (m) => m.stop(req.body && req.body.force))));
+app.post('/api/servers/:id/start', (req, res) => res.json(localizeManagerResult(req, getManagerOr404(req, res, (m) => m.start()))));
+app.post('/api/servers/:id/stop', (req, res) => res.json(localizeManagerResult(req, getManagerOr404(req, res, (m) => m.stop(req.body && req.body.force)))));
 app.post('/api/servers/:id/restart', async (req, res) => {
   const s = findServer(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Server not found' });
-  res.json(await getManager(s.id).restart());
+  if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
+  const r = await getManager(s.id).restart();
+  res.json(localizeManagerResult(req, r));
 });
 
 function getManagerOr404(req, res, fn) {
   const s = findServer(req.params.id);
-  if (!s) { res.status(404); return { error: 'Server not found' }; }
+  if (!s) { res.status(404); return { error: eKey('errors.serverNotFound') }; }
   return fn(getManager(s.id));
+}
+
+// Translate the manager-shaped result ({ ok, error }) and 4xx the failure.
+function localizeManagerResult(req, r) {
+  if (!r || r.ok) return r;
+  return { ok: false, error: localizeErr(req.user, r.error) };
 }
 
 // --- server status / actions (active server, legacy-compatible) ---
@@ -1127,22 +1287,22 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/server/start', (req, res) => {
   const m = targetManager(req);
-  res.json(m ? m.start() : { ok: false, error: 'No active server.' });
+  res.json(localizeManagerResult(req, m ? m.start() : { ok: false, error: eKey('errors.noActiveServer') }));
 });
 app.post('/api/server/stop', (req, res) => {
   const m = targetManager(req);
-  res.json(m ? m.stop(req.body && req.body.force) : { ok: false, error: 'No active server.' });
+  res.json(localizeManagerResult(req, m ? m.stop(req.body && req.body.force) : { ok: false, error: eKey('errors.noActiveServer') }));
 });
 app.post('/api/server/restart', async (req, res) => {
   const m = targetManager(req);
-  res.json(m ? await m.restart() : { ok: false, error: 'No active server.' });
+  res.json(localizeManagerResult(req, m ? await m.restart() : { ok: false, error: eKey('errors.noActiveServer') }));
 });
 
 app.post('/api/command', (req, res) => {
   const cmd = req.body && req.body.cmd;
-  if (!cmd || typeof cmd !== 'string') return res.status(400).json({ error: 'Missing cmd' });
+  if (!cmd || typeof cmd !== 'string') return res.status(400).json({ error: tErr(req.user, 'errors.missingCmd') });
   const m = targetManager(req);
-  res.json(m ? m.sendCommand(cmd) : { ok: false, error: 'No active server.' });
+  res.json(localizeManagerResult(req, m ? m.sendCommand(cmd) : { ok: false, error: eKey('errors.noActiveServer') }));
 });
 
 // --- players ---
@@ -1154,7 +1314,7 @@ app.get('/api/players', (req, res) => {
 
 app.post('/api/players/:action', (req, res) => {
   const name = (req.body && req.body.name || '').trim();
-  if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return res.status(400).json({ error: 'Invalid name' });
+  if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return res.status(400).json({ error: tErr(req.user, 'errors.invalidName') });
   const map = {
     kick: `kick ${name}`,
     ban: `ban ${name}`,
@@ -1165,9 +1325,9 @@ app.post('/api/players/:action', (req, res) => {
     'whitelist-remove': `whitelist remove ${name}`,
   };
   const cmd = map[req.params.action];
-  if (!cmd) return res.status(400).json({ error: 'Unknown action' });
+  if (!cmd) return res.status(400).json({ error: tErr(req.user, 'errors.unknownAction') });
   const m = targetManager(req);
-  res.json(m ? m.sendCommand(cmd) : { ok: false, error: 'No active server.' });
+  res.json(localizeManagerResult(req, m ? m.sendCommand(cmd) : { ok: false, error: eKey('errors.noActiveServer') }));
 });
 
 // ---------------------------------------------------------------------------
@@ -1225,9 +1385,9 @@ app.get('/api/playerlists', (req, res) => {
 // Toggle the whitelist on/off (sends command when running, edits server.properties when offline).
 app.post('/api/whitelist/toggle', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const on = !!(req.body && req.body.enabled);
-  if (m.isRunning()) return res.json(m.sendCommand(`whitelist ${on ? 'on' : 'off'}`));
+  if (m.isRunning()) return res.json(localizeManagerResult(req, m.sendCommand(`whitelist ${on ? 'on' : 'off'}`)));
   try {
     const file = path.join(m.dir(), 'server.properties');
     let props = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -1242,13 +1402,13 @@ app.post('/api/whitelist/toggle', (req, res) => {
 // kind: whitelist | op | ban ; op: add | remove
 app.post('/api/playerlists/:kind/:op', async (req, res) => {
   const name = (req.body && req.body.name || '').trim();
-  if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return res.status(400).json({ error: 'Invalid player name' });
+  if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPlayerName') });
   const { kind, op } = req.params;
   if (!['whitelist', 'op', 'ban'].includes(kind) || !['add', 'remove'].includes(op)) {
-    return res.status(400).json({ error: 'Unknown action' });
+    return res.status(400).json({ error: tErr(req.user, 'errors.unknownAction') });
   }
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
 
   // Online: let Minecraft do it (resolves UUIDs, applies immediately).
   if (m.isRunning()) {
@@ -1257,7 +1417,7 @@ app.post('/api/playerlists/:kind/:op', async (req, res) => {
       'op:add': `op ${name}`, 'op:remove': `deop ${name}`,
       'ban:add': `ban ${name}`, 'ban:remove': `pardon ${name}`,
     };
-    return res.json(m.sendCommand(cmds[`${kind}:${op}`]));
+    return res.json(localizeManagerResult(req, m.sendCommand(cmds[`${kind}:${op}`])));
   }
 
   // Offline: edit the JSON files directly.
@@ -1273,7 +1433,7 @@ app.post('/api/playerlists/:kind/:op', async (req, res) => {
     }
     // add → needs a UUID
     const uuid = await mojangUuid(name);
-    if (!uuid) return res.status(400).json({ error: 'Could not resolve that player (start the server to add, or check the name).' });
+    if (!uuid) return res.status(400).json({ error: tErr(req.user, 'errors.couldNotResolvePlayer') });
     const arr = readJsonArray(file);
     if (arr.some((x) => (x.name || '').toLowerCase() === name.toLowerCase())) return res.json({ ok: true, note: 'Already listed.' });
     if (kind === 'whitelist') arr.push({ uuid, name });
@@ -1431,16 +1591,16 @@ app.get('/api/plugins', (req, res) => {
 app.post('/api/plugins/upload', upload.single('plugin'), (req, res) => {
   res.json({ ok: true, name: req.file && req.file.filename, note: 'Restart the server to apply.' });
 }, (err, req, res, next) => {
-  res.status(400).json({ error: err.message });
+  res.status(400).json({ error: tErr(req.user, err.message && err.message.includes('Only') ? 'errors.onlyJar' : 'errors.unknownAction') });
 });
 
 app.delete('/api/plugins/:name', (req, res) => {
   const m = targetManager(req);
-  if (!m) return res.status(400).json({ error: 'No active server.' });
+  if (!m) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const name = path.basename(req.params.name);
-  if (!name.toLowerCase().endsWith('.jar')) return res.status(400).json({ error: 'Not a .jar' });
+  if (!name.toLowerCase().endsWith('.jar')) return res.status(400).json({ error: tErr(req.user, 'errors.notAJar') });
   const full = path.join(m.pluginsDir(), name);
-  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Does not exist' });
+  if (!fs.existsSync(full)) return res.status(404).json({ error: tErr(req.user, 'errors.fileDoesNotExist') });
   try {
     fs.unlinkSync(full);
     res.json({ ok: true, note: 'Restart the server to apply.' });
@@ -1482,9 +1642,9 @@ app.get('/api/configs', (req, res) => {
 
 app.get('/api/configs/:name', (req, res) => {
   const m = targetManager(req);
-  if (!m) return res.status(400).json({ error: 'No active server.' });
+  if (!m) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const full = resolveEditable(m.dir(), req.params.name);
-  if (!full) return res.status(404).json({ error: 'File not allowed' });
+  if (!full) return res.status(404).json({ error: tErr(req.user, 'errors.fileNotAllowed') });
   try {
     res.json({ name: path.basename(full), content: fs.readFileSync(full, 'utf8') });
   } catch (err) {
@@ -1494,11 +1654,11 @@ app.get('/api/configs/:name', (req, res) => {
 
 app.put('/api/configs/:name', (req, res) => {
   const m = targetManager(req);
-  if (!m) return res.status(400).json({ error: 'No active server.' });
+  if (!m) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const full = resolveEditable(m.dir(), req.params.name);
-  if (!full) return res.status(404).json({ error: 'File not allowed' });
+  if (!full) return res.status(404).json({ error: tErr(req.user, 'errors.fileNotAllowed') });
   const content = req.body && req.body.content;
-  if (typeof content !== 'string') return res.status(400).json({ error: 'Missing content' });
+  if (typeof content !== 'string') return res.status(400).json({ error: tErr(req.user, 'errors.missingContent') });
   try {
     if (fs.existsSync(full)) {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1666,7 +1826,7 @@ app.get('/api/modrinth/search', async (req, res) => {
   const m = targetManager(req);
   const compat = detectCompat(m);
   if (!compat.projectType) {
-    return res.json({ hits: [], compat, note: 'Vanilla servers cannot install plugins or mods.' });
+    return res.json({ hits: [], compat, note: tErr(req.user, 'errors.vanillaNoPlugins') });
   }
   const q = req.query.q || '';
   const sort = MODRINTH_SORTS.includes(req.query.sort) ? req.query.sort : 'downloads';
@@ -1705,9 +1865,9 @@ app.get('/api/modrinth/versions/:projectId', async (req, res) => {
 
 app.post('/api/modrinth/install', async (req, res) => {
   const { versionId } = req.body || {};
-  if (!versionId) return res.status(400).json({ error: 'Missing versionId' });
+  if (!versionId) return res.status(400).json({ error: tErr(req.user, 'errors.missingVersionId') });
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const compat = detectCompat(m);
   try {
     const r = await fetch(`${MODRINTH}/version/${encodeURIComponent(versionId)}`, { headers: { 'User-Agent': UA } });
@@ -1717,10 +1877,10 @@ app.post('/api/modrinth/install', async (req, res) => {
     const loaderOk = (version.loaders || []).some((l) => compat.loaders.includes(l));
     const versionOk = !compat.mcVersion || (version.game_versions || []).includes(compat.mcVersion);
     if (!loaderOk || !versionOk) {
-      return res.status(409).json({ error: `Not compatible with ${compat.label} ${compat.mcVersion || ''}`.trim() });
+      return res.status(409).json({ error: tErr(req.user, 'errors.incompatible', { label: compat.label, version: compat.mcVersion || '' }) });
     }
     const file = (version.files || []).find((f) => f.primary) || (version.files || [])[0];
-    if (!file) return res.status(404).json({ error: 'This version has no files.' });
+    if (!file) return res.status(404).json({ error: tErr(req.user, 'errors.noVersionFiles') });
     const dl = await fetch(file.url, { headers: { 'User-Agent': UA } });
     if (!dl.ok) return res.status(502).json({ error: `Download failed: HTTP ${dl.status}` });
     const buf = Buffer.from(await dl.arrayBuffer());
@@ -1767,9 +1927,9 @@ function isTextFile(name) {
 
 app.get('/api/files', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const abs = safeResolve(m.dir(), req.query.path || '');
-  if (!abs) return res.status(400).json({ error: 'Invalid path' });
+  if (!abs) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   try {
     const entries = fs.readdirSync(abs, { withFileTypes: true });
     const out = entries.map((e) => {
@@ -1785,14 +1945,14 @@ app.get('/api/files', (req, res) => {
 
 app.get('/api/files/read', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const abs = safeResolve(m.dir(), req.query.path || '');
-  if (!abs) return res.status(400).json({ error: 'Invalid path' });
+  if (!abs) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   try {
     const st = fs.statSync(abs);
-    if (st.isDirectory()) return res.status(400).json({ error: 'That is a folder' });
-    if (st.size > MAX_EDIT_BYTES) return res.status(413).json({ error: 'File too large to edit (max 2 MB)' });
-    if (!isTextFile(path.basename(abs))) return res.status(415).json({ error: 'Not a text file' });
+    if (st.isDirectory()) return res.status(400).json({ error: tErr(req.user, 'errors.isAFolder') });
+    if (st.size > MAX_EDIT_BYTES) return res.status(413).json({ error: tErr(req.user, 'errors.fileTooLarge') });
+    if (!isTextFile(path.basename(abs))) return res.status(415).json({ error: tErr(req.user, 'errors.notATextFile') });
     res.json({ content: fs.readFileSync(abs, 'utf8') });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1801,11 +1961,11 @@ app.get('/api/files/read', (req, res) => {
 
 app.put('/api/files/write', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const abs = safeResolve(m.dir(), req.body && req.body.path);
-  if (!abs) return res.status(400).json({ error: 'Invalid path' });
+  if (!abs) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   const content = req.body && req.body.content;
-  if (typeof content !== 'string') return res.status(400).json({ error: 'Missing content' });
+  if (typeof content !== 'string') return res.status(400).json({ error: tErr(req.user, 'errors.missingContent') });
   try {
     fs.writeFileSync(abs, content, 'utf8');
     res.json({ ok: true });
@@ -1816,11 +1976,11 @@ app.put('/api/files/write', (req, res) => {
 
 app.post('/api/files/mkdir', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const name = path.basename(String((req.body && req.body.name) || '').trim());
-  if (!name) return res.status(400).json({ error: 'Name required' });
+  if (!name) return res.status(400).json({ error: tErr(req.user, 'errors.nameRequiredShort') });
   const abs = safeResolve(m.dir(), path.join(req.body.path || '', name));
-  if (!abs) return res.status(400).json({ error: 'Invalid path' });
+  if (!abs) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   try {
     fs.mkdirSync(abs, { recursive: true });
     res.json({ ok: true });
@@ -1831,10 +1991,10 @@ app.post('/api/files/mkdir', (req, res) => {
 
 app.post('/api/files/rename', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const from = safeResolve(m.dir(), req.body && req.body.path);
   const newName = path.basename(String((req.body && req.body.name) || '').trim());
-  if (!from || !newName) return res.status(400).json({ error: 'Invalid path or name' });
+  if (!from || !newName) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   const to = path.join(path.dirname(from), newName);
   try {
     fs.renameSync(from, to);
@@ -1846,9 +2006,9 @@ app.post('/api/files/rename', (req, res) => {
 
 app.delete('/api/files', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const abs = safeResolve(m.dir(), req.query.path || '');
-  if (!abs || abs === path.resolve(m.dir())) return res.status(400).json({ error: 'Invalid path' });
+  if (!abs || abs === path.resolve(m.dir())) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   try {
     fs.rmSync(abs, { recursive: true, force: true });
     res.json({ ok: true });
@@ -1859,14 +2019,14 @@ app.delete('/api/files', (req, res) => {
 
 app.get('/api/files/download', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const abs = safeResolve(m.dir(), req.query.path || '');
-  if (!abs) return res.status(400).json({ error: 'Invalid path' });
+  if (!abs) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPath') });
   try {
-    if (fs.statSync(abs).isDirectory()) return res.status(400).json({ error: 'Cannot download a folder' });
+    if (fs.statSync(abs).isDirectory()) return res.status(400).json({ error: tErr(req.user, 'errors.cannotDownloadFolder') });
     res.download(abs, path.basename(abs));
   } catch (err) {
-    res.status(404).json({ error: 'Does not exist' });
+    res.status(404).json({ error: tErr(req.user, 'errors.fileDoesNotExist') });
   }
 });
 
@@ -1961,7 +2121,7 @@ async function resolveServerJar(type, mcVersion) {
 
 app.get('/api/create/versions', async (req, res) => {
   const type = String(req.query.type || '').toLowerCase();
-  if (!SERVER_TYPES.includes(type)) return res.status(400).json({ error: 'Unknown server type' });
+  if (!SERVER_TYPES.includes(type)) return res.status(400).json({ error: tErr(req.user, 'errors.unknownServerType') });
   try {
     res.json({ versions: await listServerVersions(type) });
   } catch (err) {
@@ -1975,15 +2135,15 @@ app.post('/api/create', async (req, res) => {
   const name = String(body.name || '').trim();
   const parentDir = String(body.parentDir || '').trim();
   const mcVersion = String(body.mcVersion || '').trim();
-  if (!SERVER_TYPES.includes(type)) return res.status(400).json({ error: 'Pick a server type' });
-  if (!name) return res.status(400).json({ error: 'A name is required' });
-  if (!parentDir || !fs.existsSync(parentDir)) return res.status(400).json({ error: 'Pick an existing parent folder' });
-  if (!mcVersion) return res.status(400).json({ error: 'Pick a Minecraft version' });
-  if (!body.eula) return res.status(400).json({ error: 'You must accept the Minecraft EULA' });
+  if (!SERVER_TYPES.includes(type)) return res.status(400).json({ error: tErr(req.user, 'errors.pickServerType') });
+  if (!name) return res.status(400).json({ error: tErr(req.user, 'errors.nameRequired') });
+  if (!parentDir || !fs.existsSync(parentDir)) return res.status(400).json({ error: tErr(req.user, 'errors.pickParentFolder') });
+  if (!mcVersion) return res.status(400).json({ error: tErr(req.user, 'errors.pickMcVersion') });
+  if (!body.eula) return res.status(400).json({ error: tErr(req.user, 'errors.eulaRequired') });
 
   const dir = path.join(parentDir, slugify(name));
   if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
-    return res.status(400).json({ error: `Folder already exists and is not empty: ${dir}` });
+    return res.status(400).json({ error: tErr(req.user, 'errors.folderNotEmpty', { path: dir }) });
   }
   try {
     const { url, filename } = await resolveServerJar(type, mcVersion);
@@ -2031,15 +2191,15 @@ function publicTask(t) {
   return { ...t, serverName: s ? s.name : '(deleted server)' };
 }
 
-function validateTask(body) {
+function validateTask(body, user) {
   const type = String(body.type || '').toLowerCase();
-  if (!TASK_TYPES.includes(type)) return { error: 'Unknown task type' };
+  if (!TASK_TYPES.includes(type)) return { error: eKey('errors.unknownTaskType') };
   const serverId = String(body.serverId || '').trim();
-  if (!findServer(serverId)) return { error: 'Unknown server' };
+  if (!findServer(serverId)) return { error: eKey('errors.unknownServer') };
   const cronExpr = String(body.cron || '').trim();
-  if (!cron.validate(cronExpr)) return { error: 'Invalid cron expression' };
+  if (!cron.validate(cronExpr)) return { error: eKey('errors.invalidCron') };
   const command = type === 'command' ? String(body.command || '').trim() : '';
-  if (type === 'command' && !command) return { error: 'A command is required' };
+  if (type === 'command' && !command) return { error: eKey('errors.commandRequired') };
   return {
     value: {
       serverId,
@@ -2065,8 +2225,8 @@ app.get('/api/tasks', (req, res) => {
 });
 
 app.post('/api/tasks', (req, res) => {
-  const v = validateTask(req.body || {});
-  if (v.error) return res.status(400).json({ error: v.error });
+  const v = validateTask(req.body || {}, req.user);
+  if (v.error) return res.status(400).json({ error: localizeErr(req.user, v.error) });
   if (!Array.isArray(config.tasks)) config.tasks = [];
   const task = { id: genId(), ...v.value };
   config.tasks.push(task);
@@ -2077,9 +2237,9 @@ app.post('/api/tasks', (req, res) => {
 
 app.put('/api/tasks/:id', (req, res) => {
   const t = (config.tasks || []).find((x) => x.id === req.params.id);
-  if (!t) return res.status(404).json({ error: 'Task not found' });
-  const v = validateTask({ ...t, ...req.body });
-  if (v.error) return res.status(400).json({ error: v.error });
+  if (!t) return res.status(404).json({ error: tErr(req.user, 'errors.taskNotFound') });
+  const v = validateTask({ ...t, ...req.body }, req.user);
+  if (v.error) return res.status(400).json({ error: localizeErr(req.user, v.error) });
   Object.assign(t, v.value);
   saveConfig(config);
   setupSchedulers();
@@ -2090,7 +2250,7 @@ app.delete('/api/tasks/:id', (req, res) => {
   if (!Array.isArray(config.tasks)) config.tasks = [];
   const before = config.tasks.length;
   config.tasks = config.tasks.filter((x) => x.id !== req.params.id);
-  if (config.tasks.length === before) return res.status(404).json({ error: 'Task not found' });
+  if (config.tasks.length === before) return res.status(404).json({ error: tErr(req.user, 'errors.taskNotFound') });
   saveConfig(config);
   setupSchedulers();
   res.json({ ok: true });
@@ -2098,7 +2258,7 @@ app.delete('/api/tasks/:id', (req, res) => {
 
 app.post('/api/tasks/:id/run', (req, res) => {
   const t = (config.tasks || []).find((x) => x.id === req.params.id);
-  if (!t) return res.status(404).json({ error: 'Task not found' });
+  if (!t) return res.status(404).json({ error: tErr(req.user, 'errors.taskNotFound') });
   try { runTask(t); res.json({ ok: true }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });

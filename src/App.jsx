@@ -3,6 +3,7 @@ import { Toaster } from 'sonner';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useServer } from '@/context/ServerContext';
+import { useI18n, useT } from '@/context/I18nContext';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -10,6 +11,7 @@ import { LoginView } from '@/views/LoginView';
 import { SpinningCube } from '@/components/shared/SpinningCube';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
+import { ControlBar } from '@/components/layout/ControlBar';
 import { DashboardView } from '@/views/DashboardView';
 import { ServersView } from '@/views/ServersView';
 import { MetricsView } from '@/views/MetricsView';
@@ -28,6 +30,7 @@ function AppShell({ onLoggedIn }) {
   const { token, user, setUser, isLoggedIn } = useAuth();
   const { servers, setServers, activeServerId, setActiveServerId, updateStatus, setMapUrl, wsRef } = useServer();
   const api = useApi();
+  const t = useT();
 
   const [currentView, setCurrentView] = useState('servers');
   const [consoleLines, setConsoleLines] = useState([]);
@@ -96,7 +99,7 @@ function AppShell({ onLoggedIn }) {
       setConsoleLines([]);
       sendMessage({ type: 'getHistory', serverId: id });
       await loadServers();
-      toast.success('Active server switched');
+      toast.success(t('header.restartSuccess'));
     } catch (e) { toast.error(e.message); }
   }
 
@@ -104,7 +107,7 @@ function AppShell({ onLoggedIn }) {
     const endpoint = action === 'start' ? '/api/server/start' :
                      action === 'stop'  ? '/api/server/stop' :
                      '/api/server/restart';
-    if (action === 'restart' && !confirm('Restart the server?')) return;
+    if (action === 'restart' && !confirm(t('header.restartConfirm'))) return;
     try {
       await api(endpoint, { method: 'POST' });
     } catch (e) { toast.error(e.message); }
@@ -136,35 +139,37 @@ function AppShell({ onLoggedIn }) {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="relative flex min-h-screen bg-background">
+      <div className="app-shell-enter relative flex min-h-screen bg-background">
         {/* Faded, slowly-spinning 3D Lodestone cube behind every section */}
         <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden">
           <SpinningCube size="min(60vh, 60vw)" duration={48} opacity={0.05} />
         </div>
         <Sidebar currentView={currentView} onNavigate={navigate} />
         <div className="relative z-10 flex min-h-screen flex-1 min-w-0 flex-col">
-          <Header
-            currentView={currentView}
-            onServerSwitch={handleSetActive}
-            onStart={() => serverAction('start')}
-            onStop={() => serverAction('stop')}
-            onRestart={() => serverAction('restart')}
-          />
-          <main className="flex-1 p-5">
+          <Header currentView={currentView} />
+          <main className="flex-1 p-5 pb-28">
             <div className="view-enter" key={currentView}>
               {views[currentView] || null}
             </div>
           </main>
         </div>
       </div>
+      <ControlBar
+        onServerSwitch={handleSetActive}
+        onStart={() => serverAction('start')}
+        onStop={() => serverAction('stop')}
+        onRestart={() => serverAction('restart')}
+      />
     </TooltipProvider>
   );
 }
 
 export default function App() {
   const { isLoggedIn, login } = useAuth();
+  const { setLang } = useI18n();
 
   const handleLogin = (token, user) => {
+    if (user && user.language) setLang(user.language);
     login(token, user);
   };
 
