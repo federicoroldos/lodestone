@@ -2017,13 +2017,16 @@ async function createBackup(m) {
   const worlds = m.desc().worlds || ['world', 'world_nether', 'world_the_end'];
 
   try {
+    log(`Backup: "${m.name()}" -> ${outName} (worlds: ${worlds.join(', ')})`);
     if (wasOnline) {
       // Avoid writes during the zip
+      log('Backup: server online, flushing world saves (save-off + save-all flush)...');
       m.sendCommand('save-off');
       m.sendCommand('save-all flush');
       await new Promise((r) => setTimeout(r, 5000));
     }
 
+    log('Backup: zipping worlds...');
     await new Promise((resolve, reject) => {
       const output = fs.createWriteStream(outPath);
       const archive = archiver('zip', { zlib: { level: 6 } });
@@ -2043,6 +2046,7 @@ async function createBackup(m) {
 
   pruneBackups(slug);
   const st = fs.statSync(outPath);
+  log(`Backup: done -> ${outName} (${(st.size / 1048576).toFixed(1)} MB)`);
   m.pushLine(`[Lodestone] Backup created: ${outName} (${(st.size / 1048576).toFixed(1)} MB)`, 'info');
   return { name: outName, size: st.size };
 }
@@ -2204,6 +2208,7 @@ app.post('/api/modrinth/install', async (req, res) => {
   if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const compat = detectCompat(m);
   try {
+    log(`Modrinth: resolving version ${versionId} for "${m.name()}" (${compat.label})...`);
     const r = await fetch(`${MODRINTH}/version/${encodeURIComponent(versionId)}`, { headers: { 'User-Agent': UA } });
     const version = await r.json();
     // Compatibility guard: refuse anything that doesn't match this server's
@@ -2215,6 +2220,7 @@ app.post('/api/modrinth/install', async (req, res) => {
     }
     const file = (version.files || []).find((f) => f.primary) || (version.files || [])[0];
     if (!file) return res.status(404).json({ error: tErr(req.user, 'errors.noVersionFiles') });
+    log(`Modrinth: downloading ${file.filename}...`);
     const dl = await fetch(file.url, { headers: { 'User-Agent': UA } });
     if (!dl.ok) return res.status(502).json({ error: `Download failed: HTTP ${dl.status}` });
     const buf = Buffer.from(await dl.arrayBuffer());
@@ -2222,9 +2228,11 @@ app.post('/api/modrinth/install', async (req, res) => {
     fs.mkdirSync(pdir, { recursive: true });
     const dest = path.join(pdir, path.basename(file.filename));
     fs.writeFileSync(dest, buf);
+    log(`Modrinth: installed ${file.filename} into ${compat.folder}/ for "${m.name()}"`);
     m.pushLine(`[Lodestone] Installed from Modrinth into ${compat.folder}/: ${file.filename}`, 'info');
     res.json({ ok: true, name: file.filename, note: 'Restart the server to apply.' });
   } catch (err) {
+    log(`Modrinth install failed: ${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });
@@ -2604,8 +2612,12 @@ app.get('/api/create/versions', async (req, res) => {
   const type = String(req.query.type || '').toLowerCase();
   if (!SERVER_TYPES.includes(type)) return res.status(400).json({ error: tErr(req.user, 'errors.unknownServerType') });
   try {
-    res.json({ versions: await listServerVersions(type) });
+    log(`Fetching ${type} version list...`);
+    const versions = await listServerVersions(type);
+    log(`${type} versions: ${versions.length} (latest ${versions[0] || 'n/a'})`);
+    res.json({ versions });
   } catch (err) {
+    log(`Failed to fetch ${type} version list: ${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });
@@ -2745,8 +2757,16 @@ function ensureRuntime(major, onProgress) {
     const dest = path.join(RUNTIMES_DIR, `temurin-${major}`);
     const archive = path.join(RUNTIMES_DIR, `temurin-${major}.${ext}`);
 
-    log(`Downloading Temurin JRE ${major} for ${osName}/${arch}...`);
-    await downloadToFile(url, archive, (rec, total) => { if (onProgress) onProgress(rec, total); });
+    log(`JRE ${major}: downloading Temurin for ${osName}/${arch} from ${url}`);
+    let nextPct = 0;
+    await downloadToFile(url, archive, (rec, total) => {
+      if (onProgress) onProgress(rec, total);
+      if (total) {
+        const pct = Math.floor((rec / total) * 100);
+        if (pct >= nextPct) { log(`JRE ${major}: download ${pct}% (${(rec / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB)`); nextPct += 25; }
+      }
+    });
+    log(`JRE ${major}: extracting...`);
 
     // Extract with the system tar: present on Linux/macOS and Windows 10+,
     // where bsdtar also opens .zip archives. Extract into a clean target.
@@ -2807,7 +2827,11 @@ app.post('/api/create', async (req, res) => {
 
   const ac = new AbortController();
   let clientGone = false;
-  req.on('close', () => {
+  // Detect a real client disconnect via the *response* stream. (Listening on
+  // req.on('close') is wrong: on Node 18+ the request emits 'close' as soon as
+  // its body has been read — immediately for a small POST — which would abort
+  // the download before it even starts.)
+  res.on('close', () => {
     if (res.writableEnded) return;
     clientGone = true;
     ac.abort();
@@ -2819,20 +2843,29 @@ app.post('/api/create', async (req, res) => {
   };
 
   try {
+    log(`Create: ${type} server "${name}" (MC ${mcVersion}) -> ${dir}`);
     send({ type: 'phase', phase: 'resolving' });
+    log(`Create: resolving ${type} ${mcVersion} download...`);
     const { url, filename } = await resolveServerJar(type, mcVersion);
     if (clientGone) return;
+    log(`Create: resolved -> ${url}`);
 
     fs.mkdirSync(dir, { recursive: true });
     const jarPath = path.join(dir, filename);
 
     send({ type: 'phase', phase: 'downloading' });
     send({ type: 'download-start', total: 0, filename });
+    log(`Create: downloading ${filename}...`);
+    let nextPct = 0;
     const received = await downloadToFile(url, jarPath, (rec, total) => {
       send({ type: 'progress', received: rec, total });
+      if (total) {
+        const pct = Math.floor((rec / total) * 100);
+        if (pct >= nextPct) { log(`Create: download ${pct}% (${(rec / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB)`); nextPct += 25; }
+      }
     }, ac.signal);
     if (clientGone) { cleanup(filename); return; }
-    log(`Downloaded ${type} jar "${filename}" (${(received / 1048576).toFixed(1)} MB) to ${dir}`);
+    log(`Create: downloaded "${filename}" (${(received / 1048576).toFixed(1)} MB)`);
 
     let jarFilename = filename;
     if (type === 'forge') {
@@ -2845,6 +2878,7 @@ app.post('/api/create', async (req, res) => {
     }
 
     send({ type: 'phase', phase: 'finalizing' });
+    log('Create: writing eula.txt and registering server...');
     fs.writeFileSync(path.join(dir, 'eula.txt'), `# Accepted via Lodestone on ${new Date().toISOString()}\neula=true\n`, 'utf8');
 
     let javaArgs = body.javaArgs;
@@ -2877,6 +2911,7 @@ app.post('/api/create', async (req, res) => {
       try { log(`Create aborted by client before completion: ${dir}`); } catch (_) { /* noop */ }
       return;
     }
+    log(`Create failed (${type} ${mcVersion}): ${err.message}`);
     send({ type: 'error', error: err.message });
     res.end();
   }
