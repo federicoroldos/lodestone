@@ -1,13 +1,17 @@
 @echo off
 REM ============================================================
-REM  Lodestone - Minecraft server panel launcher (Windows)
-REM  Double-click this file to start the web panel.
+REM  Lodestone - DEVELOPMENT launcher (Windows)
+REM  Runs the backend + the Vite dev server with hot reload.
+REM  Edit anything under src/ and the browser updates instantly,
+REM  no rebuild and no panel restart needed.
+REM
+REM  For normal use (built bundle, single port) use start-panel.bat.
 REM ============================================================
 
 REM Move to the folder where this .bat lives (handles spaces and "N").
 cd /d "%~dp0"
 
-title Lodestone Panel
+title Lodestone Dev
 
 REM --- Check Node.js is installed ---
 where node >nul 2>nul
@@ -30,20 +34,6 @@ if not exist "node_modules" (
   )
 )
 
-REM --- Build the frontend on every launch so source edits always take effect ---
-REM  (Set LODESTONE_SKIP_BUILD=1 before running to skip and serve the existing bundle.)
-if "%LODESTONE_SKIP_BUILD%"=="1" (
-  echo Skipping frontend build (LODESTONE_SKIP_BUILD=1).
-) else (
-  echo Building frontend...
-  call npm run build
-  if errorlevel 1 (
-    echo [ERROR] Frontend build failed. Check the output above for details.
-    pause
-    exit /b 1
-  )
-)
-
 REM --- Seed config.json from the template on first run (never overwrite an existing one) ---
 if not exist "config.json" (
   if exist "config.example.json" (
@@ -54,30 +44,34 @@ if not exist "config.json" (
       pause
       exit /b 1
     )
-    echo Edit config.json to change the password, port, etc., then restart the panel.
+    echo Edit config.json to change the password, port, etc., then restart.
     echo.
   ) else (
     echo [ERROR] Neither config.json nor config.example.json were found.
-    echo Re-download the panel files or restore config.example.json next to start-panel.bat.
+    echo Re-download the panel files or restore config.example.json next to this script.
     pause
     exit /b 1
   )
 )
 
-REM --- Kill any previous panel instance still holding the port ---
+REM --- Kill any previous backend instance still holding the port ---
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr "0.0.0.0:2121 " 2^>nul') do (
-  echo Stopping previous panel instance (PID %%p^)...
+  echo Stopping previous backend instance (PID %%p^)...
   taskkill /f /pid %%p >nul 2>nul
 )
 
 echo.
-echo Starting Lodestone panel...
-echo Open http://localhost:2121 in your browser (default port^).
-echo Press Ctrl+C in this window to stop the panel.
+echo Starting Lodestone backend (port 2121) in a separate window...
+start "Lodestone Backend" cmd /k node server.js
+
+echo Starting Vite dev server with hot reload...
+echo Open http://localhost:5173 in your browser (it should open automatically^).
+echo Frontend changes under src/ reload instantly. Close this window to stop Vite;
+echo close the "Lodestone Backend" window to stop the backend.
 echo.
 
-node server.js
+call npm run dev -- --open
 
 echo.
-echo The panel stopped. Press a key to close this window.
+echo The Vite dev server stopped. Press a key to close this window.
 pause >nul
