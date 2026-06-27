@@ -7,6 +7,9 @@ config.json
 # runtime data
 metrics.json
 
+# managed Java runtimes (downloaded Temurin JREs per Java major)
+runtimes/
+
 # logs
 *.log
 

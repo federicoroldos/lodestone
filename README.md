@@ -1,6 +1,6 @@
 # Lodestone
 
-A lightweight web panel to manage a Minecraft (Spigot/Paper) server on Windows.
+A lightweight web panel to manage a Minecraft (Spigot/Paper) server on Windows, Linux, or macOS.
 
 One small Node.js process gives you a browser dashboard with:
 
@@ -21,7 +21,11 @@ One small Node.js process gives you a browser dashboard with:
 ## 1. Requirements
 
 - **Node.js 18 or newer** — <https://nodejs.org/> (the LTS installer is fine). Verify with `node -v`.
-- **Java** must be installed and on your `PATH` — the panel launches the server with `java -jar ...`. Verify with `java -version`. Use the Java version your server jar requires.
+- **Java** — you do **not** need to install it yourself. The panel downloads and manages the
+  correct Temurin (Adoptium) JRE per Minecraft version automatically, the first time a server
+  that needs it is started (stored under `runtimes/`). If a matching Java is already on your
+  `PATH`, the panel uses that instead. Extraction uses the system `tar` (built into Linux,
+  macOS, and Windows 10+).
 - A Spigot/Paper server jar already set up in its own folder (with `eula.txt` accepted, etc.).
 
 ---
@@ -30,10 +34,14 @@ One small Node.js process gives you a browser dashboard with:
 
 1. Open `config.json` and set at least `password` (see section 3). You no longer need to set the
    server folder by hand — you register servers from the UI (see section 2.1).
-2. Double-click **`start-panel.bat`**.
-   - On the first run it automatically runs `npm install` to fetch dependencies.
+2. Start the panel:
+   - **Windows:** double-click **`start-panel.bat`**.
+   - **Linux / macOS:** run **`./start-panel.sh`** in a terminal.
+   - On the first run it automatically runs `npm install` to fetch dependencies, builds the
+     frontend, and (on Linux/macOS) offers to install Node/npm if they are missing.
    - It then starts the panel and prints the URL.
-3. Open **<http://localhost:2121>** in your browser and log in with your password.
+3. Open **<http://localhost:2121>** in your browser and log in. The default account is
+   **`admin`** / **`admin`** — change it from the Users tab right away.
 
 ### 2.1. Registering servers (Servers tab)
 
@@ -198,11 +206,11 @@ Tips:
 
 | Symptom | Fix |
 | --- | --- |
-| `Node.js was not found` | Install Node 18+ and reopen the `.bat`. |
-| Server won't start, "Jar not found" | Check `serverDir` and `jar` in `config.json` (double backslashes!). |
-| Console shows a Java error immediately | Run `java -version`; install/repair Java or adjust `javaArgs`. |
+| `Node.js was not found` | Install Node 18+ and re-run the launcher (`start-panel.bat` on Windows, `./start-panel.sh` on Linux/macOS). |
+| Server won't start, "Jar not found" | Check the server's folder and jar in the Servers tab. On Windows paths in `config.json` use double backslashes. |
+| Java runtime download fails | The panel fetches the Temurin JRE from `api.adoptium.net` and extracts it with `tar`; check internet access and that `tar` is available. You can also install a matching Java on your `PATH`. |
 | TPS always shows `—` | TPS needs EssentialsX or Paper's `/tps`. Without them it stays blank — everything else still works. |
-| Can't reach the panel from another device | Use the LAN/Tailscale IP (not `localhost`), confirm `panelHost` is `0.0.0.0`, and allow the port in Windows Firewall. |
+| Can't reach the panel from another device | Use the LAN/Tailscale IP (not `localhost`), confirm `panelHost` is `0.0.0.0`, and allow the port in your firewall. |
 | Map tab is blank | BlueMap must be installed, rendered, and `map.url` set. Large worlds take time to render. |
 
 ---
@@ -213,8 +221,8 @@ Tips:
 config.json        # all settings (hand-edited)
 server.js          # Node backend: REST API + WebSocket + server process manager
 start-panel.bat    # Windows launcher (installs deps on first run, then starts)
-public/
-  index.html       # UI
-  style.css        # Material-style dark theme
-  app.js           # frontend logic
+start-panel.sh     # Linux/macOS launcher (checks deps, installs them, then starts)
+runtimes/          # managed Temurin JREs downloaded per Java major (git-ignored)
+src/               # React + Vite frontend source
+public/            # built frontend served by the backend (npm run build)
 ```
