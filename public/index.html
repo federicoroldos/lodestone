@@ -4,12 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lodestone</title>
+  <link rel="icon" type="image/webp" href="/resources/lodestone.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <!-- ====================== LOGIN ====================== -->
   <div id="login" class="login-overlay">
+
+    <!-- 3D Lodestone Block -->
+    <div class="ls-cube-scene">
+      <div class="ls-cube">
+        <div class="ls-face ls-front"></div>
+        <div class="ls-face ls-back"></div>
+        <div class="ls-face ls-left"></div>
+        <div class="ls-face ls-right"></div>
+        <div class="ls-face ls-top"></div>
+        <div class="ls-face ls-bottom"></div>
+      </div>
+    </div>
+
     <form id="login-form" class="login-card">
       <div class="login-logo"><span class="diamond">◆</span> Lodestone</div>
       <p class="login-sub">Minecraft server panel</p>
@@ -29,7 +46,7 @@
 
       <nav class="nav">
         <div class="nav-group">
-          <span class="nav-label">Overview</span>
+          <button class="nav-label" type="button">Overview</button>
           <button class="nav-item" data-view="dashboard">
             <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
             <span>Dashboard</span>
@@ -45,7 +62,7 @@
         </div>
 
         <div class="nav-group">
-          <span class="nav-label">Operate</span>
+          <button class="nav-label" type="button">Operate</button>
           <button class="nav-item" data-view="console">
             <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
             <span>Console</span>
@@ -61,7 +78,7 @@
         </div>
 
         <div class="nav-group">
-          <span class="nav-label">Content</span>
+          <button class="nav-label" type="button">Content</button>
           <button class="nav-item" data-view="plugins">
             <svg viewBox="0 0 24 24" class="ico"><path d="M10 3v3M14 3v3M10 18v3M14 18v3M3 10h3M3 14h3M18 10h3M18 14h3"/><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
             <span>Plugins</span>
@@ -81,7 +98,7 @@
         </div>
 
         <div class="nav-group">
-          <span class="nav-label">Maintenance</span>
+          <button class="nav-label" type="button">Maintenance</button>
           <button class="nav-item" data-view="backups">
             <svg viewBox="0 0 24 24" class="ico"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
             <span>Backups</span>
@@ -93,7 +110,7 @@
         </div>
 
         <div class="nav-group">
-          <span class="nav-label">Settings</span>
+          <button class="nav-label" type="button">Settings</button>
           <button class="nav-item" data-view="users">
             <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>
             <span>Users</span>
@@ -270,6 +287,9 @@
       <!-- ===== Console ===== -->
       <section class="view" data-view="console">
         <div class="card no-pad">
+          <div class="console-toolbar">
+            <label class="console-autoscroll"><input type="checkbox" id="console-autoscroll" checked /><span>Autoscroll</span></label>
+          </div>
           <div id="console" class="console"></div>
           <form id="cmd-form" class="cmd-bar">
             <span class="cmd-prompt">&gt;</span>

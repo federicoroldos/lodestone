@@ -19,11 +19,30 @@ function api(path, opts = {}) {
     opts.body = JSON.stringify(opts.body);
   }
   return fetch(path, opts).then(async (r) => {
-    if (r.status === 401) { logout(); throw new Error('Session expired'); }
+    if (r.status === 401 && !opts.silent) { logout(); throw new Error('Session expired'); }
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
     return data;
   });
+}
+
+// Lightweight client-side JWT expiration check. Decodes the payload (no
+// signature verification — the server does that on the first protected API
+// call) and returns true when the token is clearly unusable, so we can skip
+// the boot network call and avoid a 401 in the console for stale tokens.
+function isJwtExpired(jwt) {
+  if (!jwt || typeof jwt !== 'string') return true;
+  const parts = jwt.split('.');
+  if (parts.length !== 3) return true;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+    const payload = JSON.parse(atob(padded));
+    if (typeof payload.exp !== 'number') return true;
+    return payload.exp * 1000 <= Date.now();
+  } catch (_) {
+    return true;
+  }
 }
 
 let toastTimer = null;
@@ -163,24 +182,64 @@ function updateServerStatus(status) {
 
 // ----- console -----
 const consoleEl = $('#console');
+function detectLevel(text) {
+  if (!text) return '';
+  const e = String(text).toUpperCase();
+  if (e.includes('ERROR') || e.includes('SEVERE') || e.includes('STDERR') ||
+      e.includes('EXCEPTION') || e.includes('CAUSED BY')) return 'error';
+  if (e.includes('WARN')) return 'warn';
+  if (e.includes('JOINED THE GAME') || e.includes('LEFT THE GAME')) return 'chat';
+  if (e.includes('INFO')) return 'info';
+  return '';
+}
 function appendConsole(line) {
   const span = document.createElement('span');
-  span.className = 'l l-' + (line.level || 'info');
+  span.className = 'l l-' + (line.level || detectLevel(line.text) || 'plain');
   span.textContent = line.text + '\n';
   consoleEl.appendChild(span);
   // client-side trim
   while (consoleEl.childNodes.length > 1200) consoleEl.removeChild(consoleEl.firstChild);
 }
 function scrollConsole() {
+  const auto = document.getElementById('console-autoscroll');
+  if (auto && !auto.checked) return;
   const nearBottom = consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 120;
   if (nearBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
 }
+
+const cmdHistory = [];
+let cmdHistoryIdx = -1;
+
+$('#cmd-input').addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  if (!cmdHistory.length) return;
+  e.preventDefault();
+  const input = e.target;
+  if (e.key === 'ArrowUp') {
+    if (cmdHistoryIdx === -1) cmdHistoryIdx = cmdHistory.length - 1;
+    else if (cmdHistoryIdx > 0) cmdHistoryIdx--;
+    else return;
+    input.value = cmdHistory[cmdHistoryIdx] || '';
+  } else {
+    if (cmdHistoryIdx === -1) return;
+    if (cmdHistoryIdx < cmdHistory.length - 1) {
+      cmdHistoryIdx++;
+      input.value = cmdHistory[cmdHistoryIdx] || '';
+    } else {
+      cmdHistoryIdx = -1;
+      input.value = '';
+    }
+  }
+  requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length));
+});
 
 $('#cmd-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('#cmd-input');
   const cmd = input.value.trim();
   if (!cmd) return;
+  if (!cmdHistory.length || cmdHistory[cmdHistory.length - 1] !== cmd) cmdHistory.push(cmd);
+  cmdHistoryIdx = -1;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'command', cmd }));
   }
@@ -344,6 +403,22 @@ $$('.nav-item').forEach((item) => {
   });
 });
 
+let _collapsedNavs;
+try { _collapsedNavs = JSON.parse(localStorage.getItem('ls-collapsed-navs') || '[]'); }
+catch { _collapsedNavs = []; }
+const collapsedNavs = new Set(Array.isArray(_collapsedNavs) ? _collapsedNavs : []);
+$$('.nav-label').forEach((lbl) => {
+  const group = lbl.closest('.nav-group');
+  const key = lbl.textContent.trim();
+  if (collapsedNavs.has(key)) group.classList.add('collapsed');
+  lbl.addEventListener('click', () => {
+    group.classList.toggle('collapsed');
+    if (group.classList.contains('collapsed')) collapsedNavs.add(key);
+    else collapsedNavs.delete(key);
+    localStorage.setItem('ls-collapsed-navs', JSON.stringify([...collapsedNavs]));
+  });
+});
+
 // ----- servers registry -----
 async function loadServers() {
   try {
@@ -426,7 +501,8 @@ function renderServers() {
   const el = $('#servers-list');
   if (!el) return;
   if (!serversCache.length) {
-    el.innerHTML = '<div class="empty">No servers registered yet. Use “Create new” or “Register existing”.</div>';
+    el.innerHTML = '';
+    el.appendChild(emptyState('No servers registered yet. Click Create new or Register existing.'));
     return;
   }
 
@@ -659,11 +735,24 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function emptyState(msg) {
+  const row = document.createElement('div');
+  row.className = 'empty-state';
+  const dot = document.createElement('span');
+  dot.className = 'empty-state-dot';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  row.appendChild(dot);
+  row.appendChild(text);
+  return row;
+}
+
 // ----- players -----
 function renderPlayers(players, max) {
   const el = $('#players-list');
   if (!players || players.length === 0) {
-    el.innerHTML = '<span class="empty">Nobody connected.</span>';
+    el.innerHTML = '';
+    el.appendChild(emptyState('No players online.'));
     return;
   }
   el.innerHTML = '';
@@ -703,7 +792,7 @@ async function loadPlugins() {
   try {
     const { plugins } = await api('/api/plugins');
     const el = $('#plugins-list');
-    if (!plugins.length) { el.innerHTML = '<span class="empty">No plugins.</span>'; return; }
+    if (!plugins.length) { el.innerHTML = ''; el.appendChild(emptyState('No plugins installed. Upload a .jar or browse Modrinth.')); return; }
     el.innerHTML = '';
     for (const p of plugins) {
       const row = document.createElement('div');
@@ -771,7 +860,7 @@ async function loadBackups() {
   try {
     const { backups } = await api('/api/backups');
     const el = $('#backups-list');
-    if (!backups.length) { el.innerHTML = '<span class="empty">No backups yet.</span>'; return; }
+    if (!backups.length) { el.innerHTML = ''; el.appendChild(emptyState('No backups yet. Click + Backup now.')); return; }
     el.innerHTML = '';
     for (const b of backups) {
       const row = document.createElement('div');
@@ -915,7 +1004,7 @@ async function loadUsers() {
   try {
     const { users } = await api('/api/users');
     const el = $('#users-list');
-    if (!users.length) { el.innerHTML = '<span class="empty">No users.</span>'; return; }
+    if (!users.length) { el.innerHTML = ''; el.appendChild(emptyState('No users. Click + Add user.')); return; }
     el.innerHTML = '';
     for (const u of users) {
       const isSelf = currentUser && u.id === currentUser.id;
@@ -1074,7 +1163,13 @@ $('#fileedit-save').addEventListener('click', async () => {
 $('#server-create').addEventListener('click', openCreateModal);
 $('#create-modal-close').addEventListener('click', () => $('#create-modal').classList.add('hidden'));
 $('#cf-cancel').addEventListener('click', () => $('#create-modal').classList.add('hidden'));
-$('#cf-browse').addEventListener('click', () => { fsTarget = 'create'; openFs($('#cf-parent').value.trim() || ''); });
+$('#cf-browse').addEventListener('click', async () => {
+  const def = $('#cf-parent').value.trim();
+  try {
+    const data = await api(`/api/pick-folder?defaultPath=${encodeURIComponent(def)}`);
+    if (data && data.path) $('#cf-parent').value = data.path;
+  } catch (e) { toast(e.message, true); }
+});
 $('#cf-type').addEventListener('change', loadCreateVersions);
 
 function openCreateModal() {
@@ -1129,7 +1224,7 @@ async function loadTasks() {
   try {
     const { tasks } = await api('/api/tasks');
     const el = $('#tasks-list');
-    if (!tasks.length) { el.innerHTML = '<span class="empty">No scheduled tasks yet.</span>'; return; }
+    if (!tasks.length) { el.innerHTML = ''; el.appendChild(emptyState('No scheduled tasks. Click + New task.')); return; }
     el.innerHTML = '';
     for (const t of tasks) {
       const row = document.createElement('div');
@@ -1227,6 +1322,14 @@ function fmtChartTime(t) {
   }
   return hm;
 }
+function hexToRgba(hex, a) {
+  let h = String(hex).replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+  const n = parseInt(h, 16);
+  if (isNaN(n)) return `rgba(58,53,64,${a})`;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 function drawChart(canvasId, points, key, opts) {
   const c = document.getElementById(canvasId);
@@ -1238,7 +1341,10 @@ function drawChart(canvasId, points, key, opts) {
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
   ctx.clearRect(0, 0, W, H);
-  const text3 = '#7d8593', grid = 'rgba(255,255,255,0.06)';
+  const cssVar = (v, fb) => (getComputedStyle(document.documentElement).getPropertyValue(v).trim() || fb);
+  const grid = hexToRgba(cssVar('--border', '#3A3540'), 0.45);
+  const accentDim = cssVar('--accent-dim', 'rgba(94,201,160,0.12)');
+  const text3 = '#7d8593';
   if (!points.length) {
     ctx.fillStyle = text3; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
     ctx.fillText('No data yet — samples are collected every minute.', W / 2, H / 2);
@@ -1253,8 +1359,8 @@ function drawChart(canvasId, points, key, opts) {
   const y = (v) => padT + plotH - (v / maxV) * plotH;
 
   ctx.strokeStyle = grid; ctx.fillStyle = text3; ctx.font = '10px system-ui'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const v = maxV * i / 4, yy = y(v);
+  for (let i = 0; i <= 3; i++) {
+    const v = maxV * i / 3, yy = y(v);
     ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
     ctx.textAlign = 'right'; ctx.fillText(opts.fmt(v), padL - 6, yy + 3);
   }
@@ -1263,7 +1369,10 @@ function drawChart(canvasId, points, key, opts) {
   points.forEach((p, i) => { const xx = x(p.t), yy = y(p[key]); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); });
   ctx.strokeStyle = opts.color; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
   ctx.lineTo(x(t1), y(0)); ctx.lineTo(x(t0), y(0)); ctx.closePath();
-  ctx.fillStyle = opts.fill; ctx.fill();
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+  grad.addColorStop(0, 'rgba(94,201,160,0)');
+  grad.addColorStop(1, accentDim);
+  ctx.fillStyle = grad; ctx.fill();
 
   ctx.fillStyle = text3; ctx.font = '10px system-ui';
   ctx.textAlign = 'left'; ctx.fillText(fmtChartTime(t0), padL, H - 7);
@@ -1318,7 +1427,8 @@ async function loadPlayerLists() {
 function renderPlList(elId, items, kind) {
   const el = document.getElementById(elId);
   if (!el) return;
-  if (!items || !items.length) { el.innerHTML = '<div class="pl-empty">Empty.</div>'; return; }
+  const PL_EMPTY_MSG = { whitelist: 'Whitelist is empty.', op: 'No operators.', ban: 'No banned players.' };
+  if (!items || !items.length) { el.innerHTML = ''; el.appendChild(emptyState(PL_EMPTY_MSG[kind] || 'Empty.')); return; }
   el.innerHTML = '';
   for (const it of items) {
     const name = typeof it === 'string' ? it : it.name;
@@ -1361,6 +1471,16 @@ if (wlToggleEl) wlToggleEl.addEventListener('change', (e) => {
 
 // ----- startup -----
 if (token) {
-  // quick token validation
-  api('/api/status').then(boot).catch(() => logout());
+  // Avoid a 401 in the network tab for obviously-expired tokens. If the JWT
+  // decode says it's expired (or the token is malformed), drop it silently
+  // and show the login form. Otherwise validate the signature with the
+  // server (silent:true so a 401 here only triggers the local catch, not the
+  // global handler in api()).
+  if (isJwtExpired(token)) {
+    logout();
+  } else {
+    api('/api/me', { silent: true })
+      .then((u) => { currentUser = u; boot(); })
+      .catch(() => logout());
+  }
 }

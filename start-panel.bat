@@ -30,6 +30,26 @@ if not exist "node_modules" (
   )
 )
 
+REM --- Seed config.json from the template on first run (never overwrite an existing one) ---
+if not exist "config.json" (
+  if exist "config.example.json" (
+    echo First run: creating config.json from config.example.json...
+    copy /y "config.example.json" "config.json" >nul
+    if errorlevel 1 (
+      echo [ERROR] Failed to create config.json. Check folder permissions.
+      pause
+      exit /b 1
+    )
+    echo Edit config.json to change the password, port, etc., then restart the panel.
+    echo.
+  ) else (
+    echo [ERROR] Neither config.json nor config.example.json were found.
+    echo Re-download the panel files or restore config.example.json next to start-panel.bat.
+    pause
+    exit /b 1
+  )
+)
+
 echo.
 echo Starting Lodestone panel...
 echo Open http://localhost:2121 in your browser (default port^).

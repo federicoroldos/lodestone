@@ -23,7 +23,7 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const express = require('express');
 const { WebSocketServer } = require('ws');
@@ -113,7 +113,13 @@ function migrateConfig() {
     config.activeServerId = config.servers[0].id;
     changed = true;
   }
-  if (!config.backups) config.backups = { dir: path.join(os.homedir(), 'mc-backups'), retainCount: 10 };
+  if (!config.backups) {
+    config.backups = { dir: path.join(os.homedir(), 'mc-backups'), retainCount: 10 };
+    changed = true;
+  } else if (!config.backups.dir) {
+    config.backups.dir = path.join(os.homedir(), 'mc-backups');
+    changed = true;
+  }
   // Migrate the legacy single global password into a first user account.
   if (!Array.isArray(config.users) || !config.users.length) {
     config.users = [{
@@ -134,7 +140,7 @@ function findServer(id) {
   return config.servers.find((s) => s.id === id) || null;
 }
 function backupsDir() {
-  return config.backups.dir;
+  return config.backups.dir || path.join(os.homedir(), 'mc-backups');
 }
 
 // ---------------------------------------------------------------------------
@@ -731,6 +737,250 @@ app.get('/api/fs', (req, res) => {
     res.json({ path: abs, parent, drives: [], dirs, jars });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Native folder picker — pops the real OS folder dialog (Windows Explorer /
+// Linux zenity / macOS Finder) and returns the chosen absolute path. The
+// in-browser custom folder browser is still used for "Register server" but
+// the "Create a new server" flow uses this so the user gets the familiar
+// native dialog. We shell out to a tiny per-platform helper; the server is
+// blocked (synchronous) for the duration of the dialog, which is fine for a
+// single-user local panel.
+// ---------------------------------------------------------------------------
+
+function pickFolderWindows(defaultPath) {
+  // PowerShell + the modern Win10/11 "Choose a folder" dialog. The legacy
+  // FolderBrowserDialog shows an outdated tree view; the dialog used here is
+  // the same one Explorer's "Select Folder" picks (IFileOpenDialog with the
+  // FOS_PICKFOLDERS option). The C# class below calls it through COM and
+  // returns the selected filesystem path. The whole script is sent as a
+  // Base64-encoded UTF-16LE -EncodedCommand so paths with spaces, "N" or
+  // quotes never need escaping.
+  const csharp = `
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public static class ModernFolderDialog
+{
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int SHCreateItemFromParsingName(
+        [MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, ref Guid riid, out IntPtr ppv);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
+    private class FileOpenDialogRcw { }
+
+    // Vtable order MUST match the COM definition of IFileOpenDialog:
+    // IModalWindow (1) + IFileDialog (17) + IFileOpenDialog (8) = 26 entries.
+    [ComImport, Guid("D57C7288-D4AD-4768-BE02-9D969532D960"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFileOpenDialog
+    {
+        [PreserveSig] int Show(IntPtr parent);
+        [PreserveSig] int SetFileTypes(uint cFileTypes, IntPtr rgFilterSpec);
+        [PreserveSig] int SetFileTypeIndex(uint iFileType);
+        [PreserveSig] int GetFileTypeIndex(out uint piFileType);
+        [PreserveSig] int Advise(IntPtr pfde, out uint pdwCookie);
+        [PreserveSig] int Unadvise(uint dwCookie);
+        [PreserveSig] int SetOptions(uint fos);
+        [PreserveSig] int GetOptions(out uint pfos);
+        [PreserveSig] int SetDefaultFolder(IntPtr psi);
+        [PreserveSig] int SetFolder(IntPtr psi);
+        [PreserveSig] int GetFolder(out IntPtr ppsi);
+        [PreserveSig] int GetCurrentSelection(out IntPtr ppsi);
+        [PreserveSig] int SetFileName([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        [PreserveSig] int GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
+        [PreserveSig] int SetTitle([MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
+        [PreserveSig] int SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string pszText);
+        [PreserveSig] int SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
+        [PreserveSig] int GetResult(out IntPtr ppsi);
+        [PreserveSig] int AddPlace(IntPtr psi, int fdap);
+        [PreserveSig] int SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
+        [PreserveSig] int Close(int hr);
+        [PreserveSig] int SetClientGuid(ref Guid guid);
+        [PreserveSig] int ClearClientData();
+        [PreserveSig] int SetFilter(IntPtr pFilter);
+        [PreserveSig] int GetResults(out IntPtr ppenum);
+        [PreserveSig] int GetSelectedItems(out IntPtr ppsai);
+    }
+
+    [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem
+    {
+        [PreserveSig] int BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv);
+        [PreserveSig] int GetParent(out IntPtr ppsi);
+        [PreserveSig] int GetDisplayName(uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
+        [PreserveSig] int GetAttributes(uint sfgaoMask, out uint psfgaoAttribs);
+        [PreserveSig] int Compare(IntPtr psi, uint hint, out int piOrder);
+    }
+
+    public static string Pick(string title, string initialPath)
+    {
+        const uint FOS_PICKFOLDERS = 0x20;
+        const uint FOS_FORCEFILESYSTEM = 0x40;
+        // 0x800704C7 (ERROR_CANCELLED) overflows int; the old C# compiler
+        // used by Windows PowerShell 5.1's Add-Type rejects the bare hex
+        // literal in an int comparison, so cast it via unchecked().
+        const int HRESULT_CANCELLED = unchecked((int)0x800704C7);
+
+        IFileOpenDialog dlg = (IFileOpenDialog)new FileOpenDialogRcw();
+        dlg.SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+        dlg.SetTitle(title);
+
+        if (!string.IsNullOrEmpty(initialPath) && Directory.Exists(initialPath))
+        {
+            Guid iid = new Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+            IntPtr item;
+            if (SHCreateItemFromParsingName(initialPath, IntPtr.Zero, ref iid, out item) == 0 && item != IntPtr.Zero)
+            {
+                dlg.SetFolder(item);
+                Marshal.Release(item);
+            }
+        }
+
+        // Anchor the dialog to the user's current foreground window (the
+        // browser) so it pops on top of it instead of being orphaned. The
+        // spawned PowerShell has no visible parent of its own.
+        IntPtr parent = GetForegroundWindow();
+        if (parent != IntPtr.Zero) SetForegroundWindow(parent);
+
+        int hr = dlg.Show(parent);
+        // hr == 0: user pressed OK
+        // hr == 0x800704C7 (ERROR_CANCELLED): user pressed Cancel
+        if (hr == 0) {
+            IntPtr resultPtr;
+            if (dlg.GetResult(out resultPtr) != 0 || resultPtr == IntPtr.Zero) return "__ERROR__:GetResult failed (0x" + Marshal.GetLastWin32Error().ToString("X") + ")";
+            IShellItem item2 = (IShellItem)Marshal.GetTypedObjectForIUnknown(resultPtr, typeof(IShellItem));
+            string path;
+            item2.GetDisplayName(0x80058000, out path);
+            Marshal.ReleaseComObject(item2);
+            Marshal.Release(resultPtr);
+            return path;
+        }
+        if (hr == HRESULT_CANCELLED) return "__CANCELLED__";
+        return "__ERROR__:Show returned 0x" + hr.ToString("X");
+    }
+}
+`;
+  const ps = [
+    `$ErrorActionPreference = 'Stop'`,
+    `try {`,
+    `  $src = @'\n${csharp}\n'@`,
+    `  Add-Type -TypeDefinition $src -Language CSharp`,
+    `  $p = [ModernFolderDialog]::Pick(${JSON.stringify('Select the parent folder for the new server')}, ${JSON.stringify(defaultPath || '')})`,
+    `  if ($p -and -not $p.StartsWith('__ERROR__')) {`,
+    `    [Console]::Out.WriteLine($p); exit 0`,
+    `  } elseif ($p -eq '__CANCELLED__') {`,
+    `    exit 2`,
+    `  } else {`,
+    `    [Console]::Error.WriteLine('FOLDERPICKER_ERR:' + $p); exit 1`,
+    `  }`,
+    `} catch {`,
+    `  [Console]::Error.WriteLine('FOLDERPICKER_ERR:' + $_.Exception.Message)`,
+    `  exit 1`,
+    `}`,
+  ].join('\n');
+  const encoded = Buffer.from(ps, 'utf16le').toString('base64');
+  const modern = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  // If the modern IFileOpenDialog path errored (exit 1) fall back to the
+  // legacy Windows.Forms FolderBrowserDialog so the Browse button at least
+  // works. Cancellation (exit 2) is passed through as-is.
+  if (modern.status === 1) {
+    return pickFolderWindowsLegacy(defaultPath);
+  }
+  return modern;
+}
+
+function pickFolderWindowsLegacy(defaultPath) {
+  // Fallback: the older Windows.Forms FolderBrowserDialog. It shows a
+  // tree-style picker instead of the modern Explorer one, but it ships in
+  // every .NET Framework since 1.1 and never fails to display. We only set
+  // properties that exist on every supported framework version (Description
+  // and ShowNewFolderButton) — UseDescriptionForTitle and the description-
+  // as-title trick are .NET 4.0+ only and aren't on every PowerShell host.
+  const ps = [
+    `try {`,
+    `  Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop | Out-Null`,
+    `  $f = New-Object System.Windows.Forms.FolderBrowserDialog`,
+    `  $f.Description = 'Select the parent folder for the new server'`,
+    `  $f.ShowNewFolderButton = $true`,
+    defaultPath
+      ? `try { $f.SelectedPath = (Resolve-Path -LiteralPath ${JSON.stringify(defaultPath)} -ErrorAction Stop).ProviderPath } catch {}`
+      : '',
+    `  if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.WriteLine($f.SelectedPath); exit 0 } else { exit 2 }`,
+    `} catch {`,
+    `  [Console]::Error.WriteLine('FOLDERPICKER_ERR:' + $_.Exception.Message); exit 1`,
+    `}`,
+  ].filter(Boolean).join('\n');
+  const encoded = Buffer.from(ps, 'utf16le').toString('base64');
+  return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+}
+
+function pickFolderLinux(defaultPath) {
+  // Use the desktop's own native file chooser: zenity on GTK (what Nautilus,
+  // gedit, GNOME Settings, Firefox etc. shell out to — gives the actual GTK
+  // file dialog), kdialog on Qt (what KDE apps use). If neither is installed
+  // the caller surfaces a "Folder picker not available" error and the user
+  // can type the path by hand.
+  const start = defaultPath ? defaultPath.replace(/'/g, "'\\''") + '/' : '';
+  const zenityArgs = ['--file-selection', '--directory', '--title=Select the parent folder for the new server', `--filename=${start}`];
+  let r = spawnSync('zenity', zenityArgs, { encoding: 'utf8' });
+  if (r.error && r.error.code === 'ENOENT') {
+    r = spawnSync('kdialog', ['--getexistingdirectory', defaultPath || os.homedir()], { encoding: 'utf8' });
+  }
+  return r;
+}
+
+function pickFolderMacos(defaultPath) {
+  const def = defaultPath ? `default location POSIX file ${JSON.stringify(defaultPath)}` : '';
+  const script = `set _f to choose folder with prompt "Select the parent folder for the new server" ${def}\nPOSIX path of _f`;
+  return spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
+}
+
+app.get('/api/pick-folder', (req, res) => {
+  const def = String(req.query.defaultPath || '').trim();
+  try {
+    let r;
+    if (process.platform === 'win32') r = pickFolderWindows(def);
+    else if (process.platform === 'darwin') r = pickFolderMacos(def);
+    else r = pickFolderLinux(def);
+
+    if (r.error) {
+      return res.status(500).json({ error: `Folder picker not available (${r.error.message}).` });
+    }
+    if (r.status === 0) {
+      const out = (r.stdout || '').toString().replace(/\r?\n$/, '');
+      if (!out) return res.json({ path: null, cancelled: true });
+      if (!fs.existsSync(out) || !fs.statSync(out).isDirectory()) {
+        return res.status(400).json({ error: `Picked path is not a folder: ${out}` });
+      }
+      return res.json({ path: out });
+    }
+    // Exit 2 = explicit "user cancelled" (modern IFileOpenDialog or legacy
+    // FolderBrowserDialog). Anything else is a real error: pull the
+    // FOLDERPICKER_ERR: prefix the helper writes so the toast is clean
+    // instead of the raw PowerShell CLIXML noise.
+    if (r.status === 2) return res.json({ path: null, cancelled: true });
+    const allOut = ((r.stdout || '') + '\n' + (r.stderr || '')).toString();
+    const m = allOut.match(/FOLDERPICKER_ERR:\s*([^\r\n]+)/);
+    const errMsg = m ? m[1].trim() : `Folder picker exited with code ${r.status}`;
+    log('pick-folder error:', errMsg);
+    return res.status(500).json({ error: errMsg });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -1857,6 +2107,7 @@ app.post('/api/tasks/:id/run', (req, res) => {
 // Static files (last, so they don't shadow /api)
 // ---------------------------------------------------------------------------
 
+app.use('/resources', express.static(path.join(__dirname, 'resources')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------------------------
