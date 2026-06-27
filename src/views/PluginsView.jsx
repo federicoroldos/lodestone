@@ -4,12 +4,20 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useApi } from '@/hooks/useApi';
+import { useT, useI18n } from '@/context/I18nContext';
 import { fmtBytes } from '@/lib/utils';
 import { toast } from 'sonner';
 import { RefreshCw, Trash2, Upload } from 'lucide-react';
 
+const HINT_EM = {
+  en: 'restart the server',
+  es: 'reinicia el servidor',
+};
+
 export function PluginsView() {
   const api = useApi();
+  const t = useT();
+  const { lang } = useI18n();
   const [plugins, setPlugins] = useState([]);
   const [pendingDelete, setPendingDelete] = useState(null);
 
@@ -25,7 +33,7 @@ export function PluginsView() {
   async function deletePlugin(name) {
     try {
       await api(`/api/plugins/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      toast.success('Deleted. Restart to apply.');
+      toast.success(t('plugins.deletedToast'));
       load();
     } catch (e) { toast.error(e.message); }
   }
@@ -37,7 +45,7 @@ export function PluginsView() {
     fd.append('plugin', file);
     try {
       await api('/api/plugins/upload', { method: 'POST', body: fd });
-      toast.success('Uploaded. Restart to apply.');
+      toast.success(t('plugins.uploadedToast'));
       load();
     } catch (e) { toast.error(e.message); }
     e.target.value = '';
@@ -46,20 +54,26 @@ export function PluginsView() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Plugins</CardTitle>
+        <CardTitle>{t('plugins.title')}</CardTitle>
         <div className="flex items-center gap-2">
           <label className="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium border border-border bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90 transition-colors">
             <Upload className="h-3 w-3" />
-            Upload .jar
+            {t('plugins.uploadJar')}
             <input type="file" accept=".jar" hidden onChange={upload} />
           </label>
           <Button variant="glass" size="xs" onClick={load}><RefreshCw className="h-3 w-3" /></Button>
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-xs text-muted-foreground mb-4">After uploading or deleting, <strong className="text-foreground">restart the server</strong> to apply.</p>
+        <p className="text-xs text-muted-foreground mb-4">{(() => {
+          const h = t('plugins.hint');
+          const tag = HINT_EM[lang] || HINT_EM.en;
+          const i = h.toLowerCase().indexOf(tag);
+          if (i < 0) return h;
+          return <>{h.slice(0, i)}<strong className="text-foreground">{h.slice(i, i + tag.length)}</strong>{h.slice(i + tag.length)}</>;
+        })()}</p>
         {plugins.length === 0 ? (
-          <EmptyState message="No plugins installed. Upload a .jar or browse Modrinth." />
+          <EmptyState message={t('plugins.empty')} />
         ) : (
           <div className="space-y-1.5">
             {plugins.map(p => (
@@ -78,9 +92,9 @@ export function PluginsView() {
       <ConfirmDialog
         open={!!pendingDelete}
         onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
-        title="Delete plugin"
-        description={pendingDelete ? `Delete "${pendingDelete}"? Restart the server afterwards to apply.` : ''}
-        confirmLabel="Delete"
+        title={t('plugins.deleteTitle')}
+        description={pendingDelete ? t('plugins.deleteBody', { name: pendingDelete }) : ''}
+        confirmLabel={t('common.delete')}
         destructive
         onConfirm={() => deletePlugin(pendingDelete)}
       />

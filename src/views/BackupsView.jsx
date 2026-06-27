@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useApi } from '@/hooks/useApi';
+import { useT } from '@/context/I18nContext';
 import { fmtBytes } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Download, Trash2, Plus } from 'lucide-react';
@@ -11,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 
 export function BackupsView() {
   const api = useApi();
+  const t = useT();
   const { token } = useAuth();
   const [backups, setBackups] = useState([]);
   const [status, setStatus] = useState('');
@@ -28,11 +30,11 @@ export function BackupsView() {
 
   async function backupNow() {
     setLoading(true);
-    setStatus('Creating backup… (may take a while depending on world size)');
+    setStatus(t('backups.creatingStatus'));
     try {
       const r = await api('/api/backups', { method: 'POST' });
-      setStatus(`Done: ${r.name} (${fmtBytes(r.size)})`);
-      toast.success('Backup created');
+      setStatus(t('backups.doneStatus', { name: r.name, size: fmtBytes(r.size) }));
+      toast.success(t('backups.createdToast'));
       load();
     } catch (e) {
       setStatus('');
@@ -45,7 +47,7 @@ export function BackupsView() {
   async function deleteBackup(name) {
     try {
       await api(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      toast.success('Backup deleted');
+      toast.success(t('backups.deletedToast'));
       load();
     } catch (e) { toast.error(e.message); }
   }
@@ -54,19 +56,23 @@ export function BackupsView() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Local backups</CardTitle>
+          <CardTitle>{t('backups.title')}</CardTitle>
           <Button variant="default" size="sm" onClick={backupNow} disabled={loading}>
             <Plus className="h-3.5 w-3.5" />
-            {loading ? 'Creating…' : 'Backup now'}
+            {loading ? t('backups.creating') : t('backups.backupNow')}
           </Button>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground mb-2">
-            Compresses the worlds into a .zip. If the server is online it runs <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">save-off/save-all</code> during the copy.
-          </p>
+          <p className="text-xs text-muted-foreground mb-2">{(() => {
+            const h = t('backups.hint');
+            const tag = 'save-off/save-all';
+            const i = h.indexOf(tag);
+            if (i < 0) return h;
+            return <>{h.slice(0, i)}<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{tag}</code>{h.slice(i + tag.length)}</>;
+          })()}</p>
           {status && <p className="text-xs text-primary mb-3">{status}</p>}
           {backups.length === 0 ? (
-            <EmptyState message="No backups yet. Click + Backup now." />
+            <EmptyState message={t('backups.empty')} />
           ) : (
             <div className="space-y-1.5">
               {backups.map(b => (
@@ -93,9 +99,9 @@ export function BackupsView() {
       <ConfirmDialog
         open={!!pendingDelete}
         onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
-        title="Delete backup"
-        description={pendingDelete ? `Delete backup "${pendingDelete}"? This cannot be undone.` : ''}
-        confirmLabel="Delete"
+        title={t('backups.deleteTitle')}
+        description={pendingDelete ? t('backups.deleteBody', { name: pendingDelete, cannotUndo: t('common.cannotUndo') }) : ''}
+        confirmLabel={t('common.delete')}
         destructive
         onConfirm={() => { deleteBackup(pendingDelete); setPendingDelete(null); }}
       />

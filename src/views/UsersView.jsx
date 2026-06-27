@@ -8,11 +8,13 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
+import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 
 function UserModal({ open, onOpenChange, user, onSaved }) {
   const api = useApi();
+  const t = useT();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
 
@@ -33,7 +35,7 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
     try {
       if (user?.id) await api(`/api/users/${user.id}`, { method: 'PUT', body });
       else await api('/api/users', { method: 'POST', body });
-      onSaved(user ? 'User updated' : 'User added');
+      onSaved(user ? t('users.updatedToast') : t('users.createdToast'));
       onOpenChange(false);
     } catch (e) { setError(e.message); }
   }
@@ -43,25 +45,25 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>{user ? 'Edit user' : 'Add user'}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{user ? t('users.editTitle') : t('users.addTitle')}</DialogTitle></DialogHeader>
         <div className="px-5 py-4 space-y-4">
           <div className="space-y-1.5">
-            <Label>Name (optional)</Label>
-            <Input value={form.name} onChange={f('name')} placeholder="Steve" />
+            <Label>{t('users.fieldName')}</Label>
+            <Input value={form.name} onChange={f('name')} placeholder={t('users.namePlaceholder')} />
           </div>
           <div className="space-y-1.5">
-            <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={f('email')} placeholder="user@example.com" autoComplete="off" />
+            <Label>{t('users.fieldEmail')}</Label>
+            <Input type="email" value={form.email} onChange={f('email')} placeholder={t('users.emailPlaceholder')} autoComplete="off" />
           </div>
           <div className="space-y-1.5">
-            <Label>{user ? 'New password (leave blank to keep)' : 'Password'}</Label>
-            <Input type="password" value={form.password} onChange={f('password')} placeholder="At least 4 characters" autoComplete="new-password" />
+            <Label>{user ? t('users.fieldPasswordEdit') : t('users.fieldPasswordNew')}</Label>
+            <Input type="password" value={form.password} onChange={f('password')} placeholder={t('users.passwordPlaceholder')} autoComplete="new-password" />
           </div>
           {error && <p className="text-xs text-status-error">{error}</p>}
         </div>
         <DialogFooter>
-          <Button variant="glass" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="default" onClick={save}>Save</Button>
+          <Button variant="glass" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="default" onClick={save}>{t('common.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -70,6 +72,7 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
 
 export function UsersView() {
   const api = useApi();
+  const t = useT();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -78,8 +81,8 @@ export function UsersView() {
 
   async function load() {
     try {
-      const { users: u } = await api('/api/users');
-      setUsers(u);
+      const { users: list } = await api('/api/users');
+      setUsers(list);
     } catch (e) { toast.error(e.message); }
   }
 
@@ -88,7 +91,7 @@ export function UsersView() {
   async function deleteUser(id) {
     try {
       await api(`/api/users/${id}`, { method: 'DELETE' });
-      toast.success('User deleted');
+      toast.success(t('users.deletedToast'));
       load();
     } catch (e) { toast.error(e.message); }
   }
@@ -97,18 +100,16 @@ export function UsersView() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Users</CardTitle>
+          <CardTitle>{t('users.title')}</CardTitle>
           <Button variant="default" size="sm" onClick={() => { setEditUser(null); setModalOpen(true); }}>
             <Plus className="h-3.5 w-3.5" />
-            Add user
+            {t('users.addUser')}
           </Button>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">
-            Anyone listed here can log in with their email and password, and manage this list.
-          </p>
+          <p className="text-xs text-muted-foreground mb-4">{t('users.hint')}</p>
           {users.length === 0 ? (
-            <EmptyState message="No users. Click + Add user." />
+            <EmptyState message={t('users.empty')} />
           ) : (
             <div className="space-y-1.5">
               {users.map(u => {
@@ -118,12 +119,12 @@ export function UsersView() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground truncate">{u.email}</span>
-                        {isSelf && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase bg-primary/15 text-primary border border-primary/25">you</span>}
+                        {isSelf && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase bg-primary/15 text-primary border border-primary/25">{t('users.youBadge')}</span>}
                       </div>
-                      <div className="text-xs text-muted-foreground">{u.name || '—'}</div>
+                      <div className="text-xs text-muted-foreground">{u.name || t('common.dashPlaceholder')}</div>
                     </div>
                     <Button variant="glass" size="xs" onClick={() => { setEditUser(u); setModalOpen(true); }}>
-                      <Pencil className="h-3 w-3" />Edit
+                      <Pencil className="h-3 w-3" />{t('common.edit')}
                     </Button>
                     <Button variant="ghost" size="icon-xs"
                       disabled={isSelf}
@@ -146,9 +147,9 @@ export function UsersView() {
       <ConfirmDialog
         open={!!pendingDelete}
         onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
-        title="Delete user"
-        description={pendingDelete ? `Delete user "${pendingDelete.email}"? This cannot be undone.` : ''}
-        confirmLabel="Delete"
+        title={t('users.deleteTitle')}
+        description={pendingDelete ? t('users.deleteBody', { email: pendingDelete.email, cannotUndo: t('common.cannotUndo') }) : ''}
+        confirmLabel={t('common.delete')}
         destructive
         onConfirm={() => { deleteUser(pendingDelete.id); setPendingDelete(null); }}
       />

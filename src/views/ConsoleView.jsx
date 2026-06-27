@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { useT } from '@/context/I18nContext';
 import { Send, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +36,7 @@ function fmtTs(ts) {
 }
 
 export function ConsoleView({ lines, onCommand }) {
+  const t = useT();
   const [cmd, setCmd] = useState('');
   const [autoscroll, setAutoscroll] = useState(true);
   const [history, setHistory] = useState([]);
@@ -89,11 +91,11 @@ export function ConsoleView({ lines, onCommand }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader>
-        <CardTitle>Console</CardTitle>
+        <CardTitle>{t('console.title')}</CardTitle>
         <div className="flex items-center gap-2">
           <Checkbox id="autoscroll" checked={autoscroll} onCheckedChange={setAutoscroll} />
           <Label htmlFor="autoscroll" className="normal-case text-xs tracking-normal font-normal text-muted-foreground cursor-pointer">
-            Autoscroll
+            {t('console.autoscroll')}
           </Label>
         </div>
       </CardHeader>
@@ -114,27 +116,27 @@ export function ConsoleView({ lines, onCommand }) {
             type="button"
             onClick={() => { consoleRef.current.scrollTop = consoleRef.current.scrollHeight; setShowJump(false); }}
             className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
-            title="Jump to live"
+            title={t('console.jumpToLive')}
           >
             <ArrowDown className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-border px-4 py-2 bg-console-bg">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-border px-4 py-2 bg-console">
         <span className="font-mono text-status-online shrink-0">&gt;</span>
         <Input
           type="text"
           value={cmd}
           onChange={e => setCmd(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a command (e.g. say hi, list, time set day)"
+          placeholder={t('console.commandPlaceholder')}
           autoComplete="off"
           className="flex-1 font-mono border-0 bg-transparent focus-visible:ring-0 h-7"
         />
         <Button type="submit" variant="default" size="xs">
           <Send className="h-3 w-3" />
-          Send
+          {t('console.send')}
         </Button>
       </form>
     </Card>

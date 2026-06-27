@@ -3,12 +3,14 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useApi } from '@/hooks/useApi';
+import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { Search, Download, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function ModrinthView() {
   const api = useApi();
+  const t = useT();
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('downloads');
   const [category, setCategory] = useState('');
@@ -40,13 +42,13 @@ export function ModrinthView() {
       const { matched } = await api(`/api/modrinth/versions/${encodeURIComponent(projectId)}`);
       const version = matched?.[0];
       if (!version) {
-        toast.error('No compatible version for this server.');
+        toast.error(t('modrinth.noCompatibleVersion'));
         setInstalling(p => ({ ...p, [projectId]: null }));
         return;
       }
       setInstalling(p => ({ ...p, [projectId]: 'downloading' }));
       const r = await api('/api/modrinth/install', { method: 'POST', body: { versionId: version.id } });
-      toast.success(`Installed: ${r.name}. Restart to apply.`);
+      toast.success(t('modrinth.installedToast', { name: r.name }));
       setInstalling(p => ({ ...p, [projectId]: 'done' }));
     } catch (e) {
       toast.error(e.message);
@@ -55,13 +57,13 @@ export function ModrinthView() {
   }
 
   const compatText = compat?.projectType
-    ? `${compat.label} ${compat.projectType === 'mod' ? 'mods' : 'plugins'}${compat.mcVersion ? ' · ' + compat.mcVersion : ''}`
-    : note || 'No compatible loader';
+    ? `${compat.label} ${compat.projectType === 'mod' ? t('modrinth.compatMod') : t('modrinth.compatPlugin')}${compat.mcVersion ? ' · ' + compat.mcVersion : ''}`
+    : note || t('modrinth.compatNone');
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Browse content (Modrinth)</CardTitle>
+        <CardTitle>{t('modrinth.title')}</CardTitle>
         <span className={cn(
           'text-xs rounded px-2 py-0.5 border',
           compat?.projectType
@@ -73,39 +75,39 @@ export function ModrinthView() {
         {/* Search toolbar */}
         <form onSubmit={e => { e.preventDefault(); search(); }} className="flex flex-wrap gap-2 mb-5">
           <div className="flex items-center gap-2 flex-1 min-w-48">
-            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" className="flex-1" />
+            <Input value={q} onChange={e => setQ(e.target.value)} placeholder={t('modrinth.searchPlaceholder')} className="flex-1" />
           </div>
           <select
             className="h-9 rounded-md border border-input bg-background/60 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
             value={sort}
             onChange={e => setSort(e.target.value)}
           >
-            <option value="downloads">Most downloaded</option>
-            <option value="follows">Most followed</option>
-            <option value="relevance">Best match</option>
-            <option value="updated">Recently updated</option>
-            <option value="newest">Newest</option>
+            <option value="downloads">{t('modrinth.sortDownloads')}</option>
+            <option value="follows">{t('modrinth.sortFollows')}</option>
+            <option value="relevance">{t('modrinth.sortRelevance')}</option>
+            <option value="updated">{t('modrinth.sortUpdated')}</option>
+            <option value="newest">{t('modrinth.sortNewest')}</option>
           </select>
           <select
             className="h-9 rounded-md border border-input bg-background/60 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
             value={category}
             onChange={e => setCategory(e.target.value)}
           >
-            <option value="">All categories</option>
+            <option value="">{t('modrinth.allCategories')}</option>
             {categories.map(c => (
               <option key={c} value={c}>{c.replace(/-/g, ' ').replace(/\b\w/g, m => m.toUpperCase())}</option>
             ))}
           </select>
           <Button type="submit" variant="default" size="sm">
             <Search className="h-3.5 w-3.5" />
-            Search
+            {t('modrinth.search')}
           </Button>
         </form>
 
         {/* Results */}
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {loading && <p className="text-sm text-muted-foreground">{t('modrinth.loading')}</p>}
         {!loading && results.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">{note || 'No compatible results.'}</p>
+          <p className="text-sm text-muted-foreground italic">{note || t('modrinth.empty')}</p>
         )}
         {!loading && (
           <div className="space-y-2">
@@ -131,9 +133,9 @@ export function ModrinthView() {
                     onClick={() => install(h.project_id || h.slug, h.slug)}
                     className="shrink-0"
                   >
-                    {state === 'done' ? <><Check className="h-3.5 w-3.5" />Installed</> :
-                     state ? state.charAt(0).toUpperCase() + state.slice(1) + '…' :
-                     <><Download className="h-3.5 w-3.5" />Install</>}
+                    {state === 'done' ? <><Check className="h-3.5 w-3.5" />{t('modrinth.installed')}</> :
+                     state ? <>{t('modrinth.installing')}</> :
+                     <><Download className="h-3.5 w-3.5" />{t('modrinth.install')}</>}
                   </Button>
                 </div>
               );

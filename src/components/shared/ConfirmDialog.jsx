@@ -2,8 +2,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Button } from '@/components/ui/button';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/context/I18nContext';
 
-export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel = 'Confirm', onConfirm, destructive = false }) {
+export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, destructive = false }) {
+  const t = useT();
+  const label = confirmLabel != null ? confirmLabel : t('common.confirm');
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
@@ -15,12 +18,12 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
         </DialogHeader>
         <DialogBody className="text-sm text-muted-foreground">{description}</DialogBody>
         <DialogFooter>
-          <Button variant="glass" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="glass" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button
             variant={destructive ? 'destructive' : 'default'}
             onClick={() => { onConfirm(); onOpenChange(false); }}
           >
-            {confirmLabel}
+            {label}
           </Button>
         </DialogFooter>
       </DialogContent>
