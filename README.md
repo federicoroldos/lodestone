@@ -88,7 +88,7 @@ by hand. Restart the panel after editing it.
 | --- | --- |
 | `appName` | Display name, also used as the Discord webhook username. |
 | `panelPort` | Port the panel listens on (default `2121`). |
-| `panelHost` | `0.0.0.0` is reachable on LAN/Tailscale, `127.0.0.1` is this PC only. |
+| `panelHost` | `0.0.0.0` is reachable on your LAN and over Radmin VPN, `127.0.0.1` is this PC only. |
 | `jwtSecret` | Random string that signs login sessions. Changing it logs everyone out. Generated for you on first run. |
 | `sessionHours` | How long a login stays valid (default `168`, i.e. 7 days). |
 | `consoleHistoryLines` | Console scrollback kept per server (default `500`). |
@@ -96,6 +96,7 @@ by hand. Restart the panel after editing it.
 | `servers[]` | Registered servers (managed from the Servers tab). |
 | `activeServerId` | The server the views target by default. |
 | `users[]` | Login accounts (managed from the Users tab; passwords are scrypt-hashed). |
+| `firewall` | `{ autoAllow, attempted }`. On first run the panel adds a Windows Firewall rule for `panelPort` (one-time UAC prompt) so LAN/Radmin devices can connect. Set `autoAllow: false` to opt out. |
 | `backups`, `scheduledRestart`, `discord`, `map`, `tasks[]` | See below. |
 
 ### Watchdog (per server)
@@ -173,28 +174,54 @@ default). BlueMap is well known, but it does touch your server folder, so do it 
 4. Set `"map": { "url": "http://localhost:8100" }` and restart the panel. The Map tab shows
    it.
 
-To view it from another device, use your LAN or Tailscale IP instead of `localhost`.
+To view it from another device, use your LAN or Radmin VPN IP instead of `localhost`.
 Dynmap works the same way; point `map.url` at its port (usually 8123).
 
-## Remote access with Tailscale
+## Remote access
 
-Tailscale gives every device a private encrypted IP, so you can reach the panel from
-anywhere without port-forwarding or exposing anything to the public internet.
+`panelHost` defaults to `0.0.0.0`, so the panel is reachable on every network the server PC
+is on. How another device connects depends on where it is.
 
-1. Install Tailscale on the server PC (<https://tailscale.com/download/windows>) and sign in.
-2. Install it on your phone or laptop and sign in with the same account.
-3. On the server PC, run `tailscale ip -4` to get its `100.x.y.z` address.
-4. Set `"panelHost": "0.0.0.0"` in `config.json` and restart the panel.
-5. From any device, open `http://100.x.y.z:2121` and log in.
+### Same network (same router)
 
-Windows Firewall may prompt the first time the panel binds the port. Allow it on private
-networks.
+1. On the server PC, run `ipconfig` and note its LAN IPv4 (usually `192.168.x.y`).
+2. From the other device on the same Wi-Fi/router, open `http://192.168.x.y:2121` and log in.
+
+### Anywhere else, with Radmin VPN
+
+Radmin VPN is a free VPN that gives every device a private `26.x.y.z` IP, so you can reach
+the panel from another house without port-forwarding or exposing anything to the public
+internet.
+
+1. Install Radmin VPN on the server PC (<https://www.radmin-vpn.com/>) and create a network
+   (give it a name and password).
+2. Install it on the other PC and **join** that same network with the name and password.
+3. On the server PC, the Radmin VPN window shows its `26.x.y.z` address (or run `ipconfig`).
+4. From the other PC, open `http://26.x.y.z:2121` and log in.
+
+Both PCs need Radmin VPN running and connected to the same network for this to work. The
+`26.x` IP is stable per device, so you can bookmark it.
+
+### Firewall
+
+Other devices can only reach the panel if its port is allowed through Windows Firewall. The
+first time the panel starts with a non-loopback `panelHost`, it adds that rule for you — you
+get a **one-time admin (UAC) prompt**; accept it and the rule sticks for good. It won't ask
+again on later starts.
+
+To opt out, set `"firewall": { "autoAllow": false }` in `config.json`. To run the setup again
+(e.g. after declining the prompt), set `"attempted": false` and restart. You can always add
+the rule by hand from an **admin** PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "Lodestone Panel" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 2121
+```
 
 ## Security notes
 
 - Logins are username + password (scrypt-hashed) with a signed JWT session. `jwtSecret` is
   generated on first run. Change the default `admin` password before you share any link.
-- Keep it on your LAN or Tailscale rather than exposing the port to the internet. There's no
+- Keep it on your LAN or Radmin VPN rather than exposing the port to the internet. There's no
   rate-limiting beyond the login throttle, and no 2FA.
 - The Files manager and Configs editor are sandboxed to each server's folder with a
   path-traversal guard. Plugin upload only accepts `.jar`.
@@ -210,7 +237,7 @@ networks.
 | Server won't start, "Jar not found" | Check the folder and jar on the Servers tab (Edit). |
 | Java error right on start | Run `java -version`, then install/repair Java or fix the Java args. |
 | TPS always shows `—` | TPS needs EssentialsX or Paper's `/tps`. The rest works without it. |
-| Can't reach the panel from another device | Use the LAN/Tailscale IP (not `localhost`), confirm `panelHost` is `0.0.0.0`, and allow the port in Windows Firewall. |
+| Can't reach the panel from another device | Use the LAN or Radmin VPN IP (not `localhost`), confirm `panelHost` is `0.0.0.0`, and allow port 2121 in Windows Firewall. |
 | Map tab is blank | BlueMap has to be installed, rendered, and `map.url` set. Big worlds take time to render. |
 
 ## Project layout
