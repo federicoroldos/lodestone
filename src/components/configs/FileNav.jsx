@@ -13,6 +13,7 @@ export function FileNav({ files = [], selected, onSelect }) {
   const buckets = FILE_GROUPS.map((g) => ({
     id: g.id,
     label: t(g.labelKey),
+    alwaysShow: !!g.alwaysShow,
     items: g.id === 'other' ? [] : files.filter((f) => groupFile(f) === g.id),
   }));
   const matched = new Set();
@@ -21,34 +22,43 @@ export function FileNav({ files = [], selected, onSelect }) {
 
   return (
     <nav className="space-y-3 text-sm" aria-label={t('configs.title')}>
-      {buckets.map((b) => b.items.length === 0 ? null : (
-        <div key={b.id}>
-          <div className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {b.label}
+      {buckets.map((b) => {
+        if (b.items.length === 0 && !b.alwaysShow) return null;
+        return (
+          <div key={b.id}>
+            <div className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {b.label}
+            </div>
+            {b.items.length === 0 ? (
+              <div className="px-2.5 py-1.5 text-[12px] text-muted-foreground/70 italic">
+                {t('configs.groupAdvancedEmpty')}
+              </div>
+            ) : (
+              <ul className="space-y-0.5">
+                {b.items.map((f) => {
+                  const isSel = f === selected;
+                  return (
+                    <li key={f}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(f)}
+                        className={cn(
+                          'w-full text-left rounded-md px-2.5 py-1.5 font-mono text-[12.5px] transition-colors',
+                          isSel
+                            ? 'bg-primary/15 text-primary font-semibold'
+                            : 'hover:bg-secondary/60 text-foreground/90'
+                        )}
+                      >
+                        {f}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
-          <ul className="space-y-0.5">
-            {b.items.map((f) => {
-              const isSel = f === selected;
-              return (
-                <li key={f}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(f)}
-                    className={cn(
-                      'w-full text-left rounded-md px-2.5 py-1.5 font-mono text-[12.5px] transition-colors',
-                      isSel
-                        ? 'bg-primary/15 text-primary font-semibold'
-                        : 'hover:bg-secondary/60 text-foreground/90'
-                    )}
-                  >
-                    {f}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }

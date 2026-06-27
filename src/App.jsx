@@ -7,7 +7,6 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { LoginView } from '@/views/LoginView';
-import { SpinningCube } from '@/components/shared/SpinningCube';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { ControlBar } from '@/components/layout/ControlBar';
@@ -50,7 +49,7 @@ function markDismissed(serverId) {
 
 function AppShell({ onLoggedIn }) {
   const { token, user, setUser, isLoggedIn } = useAuth();
-  const { servers, setServers, activeServerId, setActiveServerId, getServerStatus, updateStatus, setMapUrl, wsRef } = useServer();
+  const { servers, setServers, activeServerId, setActiveServerId, getServerStatus, updateStatus, wsRef } = useServer();
   const api = useApi();
   const t = useT();
 
@@ -78,17 +77,8 @@ function AppShell({ onLoggedIn }) {
   // Load initial data on mount
   useEffect(() => {
     if (!isLoggedIn) return;
-    loadConfig();
     loadServers();
   }, [isLoggedIn]);
-
-  async function loadConfig() {
-    try {
-      const cfg = await api('/api/config');
-      const url = (cfg.map && cfg.map.url) || `http://${location.hostname}:8100`;
-      setMapUrl(url);
-    } catch (_) {}
-  }
 
   async function loadServers() {
     try {
@@ -229,10 +219,15 @@ function AppShell({ onLoggedIn }) {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="app-shell-enter relative flex min-h-screen bg-background">
-        {/* Faded, slowly-spinning 3D Lodestone cube behind every section */}
-        <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden">
-          <SpinningCube size="min(60vh, 60vw)" duration={48} opacity={0.05} />
-        </div>
+        {/* Stone-tile texture behind every section */}
+        <div
+          className="pointer-events-none fixed inset-0 z-0 opacity-[0.05]"
+          style={{
+            backgroundImage: 'url(/resources/stone_tile.jpg)',
+            backgroundRepeat: 'repeat',
+            backgroundSize: '120px',
+          }}
+        />
         <Sidebar currentView={currentView} onNavigate={navigate} />
         <div className="relative z-10 flex min-h-screen flex-1 min-w-0 flex-col">
           <Header currentView={currentView} />

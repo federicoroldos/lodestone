@@ -12,7 +12,7 @@ import { RestartBanner } from '@/components/configs/RestartBanner';
 import { HistoryDropdown } from '@/components/configs/HistoryDropdown';
 import { DiffPreview } from '@/components/configs/DiffPreview';
 import { FILE_GROUPS, groupFile } from '@/configs/groups';
-import { isPropertiesFilename } from '@/lib/configFile';
+import { hasFriendlyForm } from '@/lib/configFile';
 import { toast } from 'sonner';
 import { Repeat } from 'lucide-react';
 
@@ -80,12 +80,12 @@ export function ConfigsView() {
   useEffect(() => { loadFile(selected); }, [selected, loadFile]);
 
   const base = selected;
-  const isProps = isPropertiesFilename(base);
-  const mode = (isProps && (readMode(base) || 'friendly')) || 'raw';
-  const isFriendly = isProps && mode === 'friendly';
+  const canFriendly = hasFriendlyForm(base);
+  const mode = (canFriendly && (readMode(base) || 'friendly')) || 'raw';
+  const isFriendly = canFriendly && mode === 'friendly';
 
   const setMode = (m) => {
-    if (!isProps) return;
+    if (!canFriendly) return;
     writeMode(base, m);
     setCurrent(original);
     modesRef.current = { ...modesRef.current, [base]: m };
@@ -121,7 +121,7 @@ export function ConfigsView() {
       <CardHeader>
         <CardTitle>{t('configs.title')}</CardTitle>
         <div className="flex items-center gap-2">
-          {isProps && (
+          {canFriendly && (
             <Button
               variant="glass"
               size="sm"

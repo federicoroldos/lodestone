@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { BrandMark } from '@/components/shared/BrandMark';
+import { SettingsDialog } from '@/components/shared/SettingsDialog';
 import { useAuth } from '@/context/AuthContext';
 import { useT } from '@/context/I18nContext';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, Server, BarChart2, Terminal, Users, Map,
+  LayoutDashboard, Server, BarChart2, Terminal, Users, User, Map,
   Puzzle, Package, FolderOpen, FileText, Database, Clock, Settings, LogOut,
   ChevronDown, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
@@ -47,7 +48,7 @@ const NAV_GROUPS = [
   {
     key: 'nav.groupSettings',
     items: [
-      { view: 'users', labelKey: 'nav.users', icon: Settings },
+      { view: 'users', labelKey: 'nav.users', icon: User },
     ],
   },
 ];
@@ -75,6 +76,7 @@ export function Sidebar({ currentView, onNavigate }) {
   const t = useT();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [mode, setMode] = useState(getInitialMode);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -114,9 +116,18 @@ export function Sidebar({ currentView, onNavigate }) {
 
   return (
     <aside className={cn(
-      'sticky top-0 z-10 flex h-screen shrink-0 flex-col overflow-hidden self-start border-r border-sidebar-border bg-sidebar transition-[width] duration-200',
+      'sticky top-0 z-10 flex h-screen shrink-0 flex-col overflow-hidden self-start border-r border-sidebar-border bg-sidebar transition-[width] duration-200 relative',
       isCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
     )}>
+      {/* Stone-tile texture, slightly darker than the main background */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.12]"
+        style={{
+          backgroundImage: 'url(/resources/stone_tile.jpg)',
+          backgroundRepeat: 'repeat',
+          backgroundSize: '120px',
+        }}
+      />
       {/* Logo */}
       <div className={cn(
         'flex items-center border-b border-border',
@@ -189,6 +200,17 @@ export function Sidebar({ currentView, onNavigate }) {
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setSettingsOpen(true)}
+          className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'justify-center px-0' : 'justify-start gap-3')}
+          title={t('sidebar.settingsTitle')}
+          aria-label={t('sidebar.settingsTitle')}
+        >
+          <Settings className="h-4 w-4" />
+          {!isCollapsed && t('sidebar.settings')}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={logout}
           className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'justify-center px-0' : 'justify-start gap-3')}
         >
@@ -196,6 +218,8 @@ export function Sidebar({ currentView, onNavigate }) {
           {!isCollapsed && t('sidebar.logout')}
         </Button>
       </div>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </aside>
   );
 }

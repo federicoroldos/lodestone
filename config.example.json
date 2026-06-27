@@ -45,9 +45,6 @@
     "notifyOnFull": true,
     "notifyOnJoinLeave": false
   },
-  "map": {
-    "url": ""
-  },
   "servers": [],
   "activeServerId": null,
   "users": []

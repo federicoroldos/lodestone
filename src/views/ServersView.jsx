@@ -87,7 +87,7 @@ function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
 function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers }) {
   const api = useApi();
   const t = useT();
-  const [form, setForm] = useState({ name: '', dir: '', jar: '', javaArgs: '-Xmx4G -Xms4G', mcVersion: '', worlds: 'world, world_nether, world_the_end' });
+  const [form, setForm] = useState({ name: '', dir: '', jar: '', javaArgs: '-Xmx4G -Xms4G', mcVersion: '', worlds: 'world, world_nether, world_the_end', mapUrl: '' });
   const [jars, setJars] = useState([]);
   const [error, setError] = useState('');
   const [fsOpen, setFsOpen] = useState(false);
@@ -103,10 +103,11 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
           javaArgs: (server.javaArgs || []).join(' '),
           mcVersion: server.mcVersion || '',
           worlds: (server.worlds || []).join(', '),
+          mapUrl: server.mapUrl || '',
         });
         setJars(server.jar ? [server.jar] : []);
       } else {
-        setForm({ name: '', dir: '', jar: '', javaArgs: '-Xmx4G -Xms4G', mcVersion: '', worlds: 'world, world_nether, world_the_end' });
+        setForm({ name: '', dir: '', jar: '', javaArgs: '-Xmx4G -Xms4G', mcVersion: '', worlds: 'world, world_nether, world_the_end', mapUrl: '' });
         setJars([]);
       }
     }
@@ -181,6 +182,16 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
                 <Label>{t('servers.fieldWorlds')}</Label>
                 <Input value={form.worlds} onChange={f('worlds')} placeholder={t('servers.worldsPlaceholder')} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('servers.fieldMapUrl')}</Label>
+              <Input
+                value={form.mapUrl}
+                onChange={f('mapUrl')}
+                placeholder={t('servers.mapUrlPlaceholder')}
+                spellCheck={false}
+                autoComplete="off"
+              />
             </div>
             {error && <p className="text-xs text-status-error">{error}</p>}
           </div>
