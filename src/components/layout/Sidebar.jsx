@@ -142,7 +142,7 @@ export function Sidebar({ currentView, onNavigate }) {
                 <ChevronDown className={cn('h-3 w-3 transition-transform', collapsed.has(group.key) && '-rotate-90')} />
               </button>
             )}
-            {!collapsed.has(group.key) && group.items.map(({ view, labelKey, icon: Icon }) => {
+            {(isCollapsed || !collapsed.has(group.key)) && group.items.map(({ view, labelKey, icon: Icon }) => {
               const label = t(labelKey);
               const itemBtn = (
                 <button

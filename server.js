@@ -2324,10 +2324,10 @@ app.post('/api/files/upload', fileUpload.array('files'), (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Server creator (download Paper / Purpur / Vanilla / Fabric jars)
+// Server creator (download Vanilla / Spigot / Paper / Purpur / Fabric / Forge jars)
 // ---------------------------------------------------------------------------
 
-const SERVER_TYPES = ['paper', 'purpur', 'vanilla', 'fabric'];
+const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'purpur', 'fabric', 'forge'];
 
 async function fetchJson(url) {
   const r = await fetch(url, { headers: { 'User-Agent': UA } });
@@ -2335,7 +2335,57 @@ async function fetchJson(url) {
   return r.json();
 }
 
-// Returns { versions: [latest..oldest] } of MC versions installable for a type.
+async function fetchText(url) {
+  const r = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!r.ok) throw new Error(`HTTP ${r.status} from ${url}`);
+  return r.text();
+}
+
+// Fetches the Forge Maven version list and returns the latest forge build for
+// each MC version, mapped to the full "<mc>-<forge>" coordinate (newest MC
+// first).
+async function listForgeVersions() {
+  const xml = await fetchText('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml');
+  const matches = [...xml.matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]);
+  // Coordinates look like "1.20.1-47.2.0" or "1.20.1-47.2.0-1.18" (rare).
+  // The MC version is the longest leading "x.y.z" prefix that Mojang would
+  // recognise. Group by that and keep the first hit per group (Maven is
+  // sorted newest-first by version-string order, which roughly matches
+  // release order for forge, so the first match is the newest build).
+  const out = [];
+  const seen = new Set();
+  for (const v of matches) {
+    const m = v.match(/^(\d+\.\d+(?:\.\d+)?)(?=-)/);
+    if (!m) continue;
+    const mc = m[1];
+    if (seen.has(mc)) continue;
+    seen.add(mc);
+    out.push(mc);
+  }
+  // Sort newest-first by Mojang-style semver.
+  out.sort((a, b) => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pb[i] || 0) - (pa[i] || 0);
+      if (d) return d;
+    }
+    return 0;
+  });
+  return out;
+}
+
+async function findLatestForgeCoordinate(mcVersion) {
+  const xml = await fetchText('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml');
+  const matches = [...xml.matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]);
+  // Newest matching coordinate that starts with the MC version followed by '-'.
+  for (const v of matches) {
+    if (v === mcVersion || v.startsWith(mcVersion + '-')) return v;
+  }
+  return null;
+}
+
+// Returns [latest..oldest] of MC versions installable for a type.
 async function listServerVersions(type) {
   if (type === 'paper') {
     const d = await fetchJson('https://api.papermc.io/v2/projects/paper');
@@ -2349,9 +2399,17 @@ async function listServerVersions(type) {
     const d = await fetchJson('https://launchermeta.mojang.com/mc/game/version_manifest_v2.json');
     return (d.versions || []).filter((v) => v.type === 'release').map((v) => v.id);
   }
+  if (type === 'spigot') {
+    // Spigot doesn't expose a version list. Use Mojang's release manifest.
+    const d = await fetchJson('https://launchermeta.mojang.com/mc/game/version_manifest_v2.json');
+    return (d.versions || []).filter((v) => v.type === 'release').map((v) => v.id);
+  }
   if (type === 'fabric') {
     const d = await fetchJson('https://meta.fabricmc.net/v2/versions/game');
     return (d || []).filter((v) => v.stable).map((v) => v.version);
+  }
+  if (type === 'forge') {
+    return await listForgeVersions();
   }
   throw new Error('Unknown server type');
 }
@@ -2377,6 +2435,13 @@ async function resolveServerJar(type, mcVersion) {
     if (!meta.downloads || !meta.downloads.server) throw new Error('That version has no server jar');
     return { url: meta.downloads.server.url, filename: `minecraft_server-${mcVersion}.jar` };
   }
+  if (type === 'spigot') {
+    // GetBukkit's CDN serves the Spigot jar for any version that has a build.
+    return {
+      url: `https://cdn.getbukkit.org/spigot/spigot-${encodeURIComponent(mcVersion)}.jar`,
+      filename: `spigot-${mcVersion}.jar`,
+    };
+  }
   if (type === 'fabric') {
     const loaders = await fetchJson(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(mcVersion)}`);
     const loader = loaders[0] && loaders[0].loader && loaders[0].loader.version;
@@ -2388,7 +2453,47 @@ async function resolveServerJar(type, mcVersion) {
       filename: `fabric-server-${mcVersion}.jar`,
     };
   }
+  if (type === 'forge') {
+    const coord = await findLatestForgeCoordinate(mcVersion);
+    if (!coord) throw new Error(`No Forge build for MC ${mcVersion}`);
+    return {
+      url: `https://maven.minecraftforge.net/net/minecraftforge/forge/${encodeURIComponent(coord)}/forge-${encodeURIComponent(coord)}-installer.jar`,
+      filename: `forge-${coord}-installer.jar`,
+    };
+  }
   throw new Error('Unknown server type');
+}
+
+// Runs the Forge installer non-interactively to extract libraries + the
+// runnable server jar into `dir`. Removes the installer jar afterwards.
+function runForgeInstaller(dir, installerFilename) {
+  return new Promise((resolve, reject) => {
+    const installerPath = path.join(dir, installerFilename);
+    log(`Running Forge installer: java -jar ${installerFilename} --installServer in ${dir}`);
+    const proc = execFile('java', ['-jar', installerFilename, '--installServer'], {
+      cwd: dir,
+      windowsHide: true,
+    }, (err, _stdout, stderr) => {
+      try { fs.unlinkSync(installerPath); } catch (_) { /* ignore */ }
+      if (err) return reject(new Error(`Forge installer failed: ${(stderr || '').toString().trim() || err.message}`));
+      resolve();
+    });
+    proc.stdout && proc.stdout.on('data', () => {});
+    proc.stderr && proc.stderr.on('data', () => {});
+  });
+}
+
+// Picks the runnable server jar the Forge installer produced. Modern Forge
+// writes "<mc>-<forge>.jar" alongside the installer; older releases used
+// "minecraftforge-universal-<coord>.jar".
+function findForgeServerJar(dir) {
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jar'));
+  const modern = files.find((f) => /^\d+\.\d+(?:\.\d+)?-\d+\.\d+\.\d+(\.\d+)?\.jar$/.test(f));
+  if (modern) return modern;
+  const universal = files.find((f) => f.includes('minecraftforge-universal'));
+  if (universal) return universal;
+  if (files.length === 1) return files[0];
+  return null;
 }
 
 app.get('/api/create/versions', async (req, res) => {
@@ -2424,6 +2529,15 @@ app.post('/api/create', async (req, res) => {
     const buf = Buffer.from(await dl.arrayBuffer());
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, filename), buf);
+
+    let jarFilename = filename;
+    if (type === 'forge') {
+      await runForgeInstaller(dir, filename);
+      const produced = findForgeServerJar(dir);
+      if (!produced) throw new Error('Forge installer finished but no server jar was found in the folder');
+      jarFilename = produced;
+    }
+
     fs.writeFileSync(path.join(dir, 'eula.txt'), `# Accepted via Lodestone on ${new Date().toISOString()}\neula=true\n`, 'utf8');
 
     let javaArgs = body.javaArgs;
@@ -2434,7 +2548,7 @@ app.post('/api/create', async (req, res) => {
       id: genId(),
       name,
       dir,
-      jar: filename,
+      jar: jarFilename,
       javaArgs,
       mcVersion,
       stopTimeoutSeconds: 30,
