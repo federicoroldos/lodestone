@@ -16,12 +16,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Toaster
             theme="dark"
             position="bottom-right"
+            richColors
+            closeButton
+            duration={3500}
+            gap={10}
             swipeDirections={['left', 'right', 'bottom']}
             toastOptions={{
               classNames: {
-                toast: 'border border-border bg-card text-foreground shadow-xl',
-                error: 'border-status-error/40 bg-card',
-                success: 'border-primary/30 bg-card',
+                toast: 'rounded-lg border shadow-xl backdrop-blur-sm text-sm',
+                title: 'font-medium',
+                closeButton: 'border-border bg-card text-muted-foreground hover:text-foreground',
               },
             }}
           />
