@@ -220,9 +220,9 @@ function migrateConfig() {
     config.users = [{
       id: genId(),
       username: 'admin',
-      email: 'fede212yt@gmail.com',
+      email: 'admin@lodestone.io',
       name: 'Admin',
-      passwordHash: hashPassword(config.password || 'changeme123'),
+      passwordHash: hashPassword(config.password || 'admin'),
     }];
     delete config.password;
     changed = true;
@@ -383,18 +383,55 @@ class ServerManager {
     }
 
     const args = [...(d.javaArgs || []), '-jar', d.jar, 'nogui'];
-    log(`Starting "${this.name()}":`, 'java', args.join(' '), 'in', d.dir);
+
+    // Resolve the Java binary for this server's Minecraft version. The panel
+    // manages its own Temurin runtimes per Java major (see runtimes/), so the
+    // user never has to install Java by hand. If the right runtime isn't on
+    // disk yet we download it first (progress in this console), then launch.
+    const major = requiredJavaMajor(d.mcVersion);
+    const javaBin = resolveJavaForServer(d, major);
+    if (javaBin) return this._launch(javaBin, args);
+
+    if (this._runtimeFetching) return { ok: true };
+    this._runtimeFetching = true;
+    this.players.clear();
+    this.manualStop = false;
+    this.tpsSupported = null;
+    this.lastTps = null;
+    this.setStatus(STATUS.STARTING);
+    this.pushLine(`[Lodestone] Minecraft ${d.mcVersion || '?'} needs Java ${major}. Downloading runtime (one-time)...`, 'info');
+    let lastPct = -1;
+    ensureRuntime(major, (rec, total) => {
+      if (!total) return;
+      const pct = Math.floor((rec / total) * 100);
+      if (pct >= lastPct + 10) { lastPct = pct; this.pushLine(`[Lodestone] Downloading Java ${major}: ${pct}%`, 'info'); }
+    }).then((bin) => {
+      this._runtimeFetching = false;
+      this.pushLine(`[Lodestone] Java ${major} runtime ready.`, 'info');
+      const r = this._launch(bin, args);
+      if (!r.ok) { this.setStatus(STATUS.OFFLINE); this.pushLine(`[Lodestone] Could not launch java: ${r.error}`, 'error'); }
+    }).catch((err) => {
+      this._runtimeFetching = false;
+      this.setStatus(STATUS.OFFLINE);
+      this.pushLine(`[Lodestone] Could not prepare Java ${major}: ${err.message}`, 'error');
+    });
+    return { ok: true };
+  }
+
+  _launch(javaBin, args) {
+    const d = this.desc();
+    log(`Starting "${this.name()}":`, javaBin, args.join(' '), 'in', d.dir);
 
     this.players.clear();
     this.manualStop = false;
     this.tpsSupported = null;
     this.lastTps = null;
     this.setStatus(STATUS.STARTING);
-    this.pushLine(`[Lodestone] Starting "${this.name()}": java ${args.join(' ')}`, 'info');
+    this.pushLine(`[Lodestone] Starting "${this.name()}": ${javaBin} ${args.join(' ')}`, 'info');
 
     let proc;
     try {
-      proc = spawn('java', args, {
+      proc = spawn(javaBin, args, {
         cwd: d.dir,
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -1021,23 +1058,34 @@ app.put('/api/config/backups', (req, res) => {
 // Filesystem browser (for registering a server)
 // ---------------------------------------------------------------------------
 
+// The "roots" shown when the folder browser is at the top level. On Windows
+// these are the drive letters (C:\, D:\, ...). On POSIX there are no drive
+// letters, so we offer the user's home folder and the filesystem root as
+// jumping-off points; navigation from there walks the tree normally.
 function listDrives() {
-  const drives = [];
-  for (const c of 'CDEFGHIJKLMNOPQRSTUVWXYZAB') {
-    const root = `${c}:\\`;
-    try {
-      fs.accessSync(root);
-      drives.push(root);
-    } catch (_) { /* not present */ }
+  if (process.platform === 'win32') {
+    const drives = [];
+    for (const c of 'CDEFGHIJKLMNOPQRSTUVWXYZAB') {
+      const root = `${c}:\\`;
+      try {
+        fs.accessSync(root);
+        drives.push(root);
+      } catch (_) { /* not present */ }
+    }
+    return drives;
   }
-  return drives;
+  const roots = [];
+  const home = os.homedir();
+  if (home && home !== '/') roots.push(home);
+  roots.push('/');
+  return roots;
 }
 
 app.get('/api/fs', (req, res) => {
   const p = (req.query.path || '').trim();
   try {
     if (!p) {
-      return res.json({ path: '', parent: null, drives: listDrives(), dirs: [], jars: [] });
+      return res.json({ path: '', parent: null, drives: listDrives(), dirs: [], jars: [], sep: path.sep });
     }
     const abs = path.resolve(p);
     const entries = fs.readdirSync(abs, { withFileTypes: true });
@@ -1053,7 +1101,7 @@ app.get('/api/fs', (req, res) => {
     jars.sort((a, b) => a.localeCompare(b));
     const parentCandidate = path.dirname(abs);
     const parent = parentCandidate === abs ? '' : parentCandidate; // '' => back to drive list
-    res.json({ path: abs, parent, drives: [], dirs, jars });
+    res.json({ path: abs, parent, drives: [], dirs, jars, sep: path.sep });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -2101,7 +2149,6 @@ function detectCompat(m) {
   else if (jar.includes('quilt')) { projectType = 'mod'; loaders = ['quilt', 'fabric']; folder = 'mods'; label = 'Quilt'; }
   else if (jar.includes('neoforge')) { projectType = 'mod'; loaders = ['neoforge']; folder = 'mods'; label = 'NeoForge'; }
   else if (jar.includes('forge')) { projectType = 'mod'; loaders = ['forge']; folder = 'mods'; label = 'Forge'; }
-  else if (jar.includes('purpur')) { loaders = ['purpur', 'paper', 'spigot', 'bukkit']; label = 'Purpur'; }
   else if (jar.includes('paper')) { loaders = ['paper', 'spigot', 'bukkit']; label = 'Paper'; }
   else if (jar.includes('spigot')) { loaders = ['spigot', 'bukkit']; label = 'Spigot'; }
   else if (jar.includes('bukkit')) { loaders = ['bukkit']; label = 'Bukkit'; }
@@ -2339,10 +2386,10 @@ app.post('/api/files/upload', fileUpload.array('files'), (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Server creator (download Vanilla / Spigot / Paper / Purpur / Fabric / Forge jars)
+// Server creator (download Vanilla / Spigot / Paper / Fabric / Forge jars)
 // ---------------------------------------------------------------------------
 
-const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'purpur', 'fabric', 'forge'];
+const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'fabric', 'forge'];
 
 async function fetchJson(url) {
   const r = await fetch(url, { headers: { 'User-Agent': UA } });
@@ -2354,6 +2401,64 @@ async function fetchText(url) {
   const r = await fetch(url, { headers: { 'User-Agent': UA } });
   if (!r.ok) throw new Error(`HTTP ${r.status} from ${url}`);
   return r.text();
+}
+
+// Spigot has no version API, so we scrape its download page. This keeps the
+// list in sync with the actual Spigot releases (so we never offer a version
+// GetBukkit has no jar for) and tracks new releases automatically. Versions
+// are listed newest-first on the page; we preserve that order.
+async function listSpigotVersions() {
+  const html = await fetchText('https://getbukkit.org/download/spigot');
+  const versions = [];
+  const seen = new Set();
+  const re = /<h[1-6][^>]*>\s*(\d+(?:\.\d+)+)\s*<\/h[1-6]>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const v = m[1];
+    if (!seen.has(v)) { seen.add(v); versions.push(v); }
+  }
+  if (!versions.length) throw new Error('Could not read the Spigot version list from getbukkit.org');
+  return versions;
+}
+
+// Vanilla releases come from a community-maintained gist that maps every
+// Minecraft version to its official Mojang server.jar URL. We keep full
+// releases only (no snapshots / pre-releases / release candidates) and
+// preserve the gist's newest-first order. Returns [{ version, url }].
+async function fetchVanillaReleases() {
+  const md = await fetchText('https://gist.githubusercontent.com/cliffano/77a982a7503669c3e1acb0a0cf6127e9/raw');
+  const out = [];
+  const seen = new Set();
+  const re = /^\|\s*([^|]+?)\s*\|\s*(https?:\/\/\S+?server\.jar)\s*\|/gm;
+  let m;
+  while ((m = re.exec(md))) {
+    const version = m[1].trim();
+    // Full releases are digits-and-dots only; anything with letters or a
+    // hyphen (26w14a, 26.2-rc-2, 1.16-pre1, beta/alpha) is filtered out.
+    if (!/^[0-9]+(\.[0-9]+)+$/.test(version)) continue;
+    if (seen.has(version)) continue;
+    seen.add(version);
+    out.push({ version, url: m[2].trim() });
+  }
+  if (!out.length) throw new Error('Could not read the vanilla version list');
+  return out;
+}
+
+// Paper versions come from the PaperMC "Fill" v3 API. `versions` is keyed by
+// version family (e.g. "1.21") with arrays of releases newest-first; we flatten
+// them keeping full releases only (no rc/pre) and the API's newest-first order.
+async function listPaperVersions() {
+  const d = await fetchJson('https://fill.papermc.io/v3/projects/paper');
+  const versions = [];
+  const seen = new Set();
+  for (const family of Object.values(d.versions || {})) {
+    for (const v of (family || [])) {
+      if (!/^[0-9]+(\.[0-9]+)+$/.test(v)) continue; // full releases only
+      if (!seen.has(v)) { seen.add(v); versions.push(v); }
+    }
+  }
+  if (!versions.length) throw new Error('Could not read the Paper version list');
+  return versions;
 }
 
 // Fetches the Forge Maven version list and returns the latest forge build for
@@ -2403,21 +2508,13 @@ async function findLatestForgeCoordinate(mcVersion) {
 // Returns [latest..oldest] of MC versions installable for a type.
 async function listServerVersions(type) {
   if (type === 'paper') {
-    const d = await fetchJson('https://api.papermc.io/v2/projects/paper');
-    return (d.versions || []).slice().reverse();
-  }
-  if (type === 'purpur') {
-    const d = await fetchJson('https://api.purpurmc.org/v2/purpur');
-    return (d.versions || []).slice().reverse();
+    return await listPaperVersions();
   }
   if (type === 'vanilla') {
-    const d = await fetchJson('https://launchermeta.mojang.com/mc/game/version_manifest_v2.json');
-    return (d.versions || []).filter((v) => v.type === 'release').map((v) => v.id);
+    return (await fetchVanillaReleases()).map((r) => r.version);
   }
   if (type === 'spigot') {
-    // Spigot doesn't expose a version list. Use Mojang's release manifest.
-    const d = await fetchJson('https://launchermeta.mojang.com/mc/game/version_manifest_v2.json');
-    return (d.versions || []).filter((v) => v.type === 'release').map((v) => v.id);
+    return await listSpigotVersions();
   }
   if (type === 'fabric') {
     const d = await fetchJson('https://meta.fabricmc.net/v2/versions/game');
@@ -2432,23 +2529,15 @@ async function listServerVersions(type) {
 // Returns { url, filename } for the jar to download.
 async function resolveServerJar(type, mcVersion) {
   if (type === 'paper') {
-    const builds = await fetchJson(`https://api.papermc.io/v2/projects/paper/versions/${encodeURIComponent(mcVersion)}/builds`);
-    const list = builds.builds || [];
-    const b = list[list.length - 1];
-    if (!b) throw new Error('No Paper build for that version');
-    const jar = b.downloads.application.name;
-    return { url: `https://api.papermc.io/v2/projects/paper/versions/${encodeURIComponent(mcVersion)}/builds/${b.build}/downloads/${jar}`, filename: jar };
-  }
-  if (type === 'purpur') {
-    return { url: `https://api.purpurmc.org/v2/purpur/${encodeURIComponent(mcVersion)}/latest/download`, filename: `purpur-${mcVersion}.jar` };
+    const build = await fetchJson(`https://fill.papermc.io/v3/projects/paper/versions/${encodeURIComponent(mcVersion)}/builds/latest`);
+    const dl = build.downloads && build.downloads['server:default'];
+    if (!dl || !dl.url) throw new Error('No Paper build for that version');
+    return { url: dl.url, filename: dl.name };
   }
   if (type === 'vanilla') {
-    const manifest = await fetchJson('https://launchermeta.mojang.com/mc/game/version_manifest_v2.json');
-    const entry = (manifest.versions || []).find((v) => v.id === mcVersion);
-    if (!entry) throw new Error('Unknown vanilla version');
-    const meta = await fetchJson(entry.url);
-    if (!meta.downloads || !meta.downloads.server) throw new Error('That version has no server jar');
-    return { url: meta.downloads.server.url, filename: `minecraft_server-${mcVersion}.jar` };
+    const rel = (await fetchVanillaReleases()).find((r) => r.version === mcVersion);
+    if (!rel) throw new Error('Unknown vanilla version');
+    return { url: rel.url, filename: `minecraft_server-${mcVersion}.jar` };
   }
   if (type === 'spigot') {
     // GetBukkit's CDN serves the Spigot jar for any version that has a build.
@@ -2556,6 +2645,129 @@ async function downloadToFile(url, destPath, onProgress, signal) {
     out.end(resolve);
   });
   return received;
+}
+
+// ---------------------------------------------------------------------------
+// Managed Java runtimes — the panel downloads and keeps a Temurin (Adoptium)
+// JRE per Java major so the user never has to install Java themselves. Each
+// Minecraft version maps to the Java major it needs; the right runtime is
+// fetched on the first start of a server that needs it. Runtimes live under
+// runtimes/temurin-<major>/ and are git-ignored.
+// ---------------------------------------------------------------------------
+
+const RUNTIMES_DIR = path.join(__dirname, 'runtimes');
+const JAVA_EXE = process.platform === 'win32' ? 'java.exe' : 'java';
+
+// Minecraft version -> required Java major.
+function requiredJavaMajor(mcVersion) {
+  const m = /^1\.(\d+)(?:\.(\d+))?/.exec(String(mcVersion || '').trim());
+  if (!m) return 21; // unknown / snapshot -> newest managed LTS
+  const minor = Number(m[1]);
+  const patch = Number(m[2] || 0);
+  if (minor <= 16) return 8;                       // 1.16.5 and older
+  if (minor < 20) return 17;                       // 1.17 - 1.19
+  if (minor === 20) return patch >= 5 ? 21 : 17;   // 1.20.5+ needs Java 21
+  return 21;                                       // 1.21+
+}
+
+// Path to the java binary of a managed runtime, or null if not installed.
+function resolveManagedJava(major) {
+  const base = path.join(RUNTIMES_DIR, `temurin-${major}`);
+  if (!fs.existsSync(base)) return null;
+  let entries;
+  try { entries = fs.readdirSync(base); } catch (_) { return null; }
+  // Temurin archives extract to a top-level folder like "jdk-21.0.3+9-jre".
+  for (const name of entries) {
+    const candidate = path.join(base, name, 'bin', JAVA_EXE);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  const flat = path.join(base, 'bin', JAVA_EXE);
+  return fs.existsSync(flat) ? flat : null;
+}
+
+// Major version of the `java` on PATH, or null if none / unparseable. Cached.
+let _systemJavaMajor; // undefined = not probed yet
+function systemJavaMajor() {
+  if (_systemJavaMajor !== undefined) return _systemJavaMajor;
+  _systemJavaMajor = null;
+  try {
+    const r = spawnSync('java', ['-version'], { encoding: 'utf8' });
+    const out = `${r.stdout || ''}${r.stderr || ''}`;
+    const m = /version "(\d+)(?:\.(\d+))?/.exec(out);
+    if (m) {
+      const a = Number(m[1]);
+      _systemJavaMajor = a === 1 ? Number(m[2] || 0) : a; // "1.8.0" -> 8
+    }
+  } catch (_) { /* no java on PATH */ }
+  return _systemJavaMajor;
+}
+
+// Pick the java to launch a server with: explicit per-server override, then a
+// managed runtime, then the system java if its major matches. null => the
+// managed runtime must be downloaded first.
+function resolveJavaForServer(d, major) {
+  if (d.javaPath && fs.existsSync(d.javaPath)) return d.javaPath;
+  const managed = resolveManagedJava(major);
+  if (managed) return managed;
+  if (systemJavaMajor() === major) return 'java';
+  return null;
+}
+
+function adoptiumOs() {
+  if (process.platform === 'win32') return 'windows';
+  if (process.platform === 'darwin') return 'mac';
+  return 'linux';
+}
+function adoptiumArch() {
+  switch (process.arch) {
+    case 'x64': return 'x64';
+    case 'arm64': return 'aarch64';
+    case 'ppc64': return 'ppc64le';
+    case 's390x': return 's390x';
+    default: return 'x64';
+  }
+}
+
+// Download + extract the Temurin JRE for a Java major. Concurrent calls for the
+// same major share one download. Resolves to the java binary path.
+const _runtimePromises = {};
+function ensureRuntime(major, onProgress) {
+  const existing = resolveManagedJava(major);
+  if (existing) return Promise.resolve(existing);
+  if (_runtimePromises[major]) return _runtimePromises[major];
+
+  const p = (async () => {
+    fs.mkdirSync(RUNTIMES_DIR, { recursive: true });
+    const osName = adoptiumOs();
+    const arch = adoptiumArch();
+    const ext = osName === 'windows' ? 'zip' : 'tar.gz';
+    const url = `https://api.adoptium.net/v3/binary/latest/${major}/ga/${osName}/${arch}/jre/hotspot/normal/eclipse`;
+    const dest = path.join(RUNTIMES_DIR, `temurin-${major}`);
+    const archive = path.join(RUNTIMES_DIR, `temurin-${major}.${ext}`);
+
+    log(`Downloading Temurin JRE ${major} for ${osName}/${arch}...`);
+    await downloadToFile(url, archive, (rec, total) => { if (onProgress) onProgress(rec, total); });
+
+    // Extract with the system tar: present on Linux/macOS and Windows 10+,
+    // where bsdtar also opens .zip archives. Extract into a clean target.
+    try { fs.rmSync(dest, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    fs.mkdirSync(dest, { recursive: true });
+    const tarArgs = ext === 'zip' ? ['-xf', archive, '-C', dest] : ['-xzf', archive, '-C', dest];
+    const ex = spawnSync('tar', tarArgs, { encoding: 'utf8' });
+    if (ex.error || ex.status !== 0) {
+      throw new Error(`Could not extract Java runtime (tar): ${ex.error ? ex.error.message : (ex.stderr || ('exit ' + ex.status))}`);
+    }
+    try { fs.unlinkSync(archive); } catch (_) { /* ignore */ }
+
+    const bin = resolveManagedJava(major);
+    if (!bin) throw new Error('Java runtime extracted but no java binary was found');
+    log(`Temurin JRE ${major} ready at ${bin}`);
+    return bin;
+  })();
+
+  _runtimePromises[major] = p;
+  p.finally(() => { delete _runtimePromises[major]; });
+  return p;
 }
 
 app.post('/api/create', async (req, res) => {

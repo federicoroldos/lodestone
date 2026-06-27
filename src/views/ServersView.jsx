@@ -35,7 +35,8 @@ function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
 
   function joinPath(base, name) {
     if (!base) return name;
-    return base.replace(/[\\/]+$/, '') + '\\' + name;
+    const sep = entries.sep || '/';
+    return base.replace(/[\\/]+$/, '') + sep + name;
   }
 
   return (
@@ -117,7 +118,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
       const j = data.jars || [];
       setJars(j);
       if (j.length) {
-        const guess = j.find(x => /spigot|paper|purpur|server|bukkit|fabric|forge/i.test(x)) || j[0];
+        const guess = j.find(x => /spigot|paper|server|bukkit|fabric|forge/i.test(x)) || j[0];
         setForm(f => ({ ...f, jar: guess }));
       }
     } catch (_) {}
@@ -201,7 +202,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
           }));
           setJars(j);
           if (j.length) {
-            const guess = j.find(x => /spigot|paper|purpur|server|bukkit|fabric|forge/i.test(x)) || j[0];
+            const guess = j.find(x => /spigot|paper|server|bukkit|fabric|forge/i.test(x)) || j[0];
             setForm(f => ({ ...f, jar: guess }));
           }
         }}
@@ -312,7 +313,6 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
                 <option value="vanilla">{t('servers.typeVanilla')}</option>
                 <option value="spigot">{t('servers.typeSpigot')}</option>
                 <option value="paper">{t('servers.typePaper')}</option>
-                <option value="purpur">{t('servers.typePurpur')}</option>
                 <option value="fabric">{t('servers.typeFabric')}</option>
                 <option value="forge">{t('servers.typeForge')}</option>
               </select>

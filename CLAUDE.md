@@ -5,7 +5,7 @@ Guidance for Claude Code (and any AI assistant) working in this repository.
 ## What this is
 
 **Lodestone** is a self-hosted web panel for managing Minecraft servers (Spigot / Paper /
-Purpur / Vanilla / Fabric / Forge) on **Windows**. It is a single Node.js process that
+Vanilla / Fabric / Forge) on **Windows, Linux, or macOS**. It is a single Node.js process that
 serves a REST API + WebSocket and a static single-page frontend. There is **no build step**
 and **no framework** on the frontend — plain HTML/CSS/JS.
 

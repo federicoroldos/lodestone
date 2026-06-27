@@ -1,7 +1,7 @@
 {
   "name": "lodestone",
   "version": "1.0.0",
-  "description": "Lodestone - lightweight web panel to manage a Minecraft server on Windows",
+  "description": "Lodestone - lightweight web panel to manage a Minecraft server on Windows, Linux, or macOS",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

@@ -56,7 +56,7 @@ export function joinRel(base, name) {
   return base ? base + '/' + name : name;
 }
 
-export function joinPath(base, name) {
+export function joinPath(base, name, sep = '/') {
   if (!base) return name;
-  return base.replace(/[\\/]+$/, '') + '\\' + name;
+  return base.replace(/[\\/]+$/, '') + sep + name;
 }
