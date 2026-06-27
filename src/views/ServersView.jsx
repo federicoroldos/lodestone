@@ -249,6 +249,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
         resolving: 'servers.phaseResolving',
         downloading: 'servers.phaseDownloading',
         'installing-forge': 'servers.phaseInstallingForge',
+        'installing-neoforge': 'servers.phaseInstallingNeoForge',
         finalizing: 'servers.phaseFinalizing',
       };
       const final = await stream('/api/create', {
@@ -315,6 +316,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
                 <option value="paper">{t('servers.typePaper')}</option>
                 <option value="fabric">{t('servers.typeFabric')}</option>
                 <option value="forge">{t('servers.typeForge')}</option>
+                <option value="neoforge">{t('servers.typeNeoForge')}</option>
               </select>
             </div>
             <div className="space-y-1.5">

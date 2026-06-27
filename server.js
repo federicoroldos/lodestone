@@ -2142,6 +2142,9 @@ const MODRINTH_CATEGORIES = [
 
 // Work out what content the selected server can actually run, from its jar name.
 // loaders[] is used both to filter Modrinth and to decide plugins/ vs mods/.
+// `canMods` (true when the server runs any mod loader) is what gates the Mods
+// tab in the content view; the Plugins tab still works for the plugin loaders
+// (paper/spigot/bukkit).
 function detectCompat(m) {
   const jar = ((m && m.desc().jar) || '').toLowerCase();
   const mcVersion = (m && m.desc().mcVersion) || '';
@@ -2149,28 +2152,67 @@ function detectCompat(m) {
   let loaders = ['paper', 'spigot', 'bukkit'];
   let folder = 'plugins';
   let label = 'Paper/Spigot';
-  if (jar.includes('fabric')) { projectType = 'mod'; loaders = ['fabric']; folder = 'mods'; label = 'Fabric'; }
-  else if (jar.includes('quilt')) { projectType = 'mod'; loaders = ['quilt', 'fabric']; folder = 'mods'; label = 'Quilt'; }
-  else if (jar.includes('neoforge')) { projectType = 'mod'; loaders = ['neoforge']; folder = 'mods'; label = 'NeoForge'; }
-  else if (jar.includes('forge')) { projectType = 'mod'; loaders = ['forge']; folder = 'mods'; label = 'Forge'; }
+  let canMods = false;
+  if (jar.includes('fabric')) { projectType = 'mod'; loaders = ['fabric']; folder = 'mods'; label = 'Fabric'; canMods = true; }
+  else if (jar.includes('quilt')) { projectType = 'mod'; loaders = ['quilt', 'fabric']; folder = 'mods'; label = 'Quilt'; canMods = true; }
+  else if (jar.includes('neoforge')) { projectType = 'mod'; loaders = ['neoforge']; folder = 'mods'; label = 'NeoForge'; canMods = true; }
+  else if (jar.includes('forge')) { projectType = 'mod'; loaders = ['forge']; folder = 'mods'; label = 'Forge'; canMods = true; }
   else if (jar.includes('paper')) { loaders = ['paper', 'spigot', 'bukkit']; label = 'Paper'; }
   else if (jar.includes('spigot')) { loaders = ['spigot', 'bukkit']; label = 'Spigot'; }
   else if (jar.includes('bukkit')) { loaders = ['bukkit']; label = 'Bukkit'; }
   else if (jar.includes('vanilla') || jar.includes('minecraft_server')) { projectType = null; label = 'Vanilla'; }
-  return { projectType, loaders, folder, label, mcVersion };
+  return { projectType, loaders, folder, label, mcVersion, canMods };
+}
+
+// Map a Modrinth loader name to the cfwidget loader query-string value.
+// cfwidget accepts any case but matches against the official labels
+// (Fabric, Forge, NeoForge, Quilt) in the per-file `versions` tag set.
+function modrinthToCfwidgetLoader(loader) {
+  if (loader === 'fabric') return 'fabric';
+  if (loader === 'forge') return 'forge';
+  if (loader === 'neoforge') return 'neoforge';
+  if (loader === 'quilt') return 'quilt';
+  return null;
+}
+
+// Capitalize a loader name the way cfwidget stores it in per-file version
+// tags. We can't just uppercase the first letter because NeoForge's is
+// `NeoForge` (two capital letters), not `Neoforge`.
+function cfLoaderLabel(loader) {
+  if (loader === 'neoforge') return 'NeoForge';
+  if (loader === 'fabric') return 'Fabric';
+  if (loader === 'forge') return 'Forge';
+  if (loader === 'quilt') return 'Quilt';
+  return null;
 }
 
 app.get('/api/modrinth/search', async (req, res) => {
   const m = targetManager(req);
   const compat = detectCompat(m);
-  if (!compat.projectType) {
+  // `projectType` (optional) lets the caller force 'mod' or 'plugin' so both
+  // tabs of the content view can reuse this endpoint regardless of the
+  // active server's loader. Without an override we keep the historical
+  // behaviour of matching the server's own project type.
+  const overrideType = String(req.query.projectType || '');
+  const projectType = overrideType === 'mod' || overrideType === 'plugin' ? overrideType : compat.projectType;
+  if (!projectType) {
     return res.json({ hits: [], compat, note: tErr(req.user, 'errors.vanillaNoPlugins') });
+  }
+  // Pick the loader facet for the requested project type: when the user is
+  // looking at the Mods tab on a Paper server (e.g. browsing a Fabric mod
+  // pack reference) we fall back to the full mod-loader union so they still
+  // see fabric/forge/neoforge results.
+  let loadersForQuery = compat.loaders;
+  if (projectType === 'mod') {
+    loadersForQuery = compat.canMods ? compat.loaders : ['fabric', 'forge', 'neoforge', 'quilt'];
+  } else if (projectType === 'plugin') {
+    loadersForQuery = ['paper', 'spigot', 'bukkit'];
   }
   const q = req.query.q || '';
   const sort = MODRINTH_SORTS.includes(req.query.sort) ? req.query.sort : 'downloads';
   const facets = [
-    [`project_type:${compat.projectType}`],
-    compat.loaders.map((l) => `categories:${l}`),
+    [`project_type:${projectType}`],
+    loadersForQuery.map((l) => `categories:${l}`),
   ];
   if (compat.mcVersion) facets.push([`versions:${compat.mcVersion}`]);
   if (req.query.category && MODRINTH_CATEGORIES.includes(req.query.category)) {
@@ -2180,7 +2222,7 @@ app.get('/api/modrinth/search', async (req, res) => {
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA } });
     const data = await r.json();
-    res.json({ ...data, compat, categories: MODRINTH_CATEGORIES });
+    res.json({ ...data, compat, projectType, categories: MODRINTH_CATEGORIES });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -2233,6 +2275,187 @@ app.post('/api/modrinth/install', async (req, res) => {
     res.json({ ok: true, name: file.filename, note: 'Restart the server to apply.' });
   } catch (err) {
     log(`Modrinth install failed: ${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CurseForge via cfwidget (no API key). The official CurseForge API requires
+// an X-API-Key header on every call, including downloads from the CDN. We
+// don't have (and per the zero-config rule, won't ship) a key, so the
+// installable jar flow is Modrinth-only. This endpoint provides a thin proxy
+// over api.cfwidget.com so the Mods tab can still let users browse
+// CurseForge projects, see their file lists, and link out to curseforge.com
+// for the manual download.
+//
+// GET /api/curseforge/mod/:slugOrId
+//   :slugOrId may be a numeric project id ("394468"), a full slug path
+//   ("minecraft/mc-mods/sodium"), or a short slug ("sodium"). Optional
+//   ?version=<mc> and ?loader=<forge|fabric|neoforge|quilt> narrow the
+//   "selected download" (cfwidget's `download` field) and we pre-filter the
+//   `files` array to that loader + MC version so the UI doesn't have to.
+// ---------------------------------------------------------------------------
+const CFWIDGET = 'https://api.cfwidget.com';
+
+// Whitelist of accepted identifiers; cfwidget will 400/404 on anything else
+// and we want a clean 400 from the panel before we even hit the network.
+const CF_SLUG_RE = /^[a-z0-9][a-z0-9_\-]{0,80}$/i;
+const CF_PATH_RE = /^(?:minecraft\/)?(?:mc-mods|modpacks|bukkit|modpack|worlds|resource-packs|customization|mc-addons|texture-packs|shaders|ctm|mods)\/[a-z0-9][a-z0-9_\-]{0,80}$/i;
+const CF_ID_RE = /^[0-9]{1,10}$/;
+
+function cfLoaderForModrinth(loader) {
+  return modrinthToCfwidgetLoader(loader);
+}
+
+// Strip HTML to plain text and trim. cfwidget returns a `summary` (one
+// paragraph) and a longer `description` with HTML; we keep both but clean
+// the long one so the UI can render it directly.
+function stripHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// cfwidget lumps a project's "categories" together regardless of whether
+// they're mod-loader tags or gameplay categories. We split them so the UI
+// can show loaders separately (Fabric/Forge/...) from gameplay categories
+// (Tech, Adventure, ...). cfwidget's category list isn't documented; we
+// fall back to keeping them all in `categories` if we can't disambiguate.
+const CF_LOADER_LABELS = new Set(['Fabric', 'Forge', 'NeoForge', 'Quilt']);
+
+function splitCfCategories(cats) {
+  const loaders = [];
+  const categories = [];
+  for (const c of cats || []) {
+    if (CF_LOADER_LABELS.has(c)) loaders.push(c);
+    else categories.push(c);
+  }
+  return { loaders, categories };
+}
+
+app.get(/^\/api\/curseforge\/mod\/(.+)$/, async (req, res) => {
+  // req.params[0] is whatever followed /api/curseforge/mod/ — could be a
+  // numeric id, a short slug, or a slash-separated path (e.g.
+  // "minecraft/mc-mods/sodium"). The match above accepts all three.
+  const id = String((req.params && req.params[0]) || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!id) return res.status(400).json({ error: tErr(req.user, 'errors.invalidCfId') });
+  if (!CF_ID_RE.test(id) && !CF_SLUG_RE.test(id) && !CF_PATH_RE.test(id)) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.invalidCfId') });
+  }
+  const version = String(req.query.version || '').trim();
+  const loader = String(req.query.loader || '').trim();
+  const cfLoader = loader ? cfLoaderForModrinth(loader) : null;
+  if (loader && !cfLoader) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.invalidCfLoader') });
+  }
+
+  const params = new URLSearchParams();
+  if (version) params.set('version', version);
+  if (cfLoader) params.set('loader', cfLoader);
+  const qs = params.toString();
+  // Build the cfwidget path carefully: numeric ids go as-is, otherwise the
+  // user-supplied tail is appended as a path. We never URL-encode the `/`
+  // separators so paths like "minecraft/mc-mods/sodium" pass through.
+  const cfPath = id;
+  const url = `${CFWIDGET}/${cfPath}${qs ? `?${qs}` : ''}`;
+
+  try {
+    log(`CurseForge: lookup ${id}${version ? ` for MC ${version}` : ''}${cfLoader ? ` (${cfLoader})` : ''}`);
+    const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept': 'application/json' } });
+    if (r.status === 404) return res.status(404).json({ error: tErr(req.user, 'errors.cfModNotFound') });
+    if (!r.ok) return res.status(502).json({ error: `CurseForge lookup failed: HTTP ${r.status}` });
+    const j = await r.json();
+
+    // Pull loader/version facets off each file so the frontend can group them
+    // (and so we can hide files that don't target the user's loader).
+    const allFiles = Array.isArray(j.files) ? j.files : [];
+    const files = allFiles.map((f) => {
+      const tags = Array.isArray(f.versions) ? f.versions : [];
+      // cfwidget's per-file "versions" is a mix of side (Client/Server),
+      // loader (Fabric/Forge/...), and MC version tags. We split them by
+      // matching against the known loader label set.
+      const fLoaders = tags.filter((t) => CF_LOADER_LABELS.has(t));
+      return {
+        id: f.id,
+        name: f.name,
+        display: f.display,
+        url: f.url, // page URL on curseforge.com (cfwidget does not expose a direct CDN URL)
+        type: f.type, // release | beta | alpha
+        version: f.version, // MC version this file targets
+        filesize: f.filesize,
+        downloads: f.downloads,
+        uploadedAt: f.uploaded_at,
+        loaders: fLoaders,
+      };
+    });
+
+    // If the caller pinned a loader, keep only files that target it; this is
+    // a no-op when `loader` isn't set.
+    const cfLabel = cfLoader ? cfLoaderLabel(cfLoader) : null;
+    const filtered = cfLabel ? files.filter((f) => f.loaders.includes(cfLabel)) : files;
+
+    // cfwidget returns a `versions` map of MC version -> file[]; flatten the
+    // keys to a sorted list so the UI can show "supports: 1.20.1, 1.20.4, ..."
+    const versionsList = j.versions ? Object.keys(j.versions) : [];
+    versionsList.sort((a, b) => {
+      const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+      const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const d = (pb[i] || 0) - (pa[i] || 0);
+        if (d) return d;
+      }
+      return 0;
+    });
+
+    const split = splitCfCategories(j.categories);
+    // cfwidget doesn't put mod-loader tags in the project-level `categories`
+    // for many projects (Sodium only lists "Performance"), so derive the
+    // project-wide loader set from the files' per-file loader tags instead.
+    const projectLoaders = Array.from(new Set(
+      files.flatMap((f) => Array.isArray(f.loaders) ? f.loaders : [])
+    )).sort();
+    const download = j.download || null;
+    const downloadMeta = download
+      ? {
+          id: download.id,
+          name: download.name,
+          display: download.display,
+          url: download.url,
+          version: download.version,
+          filesize: download.filesize,
+          type: download.type,
+        }
+      : null;
+
+    res.json({
+      id: j.id,
+      title: j.title,
+      summary: j.summary || '',
+      description: stripHtml(j.description || ''),
+      thumbnail: j.thumbnail || null,
+      urls: j.urls || {},
+      downloads: j.downloads || null,
+      license: j.license || null,
+      loaders: projectLoaders.length ? projectLoaders : split.loaders,
+      categories: split.categories,
+      versions: versionsList,
+      files: filtered,
+      download: downloadMeta,
+      compat: detectCompat(targetManager(req)),
+    });
+  } catch (err) {
+    log(`CurseForge lookup failed for ${id}: ${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });
@@ -2394,10 +2617,37 @@ app.post('/api/files/upload', fileUpload.array('files'), (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Server creator (download Vanilla / Spigot / Paper / Fabric / Forge jars)
+// Server creator (download Vanilla / Spigot / Paper / Fabric / Forge / NeoForge jars)
 // ---------------------------------------------------------------------------
 
-const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'fabric', 'forge'];
+const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'fabric', 'forge', 'neoforge'];
+
+// Minecraft version -> the NeoForge version "branch" (leading portion of the
+// version string, e.g. "21.4" for NeoForge 21.4.x). One branch per MC release.
+// 1.20.1 is not listed: the early NeoForge-as-Forge 1.20.1 (47.x) builds live
+// under the legacy `net.neoforged:forge` path, which is the same artifact as
+// Forge 1.20.1 — users wanting 1.20.1 modded can pick the Forge option. Add a
+// new entry when a new NeoForge branch ships for a new MC version.
+const NEOFORGE_BRANCHES = {
+  '1.20.2': '20.2',
+  '1.20.3': '20.3',
+  '1.20.4': '20.4',
+  '1.20.5': '20.5',
+  '1.20.6': '20.6',
+  '1.21': '21.0',
+  '1.21.1': '21.1',
+  '1.21.2': '21.2',
+  '1.21.3': '21.3',
+  '1.21.4': '21.4',
+  '1.21.5': '21.5',
+  '1.21.6': '21.6',
+  '1.21.7': '21.7',
+  '1.21.8': '21.8',
+  '1.21.9': '21.9',
+  '1.21.10': '21.10',
+  '1.21.11': '21.11',
+};
+const NEOFORGE_METADATA_URL = 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml';
 
 async function fetchJson(url) {
   const r = await fetch(url, { headers: { 'User-Agent': UA } });
@@ -2513,6 +2763,45 @@ async function findLatestForgeCoordinate(mcVersion) {
   return null;
 }
 
+// Fetches the NeoForge Maven version list and returns the MC versions
+// advertised in NEOFORGE_BRANCHES that have at least one build, newest-first.
+async function listNeoForgeVersions() {
+  const xml = await fetchText(NEOFORGE_METADATA_URL);
+  const present = new Set([...xml.matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]));
+  return Object.keys(NEOFORGE_BRANCHES)
+    .filter((mc) => {
+      const branch = NEOFORGE_BRANCHES[mc];
+      // The branch counts as "available" if any version starts with the branch prefix.
+      for (const v of present) {
+        if (v === branch || v.startsWith(branch + '.')) return true;
+      }
+      return false;
+    })
+    .sort((a, b) => {
+      const pa = a.split('.').map(Number);
+      const pb = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const d = (pb[i] || 0) - (pa[i] || 0);
+        if (d) return d;
+      }
+      return 0;
+    });
+}
+
+async function findLatestNeoForgeCoordinate(mcVersion) {
+  const branch = NEOFORGE_BRANCHES[mcVersion];
+  if (!branch) return null;
+  const xml = await fetchText(NEOFORGE_METADATA_URL);
+  const matches = [...xml.matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]);
+  // Maven is sorted oldest-first within a branch (with a few non-deterministic
+  // appends near the tail), so the last matching entry is the newest build.
+  let latest = null;
+  for (const v of matches) {
+    if (v === branch || v.startsWith(branch + '.')) latest = v;
+  }
+  return latest;
+}
+
 // Returns [latest..oldest] of MC versions installable for a type.
 async function listServerVersions(type) {
   if (type === 'paper') {
@@ -2530,6 +2819,9 @@ async function listServerVersions(type) {
   }
   if (type === 'forge') {
     return await listForgeVersions();
+  }
+  if (type === 'neoforge') {
+    return await listNeoForgeVersions();
   }
   throw new Error('Unknown server type');
 }
@@ -2573,21 +2865,29 @@ async function resolveServerJar(type, mcVersion) {
       filename: `forge-${coord}-installer.jar`,
     };
   }
+  if (type === 'neoforge') {
+    const coord = await findLatestNeoForgeCoordinate(mcVersion);
+    if (!coord) throw new Error(`No NeoForge build for MC ${mcVersion}`);
+    return {
+      url: `https://maven.neoforged.net/releases/net/neoforged/neoforge/${encodeURIComponent(coord)}/neoforge-${encodeURIComponent(coord)}-installer.jar`,
+      filename: `neoforge-${coord}-installer.jar`,
+    };
+  }
   throw new Error('Unknown server type');
 }
 
-// Runs the Forge installer non-interactively to extract libraries + the
-// runnable server jar into `dir`. Removes the installer jar afterwards.
-function runForgeInstaller(dir, installerFilename) {
+// Runs the Forge / NeoForge installer non-interactively to extract libraries
+// + the runnable server jar into `dir`. Removes the installer jar afterwards.
+function runForgeInstaller(dir, installerFilename, label = 'Forge') {
   return new Promise((resolve, reject) => {
     const installerPath = path.join(dir, installerFilename);
-    log(`Running Forge installer: java -jar ${installerFilename} --installServer in ${dir}`);
+    log(`Running ${label} installer: java -jar ${installerFilename} --installServer in ${dir}`);
     const proc = execFile('java', ['-jar', installerFilename, '--installServer'], {
       cwd: dir,
       windowsHide: true,
     }, (err, _stdout, stderr) => {
       try { fs.unlinkSync(installerPath); } catch (_) { /* ignore */ }
-      if (err) return reject(new Error(`Forge installer failed: ${(stderr || '').toString().trim() || err.message}`));
+      if (err) return reject(new Error(`${label} installer failed: ${(stderr || '').toString().trim() || err.message}`));
       resolve();
     });
     proc.stdout && proc.stdout.on('data', () => {});
@@ -2595,13 +2895,17 @@ function runForgeInstaller(dir, installerFilename) {
   });
 }
 
-// Picks the runnable server jar the Forge installer produced. Modern Forge
-// writes "<mc>-<forge>.jar" alongside the installer; older releases used
+// Picks the runnable server jar the Forge / NeoForge installer produced.
+// Modern Forge writes "<mc>-<forge>.jar" alongside the installer; modern
+// NeoForge writes just "<neoforge-version>.jar" (e.g. "21.1.66.jar" or, for
+// pre-release builds, "21.6.20-beta.jar"); older Forge releases used
 // "minecraftforge-universal-<coord>.jar".
 function findForgeServerJar(dir) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jar'));
   const modern = files.find((f) => /^\d+\.\d+(?:\.\d+)?-\d+\.\d+\.\d+(\.\d+)?\.jar$/.test(f));
   if (modern) return modern;
+  const neo = files.find((f) => /^\d+(\.\d+){1,2}(-beta)?\.jar$/.test(f));
+  if (neo) return neo;
   const universal = files.find((f) => f.includes('minecraftforge-universal'));
   if (universal) return universal;
   if (files.length === 1) return files[0];
@@ -2813,6 +3117,7 @@ app.post('/api/create', async (req, res) => {
   //   {type:"download-start", total, filename}
   //   {type:"progress", received, total}    (repeated while downloading)
   //   {type:"phase", phase:"installing-forge"}    (forge only)
+  //   {type:"phase", phase:"installing-neoforge"} (neoforge only)
   //   {type:"phase", phase:"finalizing"}
   //   {type:"done", server}                  (terminal)
   //   {type:"error", error}                  (terminal)
@@ -2868,12 +3173,13 @@ app.post('/api/create', async (req, res) => {
     log(`Create: downloaded "${filename}" (${(received / 1048576).toFixed(1)} MB)`);
 
     let jarFilename = filename;
-    if (type === 'forge') {
-      send({ type: 'phase', phase: 'installing-forge' });
-      await runForgeInstaller(dir, filename);
+    if (type === 'forge' || type === 'neoforge') {
+      const label = type === 'neoforge' ? 'NeoForge' : 'Forge';
+      send({ type: 'phase', phase: type === 'neoforge' ? 'installing-neoforge' : 'installing-forge' });
+      await runForgeInstaller(dir, filename, label);
       if (clientGone) { cleanup(filename); return; }
       const produced = findForgeServerJar(dir);
-      if (!produced) throw new Error('Forge installer finished but no server jar was found in the folder');
+      if (!produced) throw new Error(`${label} installer finished but no server jar was found in the folder`);
       jarFilename = produced;
     }
 
