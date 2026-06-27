@@ -15,7 +15,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <App />
           <Toaster
             theme="dark"
-            position="bottom-center"
+            position="bottom-right"
+            swipeDirections={['left', 'right', 'bottom']}
             toastOptions={{
               classNames: {
                 toast: 'border border-border bg-card text-foreground shadow-xl',

@@ -29,7 +29,8 @@
   },
   "backups": {
     "dir": "",
-    "retainCount": 10,
+    "maxCount": 10,
+    "maxSizeMB": 0,
     "scheduledEnabled": false,
     "scheduledCron": "0 3 * * *",
     "worlds": [

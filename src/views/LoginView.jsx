@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Field } from '@/components/ui/field';
-import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Loader2, User, Lock, ArrowRight } from 'lucide-react';
 import { SpinningCube } from '@/components/shared/SpinningCube';
 import { useT } from '@/context/I18nContext';
 
@@ -89,7 +89,7 @@ function startCubeFly(cubeEl, formEl) {
 
 export function LoginView({ onLogin }) {
   const t = useT();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -108,6 +108,11 @@ export function LoginView({ onLogin }) {
     setError('');
     setLoading(true);
 
+    const id = identifier.trim();
+    // Send as the right field based on whether it looks like an email,
+    // so the server can give better feedback. Either works at lookup.
+    const loginField = id.includes('@') ? { email: id } : { username: id };
+
     let data;
     try {
       const clientIp = await fetchPublicIp();
@@ -115,7 +120,7 @@ export function LoginView({ onLogin }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
+          ...loginField,
           password: pass,
           ...(clientIp ? { clientIp } : {}),
         }),
@@ -185,15 +190,15 @@ export function LoginView({ onLogin }) {
         </div>
 
         <div className="flex flex-col gap-4">
-          <Field label={t('login.emailLabel')} required>
+          <Field label={t('login.identifierLabel')} required>
             <div className="relative">
-              <Mail className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/55" />
+              <User className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/55" />
               <Input
-                type="email"
-                placeholder={t('login.emailPlaceholder')}
+                type="text"
+                placeholder={t('login.identifierPlaceholder')}
                 autoComplete="username"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
                 required
                 className="pl-8"
               />

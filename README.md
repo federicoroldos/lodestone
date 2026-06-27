@@ -114,7 +114,8 @@ The scheduled restart and scheduled backup act on the **active** server.
 ```json
 "backups": {
   "dir": "C:\\Servers\\mc-backups",
-  "retainCount": 10,
+  "maxCount": 10,
+  "maxSizeMB": 0,
   "scheduledEnabled": true,
   "scheduledCron": "0 3 * * *",
   "worlds": ["world", "world_nether", "world_the_end"]
@@ -123,7 +124,11 @@ The scheduled restart and scheduled backup act on the **active** server.
 
 - `worlds` are the folders (relative to `serverDir`) zipped into each backup.
 - If the server is online, the panel runs `save-off` + `save-all flush` during the copy, then `save-on`.
-- `retainCount` keeps only the newest N zips. Backups can also be created on demand from the **Backups** tab.
+- Retention is **per server**: when a fresh backup pushes that server's
+  set over either `maxCount` (newest-N) or `maxSizeMB` (total size on disk),
+  the oldest is deleted. Set either value to `0` to disable that cap.
+  Both caps are also configurable from the **Backups** tab.
+  Backups can be created on demand from the **Backups** tab.
 
 ### Discord notifications (webhook)
 

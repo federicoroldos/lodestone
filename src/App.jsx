@@ -78,7 +78,7 @@ function AppShell({ onLoggedIn }) {
   const { sendMessage } = useWebSocket({
     onLine: useCallback((msg) => {
       if (msg.serverId !== activeServerId) return;
-      setConsoleLines(prev => [...prev, { ...msg.line, _ts: msg.ts || Date.now() }].slice(-1200));
+      setConsoleLines(prev => [...prev, msg.line].slice(-1200));
     }, [activeServerId]),
     onHistory: useCallback((msg) => {
       if (msg.serverId !== activeServerId) return;

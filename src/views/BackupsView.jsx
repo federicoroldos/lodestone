@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useApi } from '@/hooks/useApi';
@@ -9,6 +11,71 @@ import { fmtBytes } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Download, Trash2, Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+
+function RetentionCard({ onSaved }) {
+  const api = useApi();
+  const t = useT();
+  const [form, setForm] = useState({ maxCount: 10, maxSizeMB: 0 });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cfg = await api('/api/config');
+        if (cancelled) return;
+        setForm({
+          maxCount: Number(cfg?.backups?.maxCount ?? cfg?.backups?.retainCount ?? 10) || 0,
+          maxSizeMB: Number(cfg?.backups?.maxSizeMB ?? 0) || 0,
+        });
+      } catch (_) { /* ignore — defaults stay in place */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const f = (k) => (e) => {
+    const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+    setForm((p) => ({ ...p, [k]: n }));
+  };
+
+  async function save() {
+    setLoading(true);
+    try {
+      await api('/api/config/backups', { method: 'PUT', body: form });
+      toast.success(t('backups.savedToast'));
+      onSaved?.();
+    } catch (e) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('backups.retentionTitle')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xs text-muted-foreground mb-4">{t('backups.retentionHint')}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>{t('backups.maxCount')}</Label>
+            <Input type="number" min="0" step="1" value={form.maxCount} onChange={f('maxCount')} />
+            <p className="text-[11px] text-muted-foreground/80">{t('backups.maxCountHint')}</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('backups.maxSizeMB')}</Label>
+            <Input type="number" min="0" step="1" value={form.maxSizeMB} onChange={f('maxSizeMB')} />
+            <p className="text-[11px] text-muted-foreground/80">{t('backups.maxSizeMBHint')}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button variant="default" size="sm" onClick={save} disabled={loading}>
+            {loading ? t('common.loading') : t('common.save')}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function BackupsView() {
   const api = useApi();
@@ -53,7 +120,7 @@ export function BackupsView() {
   }
 
   return (
-    <>
+    <div className="space-y-5">
       <Card>
         <CardHeader>
           <CardTitle>{t('backups.title')}</CardTitle>
@@ -96,6 +163,7 @@ export function BackupsView() {
           )}
         </CardContent>
       </Card>
+      <RetentionCard onSaved={load} />
       <ConfirmDialog
         open={!!pendingDelete}
         onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
@@ -105,6 +173,6 @@ export function BackupsView() {
         destructive
         onConfirm={() => { deleteBackup(pendingDelete); setPendingDelete(null); }}
       />
-    </>
+    </div>
   );
 }
