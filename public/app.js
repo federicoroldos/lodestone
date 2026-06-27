@@ -61,13 +61,13 @@ function fmtUptime(ms) {
 let currentUser = null;
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = $('#login-email').value.trim();
+  const username = $('#login-username').value.trim();
   const pass = $('#login-pass').value;
   try {
     const r = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass }),
+      body: JSON.stringify({ username, password: pass }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Error');
@@ -954,14 +954,14 @@ async function loadUsers() {
       const isSelf = currentUser && u.id === currentUser.id;
       const row = document.createElement('div');
       row.className = 'file-row';
-      row.innerHTML = `<span class="file-name">${escapeHtml(u.email)}${isSelf ? ' <span class="badge-active">you</span>' : ''}</span>
+      row.innerHTML = `<span class="file-name">${escapeHtml(u.username)}${isSelf ? ' <span class="badge-active">you</span>' : ''}</span>
         <span class="file-meta">${escapeHtml(u.name || '—')}</span>
         <button class="btn btn-sm btn-glass" data-act="edit">Edit</button>
         <button class="btn btn-sm btn-stop" data-act="delete" ${isSelf ? 'disabled' : ''}>Delete</button>`;
       row.querySelector('[data-act="edit"]').addEventListener('click', () => openUserModal(u));
       const del = row.querySelector('[data-act="delete"]');
       if (!isSelf) del.addEventListener('click', () => {
-        if (!confirm(`Delete user ${u.email}?`)) return;
+        if (!confirm(`Delete user ${u.username}?`)) return;
         api(`/api/users/${u.id}`, { method: 'DELETE' })
           .then(() => { toast('User deleted'); loadUsers(); })
           .catch(e => toast(e.message, true));
@@ -976,7 +976,7 @@ function openUserModal(user) {
   editingUserId = user ? user.id : null;
   $('#user-modal-title').textContent = user ? 'Edit user' : 'Add user';
   $('#uf-name').value = user ? (user.name || '') : '';
-  $('#uf-email').value = user ? user.email : '';
+  $('#uf-username').value = user ? user.username : '';
   $('#uf-pass').value = '';
   $('#uf-pass-label').textContent = user ? 'New password (leave blank to keep)' : 'Password';
   $('#uf-error').textContent = '';
@@ -990,7 +990,7 @@ $('#uf-cancel').addEventListener('click', closeUserModal);
 $('#uf-save').addEventListener('click', async () => {
   const body = {
     name: $('#uf-name').value.trim(),
-    email: $('#uf-email').value.trim(),
+    username: $('#uf-username').value.trim(),
   };
   const pass = $('#uf-pass').value;
   if (pass || !editingUserId) body.password = pass;

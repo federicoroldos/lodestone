@@ -595,7 +595,7 @@ app.use(express.json({ limit: '8mb' }));
 
 // --- auth ---
 function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email }, config.jwtSecret, {
+  return jwt.sign({ sub: user.id, username: user.username }, config.jwtSecret, {
     expiresIn: `${config.sessionHours || 168}h`,
   });
 }
@@ -649,12 +649,12 @@ app.post('/api/login', (req, res) => {
   if (blocked) {
     return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
   }
-  const { email, password } = req.body || {};
-  const user = findUserByEmail(email);
+  const { username, password } = req.body || {};
+  const user = findUserByUsername(username);
   if (!user || !verifyPassword(password, user.passwordHash)) {
     const cur = rec || loginAttempts.get(ip);
     if (cur) cur.count++;
-    return res.status(401).json({ error: 'Wrong email or password' });
+    return res.status(401).json({ error: 'Wrong username or password' });
   }
   loginAttempts.delete(ip); // reset on success
   res.json({ token: signToken(user), user: publicUser(user) });
@@ -667,8 +667,8 @@ app.use('/api', (req, res, next) => {
 });
 
 // --- users CRUD (any logged-in user can manage users) ---
-function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
 }
 
 app.get('/api/me', (req, res) => res.json(publicUser(req.user)));
@@ -678,14 +678,14 @@ app.get('/api/users', (req, res) => {
 });
 
 app.post('/api/users', (req, res) => {
-  const { email, name, password } = req.body || {};
-  const e = normalizeEmail(email);
-  if (!e || !e.includes('@')) return res.status(400).json({ error: 'A valid email is required' });
+  const { username, name, password } = req.body || {};
+  const u = normalizeUsername(username);
+  if (!u) return res.status(400).json({ error: 'A username is required' });
   if (typeof password !== 'string' || password.length < 4) {
     return res.status(400).json({ error: 'Password must be at least 4 characters' });
   }
-  if (findUserByEmail(e)) return res.status(400).json({ error: 'That email is already registered' });
-  const user = { id: genId(), email: e, name: String(name || '').trim(), passwordHash: hashPassword(password) };
+  if (findUserByUsername(u)) return res.status(400).json({ error: 'That username is already taken' });
+  const user = { id: genId(), username: u, name: String(name || '').trim(), passwordHash: hashPassword(password) };
   config.users.push(user);
   saveConfig(config);
   res.json({ user: publicUser(user) });
@@ -694,13 +694,13 @@ app.post('/api/users', (req, res) => {
 app.put('/api/users/:id', (req, res) => {
   const user = findUser(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { email, name, password } = req.body || {};
-  if (email !== undefined) {
-    const e = normalizeEmail(email);
-    if (!e || !e.includes('@')) return res.status(400).json({ error: 'A valid email is required' });
-    const clash = findUserByEmail(e);
-    if (clash && clash.id !== user.id) return res.status(400).json({ error: 'That email is already registered' });
-    user.email = e;
+  const { username, name, password } = req.body || {};
+  if (username !== undefined) {
+    const u = normalizeUsername(username);
+    if (!u) return res.status(400).json({ error: 'A username is required' });
+    const clash = findUserByUsername(u);
+    if (clash && clash.id !== user.id) return res.status(400).json({ error: 'That username is already taken' });
+    user.username = u;
   }
   if (name !== undefined) user.name = String(name || '').trim();
   if (password !== undefined && password !== '') {
