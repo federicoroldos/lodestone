@@ -1929,6 +1929,14 @@ app.post('/api/tasks/:id/run', (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// SPA fallback: any GET that isn't an /api route and didn't match a static
+// file is a client-side route (clean URLs like /console, /players) — serve the
+// app shell so deep links and reloads work. /api/* falls through to its 404.
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ---------------------------------------------------------------------------
 // System resources (monitor)
 // ---------------------------------------------------------------------------

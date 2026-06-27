@@ -102,6 +102,13 @@ async function boot() {
   loadPlugins();
   loadConfigsList();
   loadBackups();
+
+  // Restore the section from the clean URL path (deep-link / reload). The
+  // default (servers) is already active in the markup and loaded above, so just
+  // pin the path without pushing a spurious history entry.
+  const initial = pathToView(location.pathname);
+  if (initial !== 'servers') activateView(initial);
+  else history.replaceState({ view: 'servers' }, '', '/servers');
 }
 
 async function loadConfig() {
@@ -309,11 +316,11 @@ function drawSpark(key) {
     const y = h - ((v - min) / range) * (h - 4) - 2;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = '#a855f7';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#2dd4bf';
+  ctx.lineWidth = 1.6;
   ctx.stroke();
   ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-  ctx.fillStyle = 'rgba(168,85,247,0.12)';
+  ctx.fillStyle = 'rgba(45,212,191,0.13)';
   ctx.fill();
 }
 
@@ -355,26 +362,52 @@ const VIEW_TITLES = {
   servers: 'Servers', dashboard: 'Dashboard', metrics: 'Metrics', console: 'Console', players: 'Players', plugins: 'Plugins',
   configs: 'Configs', files: 'Files', tasks: 'Schedules', backups: 'Backups', modrinth: 'Modrinth', map: 'Map', users: 'Users',
 };
+// Switch the visible section + load its data. Driven by the router below.
+function activateView(name) {
+  const item = $(`.nav-item[data-view="${name}"]`);
+  const view = $(`.view[data-view="${name}"]`);
+  if (!item || !view) return;
+  $$('.nav-item').forEach(n => n.classList.remove('active'));
+  $$('.view').forEach(v => v.classList.remove('active'));
+  item.classList.add('active');
+  view.classList.add('active');
+  $('#page-title').textContent = VIEW_TITLES[name] || name;
+  if (name === 'console') requestAnimationFrame(() => scrollConsole(true));
+  if (name === 'servers') loadServers();
+  if (name === 'metrics') loadMetricsView();
+  if (name === 'map') openMap();
+  if (name === 'backups') loadBackups();
+  if (name === 'plugins') loadPlugins();
+  if (name === 'players') loadPlayerLists();
+  if (name === 'users') loadUsers();
+  if (name === 'files') loadFiles('');
+  if (name === 'tasks') loadTasks();
+  if (name === 'modrinth') loadModrinth();
+}
+
+// Map a clean URL path ("/console") to a view name, defaulting to servers.
+function pathToView(p) {
+  const name = (p || '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  return VIEW_TITLES[name] ? name : 'servers';
+}
+
+// Navigate with clean URLs (/console, /players …) via the History API so the
+// browser Back/Forward (and the mouse back/forward buttons) move between
+// sections instead of leaving the app.
+function navigate(name) {
+  const path = '/' + name;
+  if (location.pathname === path) { activateView(name); return; } // same → refresh
+  history.pushState({ view: name }, '', path);
+  activateView(name);
+}
+
 $$('.nav-item').forEach((item) => {
-  item.addEventListener('click', () => {
-    const name = item.dataset.view;
-    $$('.nav-item').forEach(n => n.classList.remove('active'));
-    $$('.view').forEach(v => v.classList.remove('active'));
-    item.classList.add('active');
-    $(`.view[data-view="${name}"]`).classList.add('active');
-    $('#page-title').textContent = VIEW_TITLES[name] || name;
-    if (name === 'console') requestAnimationFrame(() => scrollConsole(true));
-    if (name === 'servers') loadServers();
-    if (name === 'metrics') loadMetricsView();
-    if (name === 'map') openMap();
-    if (name === 'backups') loadBackups();
-    if (name === 'plugins') loadPlugins();
-    if (name === 'players') loadPlayerLists();
-    if (name === 'users') loadUsers();
-    if (name === 'files') loadFiles('');
-    if (name === 'tasks') loadTasks();
-    if (name === 'modrinth') loadModrinth();
-  });
+  item.addEventListener('click', () => navigate(item.dataset.view));
+});
+
+window.addEventListener('popstate', () => {
+  if (!token) return; // ignore while logged out
+  activateView(pathToView(location.pathname));
 });
 
 // ----- servers registry -----
@@ -1271,7 +1304,7 @@ function drawChart(canvasId, points, key, opts) {
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
   ctx.clearRect(0, 0, W, H);
-  const text3 = '#7d8593', grid = 'rgba(255,255,255,0.06)';
+  const text3 = '#6b7689', grid = 'rgba(255,255,255,0.055)';
   if (!points.length) {
     ctx.fillStyle = text3; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
     ctx.fillText('No data yet — samples are collected every minute.', W / 2, H / 2);
@@ -1310,10 +1343,10 @@ function drawMetrics(points) {
   $('#m-mem-last').textContent = last ? fmtMB(last.mem) : '—';
   $('#m-players-last').textContent = last ? String(last.players) : '—';
   $('#m-world-last').textContent = last ? fmtMB(last.world) : '—';
-  drawChart('chart-cpu', points, 'cpu', { color: '#4f8cff', fill: 'rgba(79,140,255,0.13)', fmt: (v) => Math.round(v) + '%', minMax: 100 });
-  drawChart('chart-mem', points, 'mem', { color: '#36c275', fill: 'rgba(54,194,117,0.13)', fmt: fmtMB });
-  drawChart('chart-players', points, 'players', { color: '#f0a23b', fill: 'rgba(240,162,59,0.13)', fmt: (v) => Math.round(v), minMax: 4 });
-  drawChart('chart-world', points, 'world', { color: '#6f9fff', fill: 'rgba(111,159,255,0.13)', fmt: fmtMB });
+  drawChart('chart-cpu', points, 'cpu', { color: '#2dd4bf', fill: 'rgba(45,212,191,0.13)', fmt: (v) => Math.round(v) + '%', minMax: 100 });
+  drawChart('chart-mem', points, 'mem', { color: '#34d399', fill: 'rgba(52,211,153,0.13)', fmt: fmtMB });
+  drawChart('chart-players', points, 'players', { color: '#e879c9', fill: 'rgba(232,121,201,0.13)', fmt: (v) => Math.round(v), minMax: 4 });
+  drawChart('chart-world', points, 'world', { color: '#fbbf24', fill: 'rgba(251,191,36,0.13)', fmt: fmtMB });
 }
 
 async function loadMetricsView() {

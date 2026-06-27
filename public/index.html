@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <base href="/" />
   <title>Lodestone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -36,7 +40,18 @@
 
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="side-logo"><span class="diamond">◆</span> Lodestone</div>
+      <div class="side-logo">
+        <span class="logo-mark">
+          <svg viewBox="0 0 32 32">
+            <rect class="lode-block" x="3.5" y="3.5" width="25" height="25" rx="6.5"/>
+            <circle class="lode-ring" cx="16" cy="16" r="8.5"/>
+            <path class="lode-n" d="M16 8 L18.4 16 L13.6 16 Z"/>
+            <path class="lode-s" d="M16 24 L18.4 16 L13.6 16 Z"/>
+            <circle class="lode-core" cx="16" cy="16" r="1.7"/>
+          </svg>
+        </span>
+        <span class="logo-word">Lodestone</span>
+      </div>
 
       <nav class="nav">
         <div class="nav-group">
@@ -120,24 +135,9 @@
     <!-- Main -->
     <main class="main">
 
-      <!-- Top page header -->
-      <header class="ph">
-        <div class="ph-left">
-          <div id="server-select" class="server-select">
-            <button id="server-select-btn" class="server-select-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
-              <span id="server-select-label">No servers</span>
-              <svg class="server-select-arrow" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <div id="server-select-menu" class="server-select-menu" role="listbox"></div>
-          </div>
-          <h1 id="page-title">Servers</h1>
-        </div>
-        <div class="ph-right">
-          <span id="status-pill" class="pill pill-offline">offline</span>
-          <button id="btn-start" class="btn btn-green btn-sm">Start</button>
-          <button id="btn-restart" class="btn btn-glass btn-sm">Restart</button>
-          <button id="btn-stop" class="btn btn-red btn-sm">Stop</button>
-        </div>
+      <!-- Inline per-section header (scrolls with content) -->
+      <header class="page-head">
+        <h1 id="page-title">Servers</h1>
       </header>
 
       <!-- ===== Servers ===== -->
@@ -471,13 +471,39 @@
           <div class="card-hd"><span class="card-hd-title">Users</span>
             <button id="user-add" class="btn btn-pri btn-sm">+ Add user</button></div>
           <div class="card-bd">
-            <p class="muted gap-b">Anyone listed here can log in with their email and password, and manage this list.</p>
+            <p class="muted gap-b">Anyone listed here can log in with their username and password, and manage this list.</p>
             <div id="users-list" class="file-list"></div>
           </div>
         </div>
       </section>
 
     </main>
+
+    <!-- Floating server-control dock -->
+    <div id="dock" class="dock">
+      <div class="dock-inner">
+        <div id="server-select" class="server-select">
+          <button id="server-select-btn" class="server-select-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="server-select-label">No servers</span>
+            <svg class="server-select-arrow" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div id="server-select-menu" class="server-select-menu" role="listbox"></div>
+        </div>
+        <span id="status-pill" class="pill pill-offline">offline</span>
+        <span class="dock-sep"></span>
+        <div class="dock-actions">
+          <button id="btn-start" class="dock-btn dock-start" type="button" title="Start server" aria-label="Start server">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7V5z" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button id="btn-restart" class="dock-btn dock-restart" type="button" title="Restart server" aria-label="Restart server">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
+          </button>
+          <button id="btn-stop" class="dock-btn dock-stop" type="button" title="Stop server" aria-label="Stop server">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
