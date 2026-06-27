@@ -1307,6 +1307,20 @@ app.get('/api/pick-folder', (req, res) => {
 // Servers registry (register / edit / delete / control)
 // ---------------------------------------------------------------------------
 
+// True if the server has been started at least once. The Minecraft server
+// always writes `server.properties` on its first run (along with the world
+// folder, plugin/mod folders for paper/spigot, etc.), so its presence is the
+// canonical "vanilla structure has been generated" signal we use to warn the
+// user away from modding before a first start.
+function hasGeneratedContent(s) {
+  if (!s || !s.dir) return false;
+  try {
+    return fs.existsSync(path.join(s.dir, 'server.properties'));
+  } catch (_) {
+    return false;
+  }
+}
+
 function serverWithStatus(s) {
   const m = getManager(s.id);
   return {
@@ -1319,6 +1333,7 @@ function serverWithStatus(s) {
     worlds: s.worlds,
     watchdog: s.watchdog,
     active: s.id === config.activeServerId,
+    hasGenerated: hasGeneratedContent(s),
     status: m.statusPayload(),
   };
 }
@@ -2506,6 +2521,43 @@ app.get('/api/create/versions', async (req, res) => {
   }
 });
 
+// Downloads `url` to `destPath`, streaming chunks to disk and reporting
+// progress through `onProgress(received, total)`. Resolves with the number of
+// bytes written. Throws on HTTP failure, on read errors, or when `signal`
+// aborts (the partial file is removed before re-throwing).
+async function downloadToFile(url, destPath, onProgress, signal) {
+  const dl = await fetch(url, { headers: { 'User-Agent': UA }, signal });
+  if (!dl.ok) throw new Error(`Jar download failed: HTTP ${dl.status}`);
+  const total = Number(dl.headers.get('content-length') || 0);
+  const out = fs.createWriteStream(destPath);
+  const reader = dl.body.getReader();
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (signal && signal.aborted) {
+        reader.cancel().catch(() => {});
+        throw new Error('aborted');
+      }
+      received += value.length;
+      if (!out.write(Buffer.from(value))) {
+        await new Promise((r) => out.once('drain', r));
+      }
+      onProgress(received, total);
+    }
+  } catch (err) {
+    out.destroy();
+    try { fs.unlinkSync(destPath); } catch (_) { /* ignore */ }
+    throw err;
+  }
+  await new Promise((resolve, reject) => {
+    out.on('error', reject);
+    out.end(resolve);
+  });
+  return received;
+}
+
 app.post('/api/create', async (req, res) => {
   const body = req.body || {};
   const type = String(body.type || '').toLowerCase();
@@ -2522,22 +2574,65 @@ app.post('/api/create', async (req, res) => {
   if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
     return res.status(400).json({ error: tErr(req.user, 'errors.folderNotEmpty', { path: dir }) });
   }
+
+  // NDJSON stream: each line is a JSON event. Phases:
+  //   {type:"start", phase:"resolving"}
+  //   {type:"phase", phase:"downloading"}
+  //   {type:"download-start", total, filename}
+  //   {type:"progress", received, total}    (repeated while downloading)
+  //   {type:"phase", phase:"installing-forge"}    (forge only)
+  //   {type:"phase", phase:"finalizing"}
+  //   {type:"done", server}                  (terminal)
+  //   {type:"error", error}                  (terminal)
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  const send = (obj) => {
+    if (res.writableEnded) return;
+    try { res.write(JSON.stringify(obj) + '\n'); } catch (_) { /* noop */ }
+  };
+
+  const ac = new AbortController();
+  let clientGone = false;
+  req.on('close', () => {
+    if (res.writableEnded) return;
+    clientGone = true;
+    ac.abort();
+  });
+
+  const cleanup = (jarName) => {
+    try { if (jarName) fs.unlinkSync(path.join(dir, jarName)); } catch (_) { /* ignore */ }
+    try { if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir); } catch (_) { /* ignore */ }
+  };
+
   try {
+    send({ type: 'phase', phase: 'resolving' });
     const { url, filename } = await resolveServerJar(type, mcVersion);
-    const dl = await fetch(url, { headers: { 'User-Agent': UA } });
-    if (!dl.ok) return res.status(502).json({ error: `Jar download failed: HTTP ${dl.status}` });
-    const buf = Buffer.from(await dl.arrayBuffer());
+    if (clientGone) return;
+
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, filename), buf);
+    const jarPath = path.join(dir, filename);
+
+    send({ type: 'phase', phase: 'downloading' });
+    send({ type: 'download-start', total: 0, filename });
+    const received = await downloadToFile(url, jarPath, (rec, total) => {
+      send({ type: 'progress', received: rec, total });
+    }, ac.signal);
+    if (clientGone) { cleanup(filename); return; }
+    log(`Downloaded ${type} jar "${filename}" (${(received / 1048576).toFixed(1)} MB) to ${dir}`);
 
     let jarFilename = filename;
     if (type === 'forge') {
+      send({ type: 'phase', phase: 'installing-forge' });
       await runForgeInstaller(dir, filename);
+      if (clientGone) { cleanup(filename); return; }
       const produced = findForgeServerJar(dir);
       if (!produced) throw new Error('Forge installer finished but no server jar was found in the folder');
       jarFilename = produced;
     }
 
+    send({ type: 'phase', phase: 'finalizing' });
     fs.writeFileSync(path.join(dir, 'eula.txt'), `# Accepted via Lodestone on ${new Date().toISOString()}\neula=true\n`, 'utf8');
 
     let javaArgs = body.javaArgs;
@@ -2560,9 +2655,18 @@ app.post('/api/create', async (req, res) => {
     saveConfig(config);
     getManager(entry.id);
     log(`Created ${type} server "${name}" (${mcVersion}) at ${dir}`);
-    res.json({ ok: true, server: serverWithStatus(entry) });
+
+    send({ type: 'done', server: serverWithStatus(entry) });
+    res.end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (err && (err.name === 'AbortError' || err.message === 'aborted' || clientGone)) {
+      // Client disconnected — keep what we have on disk for inspection but
+      // don't register the server.
+      try { log(`Create aborted by client before completion: ${dir}`); } catch (_) { /* noop */ }
+      return;
+    }
+    send({ type: 'error', error: err.message });
+    res.end();
   }
 });
 
