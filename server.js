@@ -23,13 +23,77 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 const crypto = require('crypto');
-const { spawn, spawnSync } = require('child_process');
+const { spawn, spawnSync, execFile } = require('child_process');
 
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const multer = require('multer');
 const pidusage = require('pidusage');
 const archiver = require('archiver');
+
+// pidusage on Windows shells out to wmic.exe, which Microsoft removed from
+// Windows 11, so every pidusage() call throws `spawn wmic ENOENT` and process
+// CPU/memory silently degrade to 0. procUsage() replaces it on win32 with a
+// Get-CimInstance probe (KernelModeTime / UserModeTime / WorkingSetSize) and
+// falls back to pidusage on other platforms. Results are cached ~1s so the 2s
+// live stats stream and the 60s metrics sampler don't spawn PowerShell each
+// overlap.
+const procUsageHistory = {}; // { [pid]: { ctime, uptime } }
+const procUsageCache = {};    // { [pid]: { ts, val } }
+function procUsage(pid) {
+  return new Promise((resolve) => {
+    if (pid == null || pid < 0) return resolve(null);
+    const now = Date.now();
+    const cached = procUsageCache[pid];
+    if (cached && (now - cached.ts) < 900) return resolve(cached.val);
+
+    const finish = (val) => {
+      if (val) procUsageCache[pid] = { ts: now, val };
+      resolve(val);
+    };
+
+    if (process.platform !== 'win32') {
+      return pidusage(pid).then(finish, () => resolve(null));
+    }
+
+    const psCmd =
+      `Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" | ` +
+      `Select-Object -Property KernelModeTime,UserModeTime,WorkingSetSize | ` +
+      `ConvertTo-Json -Compress`;
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', psCmd],
+      { windowsHide: true, timeout: 5000 },
+      (err, stdout) => {
+        if (err) { delete procUsageCache[pid]; return resolve(null); }
+        let data;
+        try { data = JSON.parse((stdout || '').trim()); } catch (_) { return resolve(null); }
+        if (!data || data.KernelModeTime == null) return resolve(null);
+        const kernel = Number(data.KernelModeTime);
+        const user = Number(data.UserModeTime);
+        const memory = Number(data.WorkingSetSize);
+        // Kernel/User time are in 100-ns ticks; convert to ms.
+        const totalMs = (kernel + user) / 10000;
+        const uptime = Math.floor(os.uptime() || (Date.now() / 1000));
+        const hst = procUsageHistory[pid];
+        let cpu = 0;
+        if (hst) {
+          const dCpu = totalMs - hst.ctime;
+          const dSec = uptime - hst.uptime;
+          if (dSec > 0) cpu = (dCpu / 1000 / dSec) * 100;
+        }
+        procUsageHistory[pid] = { ctime: totalMs, uptime };
+        finish({
+          cpu,
+          memory,
+          pid,
+          ctime: totalMs,
+          timestamp: now,
+        });
+      }
+    );
+  });
+}
 const cron = require('node-cron');
 const jwt = require('jsonwebtoken');
 const i18n = require('./i18n.cjs');
@@ -84,10 +148,28 @@ function findUser(id) {
 }
 function findUserByEmail(email) {
   const e = String(email || '').trim().toLowerCase();
-  return (config.users || []).find((u) => u.email.toLowerCase() === e) || null;
+  return (config.users || []).find((u) => (u.email || '').toLowerCase() === e) || null;
+}
+function findUserByUsername(username) {
+  const u = String(username || '').trim().toLowerCase();
+  if (!u) return null;
+  return (config.users || []).find((x) => (x.username || '').toLowerCase() === u) || null;
+}
+// Find a user by the login field, which can be either an email or a username.
+function findUserByLogin(identifier) {
+  const v = String(identifier || '').trim().toLowerCase();
+  if (!v) return null;
+  if (v.includes('@')) return findUserByEmail(v);
+  return findUserByUsername(v) || findUserByEmail(v);
 }
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name || '', language: i18n.normalizeLang(u.language) };
+  return {
+    id: u.id,
+    email: u.email || '',
+    username: u.username || '',
+    name: u.name || '',
+    language: i18n.normalizeLang(u.language),
+  };
 }
 
 // Migrate a legacy single-server config (serverDir/jar/...) into config.servers[].
@@ -115,16 +197,29 @@ function migrateConfig() {
     changed = true;
   }
   if (!config.backups) {
-    config.backups = { dir: path.join(os.homedir(), 'mc-backups'), retainCount: 10 };
+    config.backups = { dir: path.join(os.homedir(), 'mc-backups'), maxCount: 10, maxSizeMB: 0 };
     changed = true;
-  } else if (!config.backups.dir) {
-    config.backups.dir = path.join(os.homedir(), 'mc-backups');
-    changed = true;
+  } else {
+    // Backwards-compat: older configs used `retainCount` for the per-server
+    // count cap. Rename to `maxCount` and add the new `maxSizeMB` knob (0 =
+    // unlimited, the default).
+    if (config.backups.retainCount !== undefined && config.backups.maxCount === undefined) {
+      config.backups.maxCount = config.backups.retainCount;
+      delete config.backups.retainCount;
+      changed = true;
+    }
+    if (config.backups.maxCount === undefined) { config.backups.maxCount = 10; changed = true; }
+    if (config.backups.maxSizeMB === undefined) { config.backups.maxSizeMB = 0; changed = true; }
+    if (!config.backups.dir) {
+      config.backups.dir = path.join(os.homedir(), 'mc-backups');
+      changed = true;
+    }
   }
   // Migrate the legacy single global password into a first user account.
   if (!Array.isArray(config.users) || !config.users.length) {
     config.users = [{
       id: genId(),
+      username: 'admin',
       email: 'fede212yt@gmail.com',
       name: 'Admin',
       passwordHash: hashPassword(config.password || 'changeme123'),
@@ -732,8 +827,9 @@ function authMiddleware(req, res, next) {
 }
 
 app.post('/api/login', async (req, res) => {
-  const { email, password, clientIp, lang } = req.body || {};
-  const user = findUserByEmail(email);
+  const { email, username, password, clientIp, lang } = req.body || {};
+  const identifier = (username != null && String(username).trim()) || (email != null && String(email).trim()) || '';
+  const user = findUserByLogin(identifier);
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return res.status(401).json({ error: tErr({ language: lang }, 'errors.wrongCredentials') });
   }
@@ -774,6 +870,27 @@ app.use('/api', (req, res, next) => {
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
+}
+// Username rules: 1-32 chars, no leading/trailing whitespace, no '@' (so
+// usernames can't be confused with emails on login). Letters, digits,
+// dot, dash, underscore are fine.
+const USERNAME_RE = /^[A-Za-z0-9._-]{1,32}$/;
+
+function validateIdentifier({ email, username }) {
+  const e = email === undefined ? undefined : normalizeEmail(email);
+  const u = username === undefined ? undefined : normalizeUsername(username);
+  if (e === undefined || e === '') {
+    // only fail if the caller tried to set email and it's malformed
+  } else if (!e.includes('@')) {
+    return { error: 'emailInvalid' };
+  }
+  if (u !== undefined && u !== '' && !USERNAME_RE.test(u)) {
+    return { error: 'usernameInvalid' };
+  }
+  return { email: e, username: u };
+}
 
 app.get('/api/me', (req, res) => res.json(publicUser(req.user)));
 
@@ -795,14 +912,23 @@ app.get('/api/users', (req, res) => {
 });
 
 app.post('/api/users', (req, res) => {
-  const { email, name, password } = req.body || {};
-  const e = normalizeEmail(email);
-  if (!e || !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailRequired') });
+  const { email, username, name, password } = req.body || {};
+  const v = validateIdentifier({ email, username });
+  if (v.error === 'emailInvalid') return res.status(400).json({ error: tErr(req.user, 'errors.emailInvalid') });
+  if (v.error === 'usernameInvalid') return res.status(400).json({ error: tErr(req.user, 'errors.usernameInvalid') });
+  if (!v.email && !v.username) return res.status(400).json({ error: tErr(req.user, 'errors.identifierRequired') });
   if (typeof password !== 'string' || password.length < 4) {
     return res.status(400).json({ error: tErr(req.user, 'errors.passwordTooShort') });
   }
-  if (findUserByEmail(e)) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
-  const user = { id: genId(), email: e, name: String(name || '').trim(), passwordHash: hashPassword(password) };
+  if (v.email && findUserByEmail(v.email)) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
+  if (v.username && findUserByUsername(v.username)) return res.status(400).json({ error: tErr(req.user, 'errors.usernameTaken') });
+  const user = {
+    id: genId(),
+    email: v.email || '',
+    username: v.username || '',
+    name: String(name || '').trim(),
+    passwordHash: hashPassword(password),
+  };
   config.users.push(user);
   saveConfig(config);
   res.json({ user: publicUser(user) });
@@ -811,13 +937,28 @@ app.post('/api/users', (req, res) => {
 app.put('/api/users/:id', (req, res) => {
   const user = findUser(req.params.id);
   if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
-  const { email, name, password } = req.body || {};
+  const { email, username, name, password } = req.body || {};
   if (email !== undefined) {
     const e = normalizeEmail(email);
-    if (!e || !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailRequired') });
-    const clash = findUserByEmail(e);
-    if (clash && clash.id !== user.id) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
+    if (e && !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailInvalid') });
+    if (e) {
+      const clash = findUserByEmail(e);
+      if (clash && clash.id !== user.id) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
+    }
     user.email = e;
+  }
+  if (username !== undefined) {
+    const u = normalizeUsername(username);
+    if (u && !USERNAME_RE.test(u)) return res.status(400).json({ error: tErr(req.user, 'errors.usernameInvalid') });
+    if (u) {
+      const clash = findUserByUsername(u);
+      if (clash && clash.id !== user.id) return res.status(400).json({ error: tErr(req.user, 'errors.usernameTaken') });
+    }
+    user.username = u;
+  }
+  // Make sure the user still has at least one way to log in.
+  if (!user.email && !user.username) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.identifierRequired') });
   }
   if (name !== undefined) user.name = String(name || '').trim();
   if (password !== undefined && password !== '') {
@@ -850,6 +991,31 @@ function publicConfig() {
 }
 
 app.get('/api/config', (req, res) => res.json(publicConfig()));
+
+// Update only the backup-retention settings. After saving, prune every
+// server's existing backups so a newly-lowered limit takes effect right
+// away (not just on the next backup).
+app.put('/api/config/backups', (req, res) => {
+  const b = req.body || {};
+  const toNonNegInt = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.floor(n);
+  };
+  const maxCount = toNonNegInt(b.maxCount);
+  const maxSizeMB = toNonNegInt(b.maxSizeMB);
+  if (maxCount === null || maxSizeMB === null) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.invalidBackupsConfig') });
+  }
+  if (!config.backups) config.backups = {};
+  config.backups.maxCount = maxCount;
+  config.backups.maxSizeMB = maxSizeMB;
+  saveConfig(config);
+  for (const s of config.servers) {
+    try { pruneBackups(slugify(s.name)); } catch (_) { /* noop */ }
+  }
+  res.json({ ok: true, backups: config.backups });
+});
 
 // ---------------------------------------------------------------------------
 // Filesystem browser (for registering a server)
@@ -1508,10 +1674,10 @@ async function sampleMetrics() {
     let cpu = 0, memMB = 0, players = 0;
     if (m && m.isRunning() && m.proc && m.proc.pid) {
       try {
-        const u = await pidusage(m.proc.pid);
+        const u = await procUsage(m.proc.pid);
         const cores = os.cpus().length || 1;
-        cpu = Math.round(Math.min(100, u.cpu / cores));
-        memMB = Math.round(u.memory / 1048576);
+        cpu = Math.round(Math.min(100, (u ? u.cpu : 0) / cores));
+        memMB = Math.round((u ? u.memory : 0) / 1048576);
       } catch (_) { /* process may have died */ }
       players = m.players.size;
     }
@@ -1671,6 +1837,85 @@ app.put('/api/configs/:name', (req, res) => {
   }
 });
 
+// --- config .bak history (list + restore) ---------------------------------
+// The PUT /api/configs/:name route above writes a timestamped .bak on every
+// save. These two routes let the UI surface that history as a "History"
+// dropdown and let the user roll back to any of those snapshots. Both are
+// JWT-protected (via the /api middleware) and reuse resolveEditable so only
+// allowlisted files can be snapshotted/restored. The restore endpoint writes
+// a fresh .bak of the state it's about to overwrite, so the user can undo
+// the restore itself.
+
+const BAK_SUFFIX_RE = /\.[0-9TZ-]+\.bak$/i;
+
+function bakStamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+app.get('/api/configs/:name/backups', (req, res) => {
+  const m = targetManager(req);
+  if (!m) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
+  const full = resolveEditable(m.dir(), req.params.name);
+  if (!full) return res.status(404).json({ error: tErr(req.user, 'errors.fileNotAllowed') });
+  try {
+    const base = path.basename(full);
+    const parentDir = path.dirname(full);
+    const entries = fs.readdirSync(parentDir, { withFileTypes: true });
+    const prefix = `${base}.`;
+    const backups = entries
+      .filter((e) => e.isFile() && e.name.startsWith(prefix) && e.name.endsWith('.bak'))
+      .map((e) => {
+        const stamp = e.name.slice(prefix.length, -'.bak'.length);
+        if (!BAK_SUFFIX_RE.test('.' + stamp)) return null;
+        const fullPath = path.join(parentDir, e.name);
+        let st;
+        try { st = fs.statSync(fullPath); } catch (_) { return null; }
+        return { name: e.name, size: st.size, mtime: new Date(st.mtimeMs).toISOString() };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
+    res.json({ ok: true, backups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/configs/:name/restore', (req, res) => {
+  const m = targetManager(req);
+  if (!m) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
+  const full = resolveEditable(m.dir(), req.params.name);
+  if (!full) return res.status(404).json({ error: tErr(req.user, 'errors.fileNotAllowed') });
+  const backupName = path.basename(String((req.body && req.body.backup) || ''));
+  const base = path.basename(full);
+  // Only allow backups of THIS file, with the matching "<base>.<stamp>.bak"
+  // shape that PUT writes. Reject anything else (path traversal, foreign
+  // files, oddly named snapshots). `path.basename` already strips any
+  // directory part, so a request like ".." or "foo/../bar" can never reach
+  // the disk.
+  if (!backupName || !backupName.startsWith(`${base}.`) || !backupName.endsWith('.bak')
+      || !BAK_SUFFIX_RE.test(backupName.slice(base.length))) {
+    return res.status(400).json({ error: 'invalidBackup' });
+  }
+  const bakPath = path.join(path.dirname(full), backupName);
+  if (!fs.existsSync(bakPath)) return res.status(404).json({ error: 'backupNotFound' });
+  try {
+    let content;
+    if (fs.existsSync(full)) {
+      // Snapshot the state we are about to overwrite so the user can undo
+      // the restore itself (same .bak naming as the PUT route).
+      const stamp = bakStamp();
+      fs.copyFileSync(full, `${full}.${stamp}.bak`);
+      content = fs.readFileSync(full, 'utf8');
+    } else {
+      content = '';
+    }
+    fs.copyFileSync(bakPath, full);
+    res.json({ ok: true, content, note: 'Restored. Restart the server to apply.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- backups ---
 function ensureBackupsDir() {
   if (!fs.existsSync(backupsDir())) fs.mkdirSync(backupsDir(), { recursive: true });
@@ -1739,15 +1984,42 @@ async function createBackup(m) {
   return { name: outName, size: st.size };
 }
 
+// Enforce retention for one server's backups. Always keeps the newest
+// (all[0]); deletes from the oldest end until both the count cap and the
+// total-size cap are satisfied. A limit of 0 means "unlimited" (disabled).
 function pruneBackups(slug) {
-  const retain = config.backups.retainCount || 0;
-  if (retain <= 0) return;
+  const maxCount = Number(config.backups.maxCount) || 0;
+  const maxSizeMB = Number(config.backups.maxSizeMB) || 0;
+  if (maxCount <= 0 && maxSizeMB <= 0) return;
   const all = listBackups().filter((b) => b.slug === slug); // sorted by mtime desc
-  const toDelete = all.slice(retain);
-  for (const b of toDelete) {
+  if (all.length === 0) return;
+  const toDelete = new Set();
+
+  // 1) Count cap: keep the newest maxCount; flag the rest.
+  if (maxCount > 0 && all.length > maxCount) {
+    for (let i = maxCount; i < all.length; i++) toDelete.add(all[i].name);
+  }
+
+  // 2) Size cap: walk oldest-first (end of the list), deleting until the
+  //    surviving backups' total size fits under the cap. Never delete the
+  //    newest (index 0) — the just-created backup is always retained, even
+  //    if on its own it's bigger than the cap (we'd rather keep one fresh
+  //    backup than none).
+  if (maxSizeMB > 0) {
+    const maxBytes = maxSizeMB * 1024 * 1024;
+    let total = all.reduce((s, b) => s + (toDelete.has(b.name) ? 0 : b.size), 0);
+    for (let i = all.length - 1; i > 0 && total > maxBytes; i--) {
+      const b = all[i];
+      if (toDelete.has(b.name)) continue;
+      toDelete.add(b.name);
+      total -= b.size;
+    }
+  }
+
+  for (const name of toDelete) {
     try {
-      fs.unlinkSync(path.join(backupsDir(), b.name));
-      log(`Old backup deleted by retention: ${b.name}`);
+      fs.unlinkSync(path.join(backupsDir(), name));
+      log(`Old backup deleted by retention: ${name}`);
     } catch (_) { /* noop */ }
   }
 }
@@ -2312,10 +2584,10 @@ async function systemStats(m) {
   let proc = { cpu: 0, memory: 0 };
   if (m && m.proc && m.proc.pid) {
     try {
-      const u = await pidusage(m.proc.pid);
-      // pidusage sums CPU across all cores (can exceed 100%); normalize to 0-100
+      const u = await procUsage(m.proc.pid);
+      // procUsage sums CPU across all cores (can exceed 100%); normalize to 0-100
       const cores = os.cpus().length || 1;
-      proc = { cpu: Math.min(100, u.cpu / cores), memory: u.memory };
+      proc = { cpu: Math.min(100, (u ? u.cpu : 0) / cores), memory: u ? u.memory : 0 };
     } catch (_) { /* the process may have died */ }
   }
   const disk = await diskFree(backupsDir() && backupsDir().length ? path.parse(backupsDir()).root : os.homedir());

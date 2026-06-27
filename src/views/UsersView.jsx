@@ -15,7 +15,7 @@ import { Pencil, Trash2, Plus } from 'lucide-react';
 function UserModal({ open, onOpenChange, user, onSaved }) {
   const api = useApi();
   const t = useT();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', username: '', password: '' });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -24,13 +24,14 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
       setForm({
         name: user?.name || '',
         email: user?.email || '',
+        username: user?.username || '',
         password: '',
       });
     }
   }, [open, user]);
 
   async function save() {
-    const body = { name: form.name, email: form.email };
+    const body = { name: form.name, email: form.email, username: form.username };
     if (form.password || !user) body.password = form.password;
     try {
       if (user?.id) await api(`/api/users/${user.id}`, { method: 'PUT', body });
@@ -50,6 +51,10 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
           <div className="space-y-1.5">
             <Label>{t('users.fieldName')}</Label>
             <Input value={form.name} onChange={f('name')} placeholder={t('users.namePlaceholder')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('users.fieldUsername')}</Label>
+            <Input value={form.username} onChange={f('username')} placeholder={t('users.usernamePlaceholder')} autoComplete="off" />
           </div>
           <div className="space-y-1.5">
             <Label>{t('users.fieldEmail')}</Label>
@@ -114,14 +119,18 @@ export function UsersView() {
             <div className="space-y-1.5">
               {users.map(u => {
                 const isSelf = currentUser && u.id === currentUser.id;
+                const primary = u.username || u.email;
+                const secondary = u.username && u.email ? u.email : null;
                 return (
                   <div key={u.id} className="flex items-center gap-3 rounded-md border border-border/60 bg-secondary/20 px-3 py-2.5 hover:bg-secondary/40 transition-colors">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-foreground truncate">{u.email}</span>
+                        <span className="text-sm font-medium text-foreground truncate">{primary}</span>
                         {isSelf && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase bg-primary/15 text-primary border border-primary/25">{t('users.youBadge')}</span>}
                       </div>
-                      <div className="text-xs text-muted-foreground">{u.name || t('common.dashPlaceholder')}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {secondary ? <span>{secondary}</span> : <span>{u.name || t('common.dashPlaceholder')}</span>}
+                      </div>
                     </div>
                     <Button variant="glass" size="xs" onClick={() => { setEditUser(u); setModalOpen(true); }}>
                       <Pencil className="h-3 w-3" />{t('common.edit')}
@@ -148,7 +157,7 @@ export function UsersView() {
         open={!!pendingDelete}
         onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
         title={t('users.deleteTitle')}
-        description={pendingDelete ? t('users.deleteBody', { email: pendingDelete.email, cannotUndo: t('common.cannotUndo') }) : ''}
+        description={pendingDelete ? t('users.deleteBody', { identifier: pendingDelete.username || pendingDelete.email, cannotUndo: t('common.cannotUndo') }) : ''}
         confirmLabel={t('common.delete')}
         destructive
         onConfirm={() => { deleteUser(pendingDelete.id); setPendingDelete(null); }}

@@ -66,7 +66,7 @@ function AddPlayerForm({ kind, onAdd, placeholder, buttonLabel, buttonVariant = 
   const submit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAdd(kind, name.trim()).then(() => setName(''));
+    onAdd(kind, 'add', name.trim()).then(() => setName(''));
   };
   return (
     <form onSubmit={submit} className="flex gap-2 mb-3">
@@ -96,9 +96,9 @@ export function PlayersView() {
 
   async function playerAction(action, name) {
     try {
-      const r = await api(`/api/players/${action}`, { method: 'POST', body: { name } });
-      if (r.error) toast.error(r.error);
-      else toast.success(`${action} → ${name}`);
+      await api(`/api/players/${action}`, { method: 'POST', body: { name } });
+      toast.success(`${action} → ${name}`);
+      if (['ban', 'op', 'deop'].includes(action)) setTimeout(loadLists, 1200);
     } catch (e) { toast.error(e.message); }
   }
 

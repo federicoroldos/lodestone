@@ -1,71 +1,188 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
+import { useServer } from '@/context/ServerContext';
+import { ConfigForm } from '@/components/configs/ConfigForm';
+import { ConfigRaw } from '@/components/configs/ConfigRaw';
+import { FileNav } from '@/components/configs/FileNav';
+import { ValidationPanel } from '@/components/configs/ValidationPanel';
+import { RestartBanner } from '@/components/configs/RestartBanner';
+import { HistoryDropdown } from '@/components/configs/HistoryDropdown';
+import { DiffPreview } from '@/components/configs/DiffPreview';
+import { FILE_GROUPS, groupFile } from '@/configs/groups';
+import { isPropertiesFilename } from '@/lib/configFile';
 import { toast } from 'sonner';
+import { Repeat } from 'lucide-react';
+
+const MODE_KEY = (base) => `lodestone.configs.mode.${base}`;
+
+function readMode(base) {
+  try {
+    const v = localStorage.getItem(MODE_KEY(base));
+    if (v === 'raw' || v === 'friendly') return v;
+  } catch (_) { /* noop */ }
+  return null;
+}
+
+function writeMode(base, mode) {
+  try { localStorage.setItem(MODE_KEY(base), mode); } catch (_) { /* noop */ }
+}
+
+function pickInitial(files) {
+  if (!files.length) return '';
+  const gameplay = FILE_GROUPS.find((g) => g.id === 'gameplay');
+  if (gameplay) {
+    const first = files.find((f) => gameplay.files.map((s) => s.toLowerCase()).includes(f.toLowerCase()));
+    if (first) return first;
+  }
+  return files[0];
+}
 
 export function ConfigsView() {
   const api = useApi();
   const t = useT();
+  const { activeServerId } = useServer();
   const [files, setFiles] = useState([]);
   const [selected, setSelected] = useState('');
-  const [content, setContent] = useState('');
+  const [original, setOriginal] = useState('');
+  const [current, setCurrent] = useState('');
+  const [issues, setIssues] = useState([]);
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingRestart, setPendingRestart] = useState({});
+  const [historyKey, setHistoryKey] = useState(0);
+  const modesRef = useRef({});
 
-  async function loadList() {
+  const loadList = useCallback(async () => {
     try {
-      const { files: f } = await api('/api/configs');
-      setFiles(f);
-      if (f.length) { setSelected(f[0]); loadFile(f[0]); }
+      const { files: list } = await api('/api/configs');
+      setFiles(list);
+      const next = pickInitial(list);
+      setSelected((cur) => (cur && list.includes(cur)) ? cur : next);
     } catch (e) { toast.error(e.message); }
-  }
+  }, [api]);
 
-  async function loadFile(name) {
+  useEffect(() => { loadList(); }, [loadList]);
+  useEffect(() => { loadList(); }, [activeServerId, loadList]);
+
+  const loadFile = useCallback(async (name) => {
+    if (!name) return;
     try {
       const { content: c } = await api(`/api/configs/${encodeURIComponent(name)}`);
-      setContent(c);
+      setOriginal(c);
+      setCurrent(c);
+      setIssues([]);
     } catch (e) { toast.error(e.message); }
-  }
+  }, [api]);
 
-  async function save() {
+  useEffect(() => { loadFile(selected); }, [selected, loadFile]);
+
+  const base = selected;
+  const isProps = isPropertiesFilename(base);
+  const mode = (isProps && (readMode(base) || 'friendly')) || 'raw';
+  const isFriendly = isProps && mode === 'friendly';
+
+  const setMode = (m) => {
+    if (!isProps) return;
+    writeMode(base, m);
+    setCurrent(original);
+    modesRef.current = { ...modesRef.current, [base]: m };
+    setIssues([]);
+  };
+
+  const onChange = (next) => setCurrent(next);
+  const onValidation = (next) => setIssues(next);
+
+  const showBanner = !!pendingRestart[base];
+
+  async function doSave() {
+    setSaving(true);
     try {
-      await api(`/api/configs/${encodeURIComponent(selected)}`, { method: 'PUT', body: { content } });
+      await api(`/api/configs/${encodeURIComponent(base)}`, { method: 'PUT', body: { content: current } });
+      setOriginal(current);
+      setPendingRestart((p) => ({ ...p, [base]: true }));
+      setHistoryKey((k) => k + 1);
       toast.success(t('configs.savedToast'));
-    } catch (e) { toast.error(e.message); }
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  useEffect(() => { loadList(); }, []);
+  const noChanges = current === original;
+  const hasErrors = issues.some((i) => i.severity === 'error');
+  const saveDisabled = noChanges || hasErrors || !selected;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t('configs.title')}</CardTitle>
-        <select
-          className="h-8 rounded-md border border-input bg-background/60 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring/50"
-          value={selected}
-          onChange={e => { setSelected(e.target.value); loadFile(e.target.value); }}
-        >
-          {files.map(f => <option key={f} value={f}>{f}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          {isProps && (
+            <Button
+              variant="glass"
+              size="sm"
+              onClick={() => setMode(isFriendly ? 'raw' : 'friendly')}
+            >
+              <Repeat className="h-3.5 w-3.5" />
+              {isFriendly ? t('configs.switchToRaw') : t('configs.switchToFriendly')}
+            </Button>
+          )}
+          <HistoryDropdown
+            file={selected}
+            refreshKey={historyKey}
+            onRestored={(content) => {
+              setOriginal(content);
+              setCurrent(content);
+              setHistoryKey((k) => k + 1);
+              setPendingRestart((p) => ({ ...p, [base]: true }));
+            }}
+          />
+        </div>
       </CardHeader>
       <CardContent>
-        <p className="text-xs text-muted-foreground mb-3">{(() => {
-          const h = t('configs.hint');
-          const tag = '.bak';
-          const i = h.indexOf(tag);
-          if (i < 0) return h;
-          return <>{h.slice(0, i)}<code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">{tag}</code>{h.slice(i + tag.length)}</>;
-        })()}</p>
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          spellCheck={false}
-          className="w-full h-[52vh] rounded-md border border-input bg-console px-3 py-2 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 resize-y"
-        />
-        <div className="flex items-center gap-3 mt-3">
-          <Button variant="default" size="sm" onClick={save}>{t('common.save')}</Button>
+        {showBanner && (
+          <RestartBanner
+            file={base}
+            onDismiss={() => setPendingRestart((p) => { const n = { ...p }; delete n[base]; return n; })}
+          />
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+          <FileNav
+            files={files}
+            selected={selected}
+            onSelect={(f) => { setSelected(f); setCurrent(''); setIssues([]); }}
+          />
+          <div className="min-w-0">
+            {isFriendly ? (
+              <ConfigForm file={base} original={original} current={current} onChange={onChange} onValidation={onValidation} />
+            ) : (
+              <ConfigRaw value={current} onChange={onChange} filename={base} onValidation={onValidation} />
+            )}
+
+            <ValidationPanel issues={issues} />
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button variant="default" size="sm" onClick={() => setDiffOpen(true)} disabled={saveDisabled}>
+                {saving ? t('common.loading') : t('common.save')}
+              </Button>
+            </div>
+          </div>
         </div>
       </CardContent>
+
+      <DiffPreview
+        open={diffOpen}
+        onOpenChange={setDiffOpen}
+        before={original}
+        after={current}
+        filename={base}
+        onConfirm={async () => { setDiffOpen(false); await doSave(); }}
+      />
     </Card>
   );
 }

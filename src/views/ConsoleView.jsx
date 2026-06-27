@@ -29,10 +29,18 @@ const LEVEL_BAR = {
 
 const MAX_LINES = 1200;
 
+// Strip the leading Minecraft log timestamp ([HH:MM:SS INFO]: or [HH:MM:SS] [thread/LEVEL]: )
+// so our custom timestamp column is the only one shown.
+const MC_TS_RE = /^\[\d{2}:\d{2}:\d{2}(?:\s+\w+)?\](?:\s*\[[^\]]*\])?:\s*/;
+function stripMcTs(text) {
+  return text ? text.replace(MC_TS_RE, '') : text;
+}
+
 function fmtTs(ts) {
   const d = new Date(ts);
-  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0'))
-    .join(':') + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  return [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(n => String(n).padStart(2, '0')).join(':') +
+    '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
 export function ConsoleView({ lines, onCommand }) {
@@ -43,13 +51,22 @@ export function ConsoleView({ lines, onCommand }) {
   const [histIdx, setHistIdx] = useState(-1);
   const [showJump, setShowJump] = useState(false);
   const consoleRef = useRef(null);
+  const prevLenRef = useRef(0);
 
   useEffect(() => {
     if (!consoleRef.current) return;
     const el = consoleRef.current;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
-    setShowJump(!nearBottom);
-    if (autoscroll && nearBottom) el.scrollTop = el.scrollHeight;
+    const prevLen = prevLenRef.current;
+    prevLenRef.current = lines.length;
+
+    // Force-scroll when history loads (initial mount or server switch):
+    // lines jumped from 0 → many, equivalent to main's scrollConsole(true).
+    const historyLoaded = prevLen === 0 && lines.length > 0;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = el.clientHeight > 0 && dist < 120;
+
+    setShowJump(!nearBottom && !historyLoaded);
+    if (historyLoaded || (autoscroll && nearBottom)) el.scrollTop = el.scrollHeight;
   }, [lines, autoscroll]);
 
   const handleSubmit = (e) => {
@@ -104,10 +121,10 @@ export function ConsoleView({ lines, onCommand }) {
         {displayLines.map((line, i) => {
           const level = line.level || detectLevel(line.text) || '';
           return (
-            <div key={i} className="grid grid-cols-[6px_72px_1fr] gap-x-3 items-start">
+            <div key={i} className="grid grid-cols-[6px_80px_1fr] gap-x-5 items-start">
               <span className={cn('h-full w-[3px] self-stretch rounded-full mt-1.5', LEVEL_BAR[level] || 'bg-transparent')} />
-              <span className="text-muted-foreground/40 tabular-nums select-none text-[12.5px]">{fmtTs(line._ts || Date.now())}</span>
-              <span className={cn('whitespace-pre-wrap break-words', `l-${level || 'plain'}`)}>{line.text}</span>
+              <span className="text-muted-foreground/40 tabular-nums select-none text-[12.5px]">{fmtTs(line.ts || Date.now())}</span>
+              <span className={cn('whitespace-pre-wrap break-words', `l-${level || 'plain'}`)}>{stripMcTs(line.text)}</span>
             </div>
           );
         })}
