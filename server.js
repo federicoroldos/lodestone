@@ -24,6 +24,7 @@ const os = require('os');
 const http = require('http');
 const crypto = require('crypto');
 const { spawn, spawnSync, execFile } = require('child_process');
+const zlib = require('zlib');
 
 const express = require('express');
 const { WebSocketServer } = require('ws');
@@ -388,7 +389,7 @@ class ServerManager {
     // manages its own Temurin runtimes per Java major (see runtimes/), so the
     // user never has to install Java by hand. If the right runtime isn't on
     // disk yet we download it first (progress in this console), then launch.
-    const major = requiredJavaMajor(d.mcVersion);
+    const major = Math.max(jarJavaMajor(jarPath) || 0, requiredJavaMajor(d.mcVersion));
     const javaBin = resolveJavaForServer(d, major);
     if (javaBin) return this._launch(javaBin, args);
 
@@ -874,24 +875,14 @@ app.post('/api/login', async (req, res) => {
   // Decide which language to use for this session:
   //   - An explicit `lang` field on the body (manual switcher before login) wins.
   //   - Otherwise, if the user already has a language set, keep it.
-  //   - Otherwise, geolocate the client IP and map country → language, then
-  //     persist that first-time detection on the user record so it sticks.
+  //   - Otherwise, fall back to the default (English).
   let chosen = i18n.normalizeLang(lang);
   if (chosen === i18n.DEFAULT_LANG && i18n.SUPPORTED_LANGS.includes(user.language)) {
     chosen = user.language;
   }
-  if (chosen === i18n.DEFAULT_LANG) {
-    const ip = pickRequestIp(req, clientIp);
-    const geo = await geolocateIp(ip);
-    if (geo && geo.country) {
-      const detected = i18n.countryToLanguage(geo.country);
-      if (detected !== user.language) {
-        user.language = detected;
-        saveConfig(config);
-      }
-      chosen = detected;
-    }
-  }
+  // The panel defaults to English. We only ever switch away from it when the
+  // user explicitly picks a language (this request's `lang`, or one they saved
+  // before) — no IP geolocation guessing, so the default stays predictable.
   user.language = chosen;
 
   res.json({ token: signToken(user), user: publicUser(user) });
@@ -2977,13 +2968,88 @@ const JAVA_EXE = process.platform === 'win32' ? 'java.exe' : 'java';
 // Minecraft version -> required Java major.
 function requiredJavaMajor(mcVersion) {
   const m = /^1\.(\d+)(?:\.(\d+))?/.exec(String(mcVersion || '').trim());
-  if (!m) return 21; // unknown / snapshot -> newest managed LTS
+  // New-scheme versions (e.g. "26.1.2") and snapshots don't match the legacy
+  // "1.x" pattern; they need the newest managed LTS. This is only a floor —
+  // jarJavaMajor() reads the exact requirement from the jar at launch.
+  if (!m) return 25;
   const minor = Number(m[1]);
   const patch = Number(m[2] || 0);
   if (minor <= 16) return 8;                       // 1.16.5 and older
   if (minor < 20) return 17;                       // 1.17 - 1.19
   if (minor === 20) return patch >= 5 ? 21 : 17;   // 1.20.5+ needs Java 21
   return 21;                                       // 1.21+
+}
+
+// --- Jar class-file version probe ----------------------------------------
+// The MC-version heuristic above is a guess; the jar itself states exactly
+// which Java it needs. Java enforces this before running: a class compiled for
+// Java N carries class-file major (N + 44), and a runtime older than N refuses
+// it with UnsupportedClassVersionError. We read the main class's version from
+// the jar (a zip) using only Node built-ins, so server-create never picks a
+// too-old runtime. Returns the Java major, or null if it can't be determined.
+// Note: this is a zip32 reader (fine for any real MC jar; not zip64-aware).
+function zipCentralDir(fd, size) {
+  const tail = Math.min(size, 65557); // max EOCD record + comment
+  const buf = Buffer.alloc(tail);
+  fs.readSync(fd, buf, 0, tail, size - tail);
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) return null;
+  const cdSize = buf.readUInt32LE(eocd + 12);
+  const cdOffset = buf.readUInt32LE(eocd + 16);
+  const cd = Buffer.alloc(cdSize);
+  fs.readSync(fd, cd, 0, cdSize, cdOffset);
+  const entries = new Map();
+  let p = 0;
+  while (p + 46 <= cd.length && cd.readUInt32LE(p) === 0x02014b50) {
+    const method = cd.readUInt16LE(p + 10);
+    const compSize = cd.readUInt32LE(p + 20);
+    const nameLen = cd.readUInt16LE(p + 28);
+    const extraLen = cd.readUInt16LE(p + 30);
+    const commentLen = cd.readUInt16LE(p + 32);
+    const localOff = cd.readUInt32LE(p + 42);
+    const name = cd.toString('utf8', p + 46, p + 46 + nameLen);
+    entries.set(name, { method, compSize, localOff });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+function zipReadEntry(fd, rec) {
+  const lh = Buffer.alloc(30);
+  fs.readSync(fd, lh, 0, 30, rec.localOff);
+  if (lh.readUInt32LE(0) !== 0x04034b50) return null;
+  const dataOff = rec.localOff + 30 + lh.readUInt16LE(26) + lh.readUInt16LE(28);
+  const comp = Buffer.alloc(rec.compSize);
+  fs.readSync(fd, comp, 0, rec.compSize, dataOff);
+  if (rec.method === 0) return comp;                       // stored
+  if (rec.method === 8) return zlib.inflateRawSync(comp);  // deflate
+  return null;
+}
+function jarJavaMajor(jarPath) {
+  let fd;
+  try {
+    const size = fs.statSync(jarPath).size;
+    fd = fs.openSync(jarPath, 'r');
+    const dir = zipCentralDir(fd, size);
+    if (!dir) return null;
+    const mfRec = dir.get('META-INF/MANIFEST.MF');
+    if (!mfRec) return null;
+    const manifest = zipReadEntry(fd, mfRec);
+    if (!manifest) return null;
+    const m = /Main-Class:\s*([^\r\n]+)/i.exec(manifest.toString('utf8'));
+    if (!m) return null;
+    const classRec = dir.get(m[1].trim().replace(/\./g, '/') + '.class');
+    if (!classRec) return null;
+    const cls = zipReadEntry(fd, classRec);
+    if (!cls || cls.length < 8 || cls.readUInt32BE(0) !== 0xcafebabe) return null;
+    return cls.readUInt16BE(6) - 44; // class-file major -> Java major
+  } catch (_) {
+    return null;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch (_) { /* ignore */ } }
+  }
 }
 
 // Path to the java binary of a managed runtime, or null if not installed.

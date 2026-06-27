@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { PromptDialog } from '@/components/shared/PromptDialog';
 import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
@@ -21,6 +22,8 @@ export function FileManagerView() {
   const [editFile, setEditFile] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [showMkdir, setShowMkdir] = useState(false);
 
   async function load(rel) {
     const p = rel ?? path;
@@ -49,10 +52,7 @@ export function FileManagerView() {
       return;
     }
     if (act === 'rename') {
-      const nn = prompt(t('files.renamePrompt'), e.name);
-      if (!nn || nn === e.name) return;
-      api('/api/files/rename', { method: 'POST', body: { path: rel, name: nn } })
-        .then(() => load()).catch(err => toast.error(err.message));
+      setRenameTarget({ rel, name: e.name });
       return;
     }
     if (act === 'delete') {
@@ -61,9 +61,13 @@ export function FileManagerView() {
     }
   }
 
-  async function mkdir() {
-    const name = prompt(t('files.newFolderPrompt'));
-    if (!name) return;
+  function doRename(name) {
+    if (!renameTarget || name === renameTarget.name) return;
+    api('/api/files/rename', { method: 'POST', body: { path: renameTarget.rel, name } })
+      .then(() => load()).catch(err => toast.error(err.message));
+  }
+
+  function doMkdir(name) {
     api('/api/files/mkdir', { method: 'POST', body: { path, name } })
       .then(() => load()).catch(err => toast.error(err.message));
   }
@@ -99,7 +103,7 @@ export function FileManagerView() {
               {t('files.upload')}
               <input type="file" multiple hidden onChange={upload} />
             </label>
-            <Button variant="glass" size="sm" onClick={mkdir}><FolderPlus className="h-3.5 w-3.5" /> {t('files.folder')}</Button>
+            <Button variant="glass" size="sm" onClick={() => setShowMkdir(true)}><FolderPlus className="h-3.5 w-3.5" /> {t('files.folder')}</Button>
             <Button variant="glass" size="xs" onClick={() => load()}><RefreshCw className="h-3 w-3" /></Button>
           </div>
         </CardHeader>
@@ -206,6 +210,26 @@ export function FileManagerView() {
             load();
           } catch (e) { toast.error(e.message); }
         }}
+      />
+
+      <PromptDialog
+        open={!!renameTarget}
+        onOpenChange={(o) => { if (!o) setRenameTarget(null); }}
+        title={t('files.rename')}
+        label={t('files.renamePrompt')}
+        defaultValue={renameTarget?.name || ''}
+        confirmLabel={t('common.save')}
+        onSubmit={doRename}
+      />
+
+      <PromptDialog
+        open={showMkdir}
+        onOpenChange={setShowMkdir}
+        title={t('files.folder')}
+        label={t('files.newFolderPrompt')}
+        placeholder={t('files.newFolderPrompt')}
+        confirmLabel={t('common.add')}
+        onSubmit={doMkdir}
       />
     </>
   );
