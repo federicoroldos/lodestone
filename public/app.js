@@ -35,11 +35,14 @@ function toast(msg, isErr = false) {
   toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
 }
 
+// Returns a human size string *with its unit* (e.g. "512 MB", "1.5 GB"), so
+// callers must not append their own " MB" — a 1.5 GB value was being shown as
+// "1.5 MB" when the unit was hard-coded by the caller.
 function fmtBytes(b) {
   if (b == null) return '—';
   const mb = b / 1048576;
-  if (mb < 1024) return mb.toFixed(0);
-  return (mb / 1024).toFixed(1);
+  if (mb < 1024) return mb.toFixed(0) + ' MB';
+  return (mb / 1024).toFixed(1) + ' GB';
 }
 function fmtUptime(ms) {
   if (!ms) return '';
@@ -116,10 +119,12 @@ function setConn(state) {
   dot.className = 'dot ' + (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : '');
   label.textContent = state === 'ok' ? 'connected' : state === 'bad' ? 'reconnecting…' : 'connecting…';
 }
+let wsRetries = 0;
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
   ws.onopen = () => {
+    wsRetries = 0;
     setConn('ok');
     if (activeServerId) ws.send(JSON.stringify({ type: 'getHistory', serverId: activeServerId }));
   };
@@ -130,7 +135,11 @@ function connectWs() {
   };
   ws.onclose = () => {
     setConn('bad');
-    if (token) setTimeout(connectWs, 2000); // reconnect
+    if (!token) return;
+    // Exponential backoff (2s → 30s) so an invalid token / down server doesn't
+    // hammer the endpoint every 2s forever.
+    const delay = Math.min(30000, 2000 * Math.pow(2, wsRetries++));
+    setTimeout(connectWs, delay);
   };
 }
 
@@ -141,7 +150,7 @@ function handleWs(msg) {
     if (msg.serverId !== activeServerId) return;
     $('#console').innerHTML = '';
     for (const line of msg.lines) appendConsole(line);
-    scrollConsole();
+    scrollConsole(true);
   } else if (msg.type === 'line') {
     if (msg.serverId !== activeServerId) return;
     appendConsole(msg.line);
@@ -171,9 +180,32 @@ function appendConsole(line) {
   // client-side trim
   while (consoleEl.childNodes.length > 1200) consoleEl.removeChild(consoleEl.firstChild);
 }
-function scrollConsole() {
+function scrollConsole(force) {
+  // While the view is hidden the element has no height, so the "near bottom"
+  // check is meaningless — only auto-scroll when it's actually measurable,
+  // unless forced (e.g. right after opening the Console view).
+  if (force || consoleEl.clientHeight === 0) {
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    updateJumpBtn();
+    return;
+  }
   const nearBottom = consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 120;
   if (nearBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+  updateJumpBtn();
+}
+
+// "Jump to latest" floating button: shown only when scrolled away from the
+// bottom (so new output is arriving below the fold).
+const consoleJump = $('#console-jump');
+function updateJumpBtn() {
+  if (!consoleJump) return;
+  const dist = consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight;
+  const away = consoleEl.clientHeight > 0 && dist > 120;
+  consoleJump.classList.toggle('hidden', !away);
+}
+if (consoleJump) {
+  consoleEl.addEventListener('scroll', updateJumpBtn);
+  consoleJump.addEventListener('click', () => scrollConsole(true));
 }
 
 $('#cmd-form').addEventListener('submit', (e) => {
@@ -286,7 +318,7 @@ function drawSpark(key) {
 }
 
 function applyStats(s) {
-  $('#stat-procmem').textContent = fmtBytes(s.procMem);
+  $('#stat-procmem').textContent = fmtBytes(s.procMem); // includes unit (MB/GB)
   $('#stat-proccpu').textContent = (s.procCpu || 0).toFixed(0);
   $('#stat-syscpu').textContent = (s.cpuSystem || 0).toFixed(0);
   $('#stat-sysmem').textContent = (s.memSystemUsed / 1073741824).toFixed(1);
@@ -331,6 +363,7 @@ $$('.nav-item').forEach((item) => {
     item.classList.add('active');
     $(`.view[data-view="${name}"]`).classList.add('active');
     $('#page-title').textContent = VIEW_TITLES[name] || name;
+    if (name === 'console') requestAnimationFrame(() => scrollConsole(true));
     if (name === 'servers') loadServers();
     if (name === 'metrics') loadMetricsView();
     if (name === 'map') openMap();
@@ -708,8 +741,8 @@ async function loadPlugins() {
     for (const p of plugins) {
       const row = document.createElement('div');
       row.className = 'file-row';
-      row.innerHTML = `<span class="file-name">${p.name}</span>
-        <span class="file-meta">${fmtBytes(p.size)} MB</span>
+      row.innerHTML = `<span class="file-name">${escapeHtml(p.name)}</span>
+        <span class="file-meta">${fmtBytes(p.size)}</span>
         <button class="btn btn-sm btn-stop">Delete</button>`;
       row.querySelector('button').addEventListener('click', () => {
         if (!confirm(`Delete ${p.name}?`)) return;
@@ -777,8 +810,8 @@ async function loadBackups() {
       const row = document.createElement('div');
       row.className = 'file-row';
       const date = new Date(b.mtime).toLocaleString();
-      row.innerHTML = `<span class="file-name">${b.name}</span>
-        <span class="file-meta">${fmtBytes(b.size)} MB · ${date}</span>
+      row.innerHTML = `<span class="file-name">${escapeHtml(b.name)}</span>
+        <span class="file-meta">${fmtBytes(b.size)} · ${date}</span>
         <a class="btn btn-sm btn-ghost" href="/api/backups/${encodeURIComponent(b.name)}/download?token=${encodeURIComponent(token)}">⬇</a>
         <button class="btn btn-sm btn-stop">Delete</button>`;
       row.querySelector('button').addEventListener('click', () => {
@@ -796,7 +829,7 @@ $('#backup-now').addEventListener('click', async () => {
   $('#backup-now').disabled = true;
   try {
     const r = await api('/api/backups', { method: 'POST' });
-    $('#backup-status').textContent = `Done: ${r.name} (${fmtBytes(r.size)} MB)`;
+    $('#backup-status').textContent = `Done: ${r.name} (${fmtBytes(r.size)})`;
     toast('Backup created');
     loadBackups();
   } catch (e) {
