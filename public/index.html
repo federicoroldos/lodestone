@@ -198,7 +198,7 @@
               <span class="card-hd-note">last ~5 min</span></div>
             <div class="card-bd">
               <div class="metric">
-                <div class="metric-top"><span>Server RAM</span><b><span id="stat-procmem">0</span> MB</b></div>
+                <div class="metric-top"><span>Server RAM</span><b><span id="stat-procmem">0 MB</span></b></div>
                 <canvas class="spark" id="spark-procmem"></canvas>
               </div>
               <div class="metric">
@@ -269,8 +269,11 @@
 
       <!-- ===== Console ===== -->
       <section class="view" data-view="console">
-        <div class="card no-pad">
+        <div class="card no-pad console-card">
           <div id="console" class="console"></div>
+          <button id="console-jump" class="console-jump hidden" type="button" title="Jump to latest" aria-label="Jump to latest">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+          </button>
           <form id="cmd-form" class="cmd-bar">
             <span class="cmd-prompt">&gt;</span>
             <input type="text" id="cmd-input" placeholder="Type a command (e.g. say hi, list, time set day)" autocomplete="off" />
