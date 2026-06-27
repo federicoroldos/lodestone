@@ -47,6 +47,10 @@
   "map": {
     "url": ""
   },
+  "firewall": {
+    "autoAllow": true,
+    "attempted": false
+  },
   "servers": [],
   "activeServerId": null,
   "users": []

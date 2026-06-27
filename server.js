@@ -23,7 +23,7 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const express = require('express');
 const { WebSocketServer } = require('ws');
@@ -150,6 +150,14 @@ function migrateConfig() {
   }
   if (!config.scheduledRestart || typeof config.scheduledRestart !== 'object') {
     config.scheduledRestart = { enabled: false, cron: '0 4 * * *', warnMinutes: [5, 1] };
+    changed = true;
+  }
+  // First-run convenience: open the panel port in Windows Firewall so other
+  // devices (LAN / Radmin VPN) can reach it. `attempted` flips to true after the
+  // one-time setup so we never re-show the admin prompt; set it back to false to
+  // run it again. Turn off `autoAllow` to opt out entirely.
+  if (!config.firewall || typeof config.firewall !== 'object') {
+    config.firewall = { autoAllow: true, attempted: false };
     changed = true;
   }
   // Migrate the legacy single global password into a first user account.
@@ -2164,10 +2172,57 @@ function printDefaultCredsNotice() {
   console.log('');
 }
 
+// Open the panel port in Windows Firewall on first run so other devices on the
+// LAN or over Radmin VPN can reach it. This needs admin rights, so the actual
+// `netsh` runs via a one-time elevated (UAC) helper; the panel itself stays
+// unprivileged. Best-effort: any failure is logged and never blocks startup.
+function ensureFirewallRule() {
+  if (process.platform !== 'win32') return;
+  const fw = config.firewall || {};
+  if (fw.autoAllow === false || fw.attempted) return;
+  const host = String(config.panelHost || '');
+  if (host === '127.0.0.1' || host === 'localhost' || host === '::1') return; // loopback-only: nothing to open
+  const port = Number(config.panelPort) || 2121;
+  const ruleName = `${String(config.appName || 'Lodestone').replace(/['"]/g, '')} Panel`;
+
+  // Mark the one-time setup as done up front, so we never re-prompt on later
+  // starts even if the user dismisses the UAC dialog.
+  config.firewall = { autoAllow: fw.autoAllow !== false, attempted: true };
+  saveConfig(config);
+
+  let exists = false;
+  try {
+    const check = spawnSync('netsh', ['advfirewall', 'firewall', 'show', 'rule', `name=${ruleName}`], { windowsHide: true });
+    exists = check.status === 0;
+  } catch (_) { /* netsh unavailable: skip silently */ }
+  if (exists) {
+    log(`Firewall rule "${ruleName}" already present; port ${port} is open for remote access.`);
+    return;
+  }
+
+  log(`Adding a Windows Firewall rule for port ${port} (you may see a one-time admin prompt)...`);
+  const inner = `/c netsh advfirewall firewall add rule name="${ruleName}" dir=in action=allow protocol=TCP localport=${port}`;
+  const psCommand = `Start-Process -FilePath cmd.exe -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '${inner}'`;
+  try {
+    const child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCommand], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    child.on('error', (e) => log(`Could not add firewall rule automatically: ${e.message}. Open port ${port} by hand if remote devices can't connect.`));
+    child.on('exit', (code) => {
+      if (code === 0) log(`Firewall rule "${ruleName}" added; port ${port} is open for LAN and Radmin VPN.`);
+      else log(`Firewall rule not added (admin prompt declined?). Remote devices may be blocked until you allow port ${port}.`);
+    });
+  } catch (e) {
+    log(`Could not launch firewall setup: ${e.message}`);
+  }
+}
+
 server.listen(config.panelPort, config.panelHost, () => {
   log(`${config.appName} listening on http://${config.panelHost}:${config.panelPort}`);
   log(`Registered servers: ${config.servers.length}`);
   printDefaultCredsNotice();
+  ensureFirewallRule();
 });
 
 // Clean shutdown
