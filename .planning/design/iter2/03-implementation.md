@@ -1,6 +1,6 @@
-# Iter 2 — Implementation Report
+# Iter 2 - Implementation Report
 
-> Agent C (Implementer) — execution of the 20 changes from
+> Agent C (Implementer) - execution of the 20 changes from
 > `.planning/design/iter2/02-feasibility.md`.
 
 ## Status: complete. Build green. All smells cleared.
@@ -64,7 +64,7 @@ public/assets/index-DxZYeKQq.js       370.97 kB │ gzip: 114.09 kB
 ✓ built in 2.44s
 ```
 
-(Baseline: 1671 modules, 32.47 kB CSS, 328.68 kB JS. Iter 2: 1683 modules, 35.51 kB CSS, 370.97 kB JS — net +12 modules and +3 kB CSS for the new primitives + new Tailwind tokens.)
+(Baseline: 1671 modules, 32.47 kB CSS, 328.68 kB JS. Iter 2: 1683 modules, 35.51 kB CSS, 370.97 kB JS - net +12 modules and +3 kB CSS for the new primitives + new Tailwind tokens.)
 
 ## Grep verification
 
@@ -140,7 +140,7 @@ The new tokens all land in the production CSS bundle:
    (`import { useState, useEffect, useEffect as useEffect2 } from 'react';`).
    Collapsed to a single `useEffect` import. The plan's note
    ("Note: the duplicate `useEffect, useEffect as useEffect2` import
-   at the top of the snippet is a paste error — collapse to a single
+   at the top of the snippet is a paste error - collapse to a single
    `useEffect` import") called this out explicitly. ✓
 2. **FileManagerView line numbers.** The plan references
    `FileManagerView.jsx:54-60`, `:48`, `:63`, `:157-160`, `:179`.
@@ -152,7 +152,7 @@ The new tokens all land in the production CSS bundle:
    `deleteTask` signature with `(id, name)` and the
    `<ConfirmDialog onConfirm>` calls it as
    `deleteTask(pendingDelete.id, pendingDelete.name)`. Applied
-   verbatim — the `name` arg is currently unused inside `deleteTask`
+   verbatim - the `name` arg is currently unused inside `deleteTask`
    (it was only used by the old `confirm` text), but the plan's
    signature is preserved as documented.
 4. **`index.css` `.console-area` whitespace/word-break rules.** The
@@ -192,19 +192,19 @@ The new tokens all land in the production CSS bundle:
   every literal is cosmetic and not done.
 - **`FileManagerView` rename / mkdir `prompt()` → styled dialog.**
   Needs a text-input dialog primitive; out of scope here.
-- **`App.jsx:106` `confirm('Restart the server?')`** — would benefit
+- **`App.jsx:106` `confirm('Restart the server?')`** - would benefit
   from a `<ConfirmDialog destructive>` for consistency with the rest
   of the panel. Plan explicitly defers.
 - **`LoginView` "Forgot password"** + **`Map` view dark-tiles** +
   **light-mode `.light` override** + **OKLCH migration** +
-  **brand identity work** — out of design-system scope, follow-on.
+  **brand identity work** - out of design-system scope, follow-on.
 - **Windowing for the Console** (if `MAX_LINES` raises to 10 000+).
   Defer.
 - **Hover micro-interactions and animation timing system** (coherent
   120 / 200 / 320 ms transitions across the panel). Iter 3.
 - **Tooltip on every Button** (the spec wants tooltips on sidebar
   icons; elsewhere `title=""` HTML attributes are used). Iter 3.
-- **Per-page Skeleton loading patterns and pagination on tables** —
+- **Per-page Skeleton loading patterns and pagination on tables** -
   iter 3.
 
 ## What to verify in a real browser
@@ -215,13 +215,13 @@ The new tokens all land in the production CSS bundle:
 3. Click the new sidebar footer "Collapse" button (or Ctrl/Cmd+B) →
    the sidebar shrinks to 48 px with icons only; hovering each icon
    surfaces a Tooltip with the label; clicking "Log out" still works.
-4. On the Console tab, send a `say hello` command — the new grid
+4. On the Console tab, send a `say hello` command - the new grid
    renders with a left severity bar, a `HH:MM:SS.mmm` timestamp, and
    the command echo.
 5. On Plugins / Tasks / Users / Backups / FileManager, click the
-   trash icon — a styled `<ConfirmDialog destructive>` opens with an
+   trash icon - a styled `<ConfirmDialog destructive>` opens with an
    `AlertTriangle` next to the title and red "Delete" button.
-6. On the login page, type a wrong password — the `<Alert
+6. On the login page, type a wrong password - the `<Alert
    variant="error">` appears between the password field and the Log
    in button (not after the button as before), the button shows a
    `<Loader2>` spinner, and the radial-gradient backdrop is

@@ -1,7 +1,7 @@
 # dependencies
 node_modules/
 
-# local config — contains secrets (jwtSecret, password hashes) and machine paths
+# local config - contains secrets (jwtSecret, password hashes) and machine paths
 config.json
 
 # runtime data

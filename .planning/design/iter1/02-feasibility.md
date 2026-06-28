@@ -1,4 +1,4 @@
-# Iter 1 — Feasibility & Plan (Foundation & Architecture)
+# Iter 1 - Feasibility & Plan (Foundation & Architecture)
 
 > Agent B (Feasibility Reviewer) review of the Agent A investigation at
 > `.planning/design/iter1/01-investigation.md`, grounded in the actual
@@ -15,45 +15,45 @@ to `components/shared/KpiTile.jsx` (the investigator's recommendation).
 **Defer** sidebar collapse-to-icons, console styling, table styling, form
 polish, light mode, full type-scale application, and the rest of the
 investigation's "out of scope" list. The investigation's claim that a full
-type scale should be wired to Tailwind in iter 1 is too aggressive — define
+type scale should be wired to Tailwind in iter 1 is too aggressive - define
 the tokens, don't re-skin every view.
 
 ## Already shipped
 
 These investigation items are already in the codebase, no work needed.
 
-- **shadcn-style HSL tokens wired to Tailwind** — `src/index.css:6-46`
+- **shadcn-style HSL tokens wired to Tailwind** - `src/index.css:6-46`
   (`:root` block) → `tailwind.config.js:28-67` (semantic color mapping).
   Every `bg-card`, `text-muted-foreground`, `border-border`, `ring-ring`
   utility resolves today.
-- **Sidebar grouping with `localStorage` persistence** —
+- **Sidebar grouping with `localStorage` persistence** -
   `src/components/layout/Sidebar.jsx:52-73` reads/writes
   `ls-collapsed-navs`. Pattern is already in place; collapse-to-icons
   should reuse it.
-- **StatusPill with `pulse-ring` animation** —
+- **StatusPill with `pulse-ring` animation** -
   `src/components/shared/StatusPill.jsx:23-37` (StatusDot uses
   `animate-ping` on the inner ring).
-- **KPI tile composition** — `src/views/DashboardView.jsx:10-29`
+- **KPI tile composition** - `src/views/DashboardView.jsx:10-29`
   (icon box + label + value + sub on a card with `border-l-2` accent).
-- **Sparkline-on-canvas with 150-point rolling buffer** —
+- **Sparkline-on-canvas with 150-point rolling buffer** -
   `src/views/DashboardView.jsx:32-58` (DPR-aware, line + area fill).
-- **Header with `backdrop-blur-sm`, 1-px bottom border, `bg-background/80`** —
+- **Header with `backdrop-blur-sm`, 1-px bottom border, `bg-background/80`** -
   `src/components/layout/Header.jsx:21-23`.
 - **ServerSelector with `StatusDot`, `bg-secondary/50` trigger, popover
-  with `shadow-xl`** — `src/components/layout/ServerSelector.jsx:1-70`.
+  with `shadow-xl`** - `src/components/layout/ServerSelector.jsx:1-70`.
 - **9 shadcn-style UI primitives** in `src/components/ui/` (button, card,
   dialog, input, select, tabs, textarea, label, checkbox, badge) using
   `React.forwardRef` + `cva`. The shadcn scaffold is complete.
 - **Sonner toaster** in `src/App.jsx:2-3`. Toast for actions already works.
-- **`fade-up` view transition** — `src/index.css:121-127`, used by
+- **`fade-up` view transition** - `src/index.css:121-127`, used by
   `.view-enter` in `App.jsx:147`.
 - **`@radix-ui/react-tooltip` already in devDependencies**
   (`package.json:41`). The `src/components/ui/tooltip.jsx` file does not
   exist yet, so adding the sidebar collapse needs the shadcn tooltip
-  component — which means deferring collapse to iter 2 unless we add the
+  component - which means deferring collapse to iter 2 unless we add the
   component in this iter (deferred; see below).
 - **KPI tile is currently a local function in DashboardView, not
-  extracted** — `src/components/shared/KpiTile.jsx` does not exist. We
+  extracted** - `src/components/shared/KpiTile.jsx` does not exist. We
   **will** extract it in this iteration.
 
 ## Approved for this iteration
@@ -64,82 +64,82 @@ described in the "Concrete change list" section below.
 
 ### Token plumbing (`src/index.css` + `tailwind.config.js`)
 
-- **Color refresh** — `:root` at `src/index.css:6-46`. Slightly deeper
+- **Color refresh** - `:root` at `src/index.css:6-46`. Slightly deeper
   `--background` and `--card`, lift `--foreground` from 68% to 78% for
   body-text legibility, decouple `--accent` from `--primary`, tighten
   `--border`/`--input`. (No new visual identity; just a denser, less
   gray-on-gray feel.)
-- **New semantic status tokens** — `--status-online / -warn / -offline
+- **New semantic status tokens** - `--status-online / -warn / -offline
   / -error` in `:root` at `src/index.css:6-46` (added). Wire to
   `tailwind.config.js` `theme.extend.colors.status` (use the
   `<alpha-value>` placeholder so `bg-status-online/10` and
   `border-l-status-online` both work).
-- **Chart palette** — `--chart-1..5` in `:root`. Wire to
+- **Chart palette** - `--chart-1..5` in `:root`. Wire to
   `tailwind.config.js` `theme.extend.colors.chart`. Sparkline and
   disk-bar will consume these.
-- **Sidebar token family** — `--sidebar / --sidebar-foreground /
+- **Sidebar token family** - `--sidebar / --sidebar-foreground /
   --sidebar-border / --sidebar-primary / --sidebar-accent` in `:root`.
   Wire to `tailwind.config.js` `theme.extend.colors.sidebar`. The
   Sidebar surface uses these.
-- **Border-radius full scale** — `--radius-sm / md / lg / xl / 2xl /
+- **Border-radius full scale** - `--radius-sm / md / lg / xl / 2xl /
   pill` in `:root`. Extend `tailwind.config.js` `theme.extend.borderRadius`
   (today only `sm/md/lg` are mapped at `tailwind.config.js:63-67`).
-- **Shadow scale** — `--shadow-xs / -sm / -md / -lg / -xl` in `:root`.
+- **Shadow scale** - `--shadow-xs / -sm / -md / -lg / -xl` in `:root`.
   Wire to `tailwind.config.js` `theme.extend.boxShadow`. Today only
-  `shadow-sm` (Card) and `shadow-xl` (ServerSelector) are used —
+  `shadow-sm` (Card) and `shadow-xl` (ServerSelector) are used -
   this is the foundation for future modals/popovers.
-- **Motion tokens** — `--ease-out / --ease-in / --ease-in-out /
+- **Motion tokens** - `--ease-out / --ease-in / --ease-in-out /
   --ease-spring`, `--duration-fast / -base / -slow` in `:root`.
   Replace the bare `ease-out` strings at `src/index.css:103, 117, 126`
   with `var(--ease-out)`. Do not sweep every component.
-- **Type-scale foundation tokens** — `--text-xs / -sm / -base / -md /
+- **Type-scale foundation tokens** - `--text-xs / -sm / -base / -md /
   -lg / -xl / -2xl` and `--tracking-tight / -normal / -wide` in
   `:root`. **Do not** override `tailwind.config.js` `theme.fontSize`
-  in this iteration — that would re-skin every view. Define the
+  in this iteration - that would re-skin every view. Define the
   tokens and the tracking, leave view-level application to iter 2.
   (The exception: update the body font-size to `var(--text-base)`
-  in `src/index.css:54` — this is one line and barely visible
+  in `src/index.css:54` - this is one line and barely visible
   because most elements use explicit `text-*` classes.)
-- **Drop `--sidebar-w` CSS variable** — `src/index.css:130-132`.
+- **Drop `--sidebar-w` CSS variable** - `src/index.css:130-132`.
   After the flex refactor, the sidebar width lives in Tailwind, not
   a CSS var.
 
 ### Page shell (`src/App.jsx`)
 
-- **Sidebar + header out of `position: fixed` into flex** — `App.jsx:136-151`.
+- **Sidebar + header out of `position: fixed` into flex** - `App.jsx:136-151`.
   Header becomes `sticky top-0 z-40` (still always visible during scroll,
   but composed in the flex column). Main drops `margin-left: var(--sidebar-w)`
   and the `pt-[calc(3.5rem+1.25rem)]` magic number → plain `p-5`.
 
 ### Sidebar (`src/components/layout/Sidebar.jsx`)
 
-- **Use `--sidebar` token for the surface** — `Sidebar.jsx:77`.
+- **Use `--sidebar` token for the surface** - `Sidebar.jsx:77`.
   `bg-[hsl(200_6%_8%)]` → `bg-sidebar`.
-- **Use `--sidebar-border` for the right divider** — `Sidebar.jsx:77`.
+- **Use `--sidebar-border` for the right divider** - `Sidebar.jsx:77`.
   `border-r border-border` → `border-r border-sidebar-border`.
-- **Add 2-px left accent on the active item** — `Sidebar.jsx:105-110`.
+- **Add 2-px left accent on the active item** - `Sidebar.jsx:105-110`.
   Today the active item is `bg-primary/10 text-primary`; add a 2-px
   left bar in `border-l-2 border-l-primary` to make the active state
   read against the hover state's `bg-secondary`. The 2-px bar reads
   even when the background is muted.
-- **Bump group-label opacity floor** — `Sidebar.jsx:93`. `text-muted-foreground/60`
+- **Bump group-label opacity floor** - `Sidebar.jsx:93`. `text-muted-foreground/60`
   → `text-muted-foreground/70` so the label reads on the slightly
   darker `--sidebar` surface.
-- **Tighten nav-item vertical padding** — `Sidebar.jsx:106`. `py-2` →
+- **Tighten nav-item vertical padding** - `Sidebar.jsx:106`. `py-2` →
   `py-1.5` to match Linear/Pterodactyl density.
 
 ### Header (`src/components/layout/Header.jsx`)
 
-- **Switch from `position: fixed` to `sticky`** — `Header.jsx:20-23`.
+- **Switch from `position: fixed` to `sticky`** - `Header.jsx:20-23`.
   `fixed right-0 top-0 z-40 ...` + inline `left: 'var(--sidebar-w)'`
   → `sticky top-0 z-40 ...` (the left offset is no longer needed
   because the header is a flex child).
-- **Add `tracking-tight` to the view title** — `Header.jsx:26`.
+- **Add `tracking-tight` to the view title** - `Header.jsx:26`.
   `text-sm font-semibold` → `text-sm font-semibold tracking-tight`.
 
 ### ServerSelector (`src/components/layout/ServerSelector.jsx`)
 
-- **Tokenize the trigger background** — `ServerSelector.jsx:28`. Keep
+- **Tokenize the trigger background** - `ServerSelector.jsx:28`. Keep
   the existing `bg-secondary/50` effect, but the new `--secondary` and
   `--muted` token values (`200 6% 16%` / `200 6% 18%`) make the
   selector visually distinct from the header. No change needed if the
@@ -148,36 +148,36 @@ described in the "Concrete change list" section below.
 
 ### StatusPill (`src/components/shared/StatusPill.jsx`)
 
-- **Replace `green-500/10` / `orange-500/10` palette with status tokens** —
+- **Replace `green-500/10` / `orange-500/10` palette with status tokens** -
   `StatusPill.jsx:3-8`. Switch the four status variant strings to
   `bg-status-online/10 text-status-online border border-status-online/20`,
   `bg-status-warn/10 text-status-warn border border-status-warn/20`, etc.
-- **Tokenize StatusDot** — `StatusPill.jsx:30-35`. `bg-green-400` →
+- **Tokenize StatusDot** - `StatusPill.jsx:30-35`. `bg-green-400` →
   `bg-status-online`, `bg-orange-400` → `bg-status-warn`, ping layer
   the same.
 
 ### Badge primitive (`src/components/ui/badge.jsx`)
 
-- **Same tokenization as StatusPill** — `badge.jsx:11-16`. Replace
+- **Same tokenization as StatusPill** - `badge.jsx:11-16`. Replace
   `green-500/orange-500/red-400` palette with the new status tokens.
   Mechanical change, in scope because the badge is a UI primitive
   consumed across views.
 
 ### Button primitive (`src/components/ui/button.jsx`)
 
-- **Tokenize the `success` variant** — `button.jsx:23-24`.
+- **Tokenize the `success` variant** - `button.jsx:23-24`.
   `bg-green-600/20 text-green-400 border border-green-600/40` →
   `bg-status-online/10 text-status-online border border-status-online/20`.
-- **Tokenize the `destructive` variant text color** — `button.jsx:14`.
+- **Tokenize the `destructive` variant text color** - `button.jsx:14`.
   `text-red-300` → `text-status-error` (the `352 70% 60%` fresh red is
   readable on a 15% destructive bg and looks consistent with the
   badge's destructive variant).
-- **Tokenize the `glass` variant** — `button.jsx:25-26`.
+- **Tokenize the `glass` variant** - `button.jsx:25-26`.
   `bg-white/[0.04]` → `bg-foreground/[0.04]` (same effect, named token).
 
 ### Modrinth compat pill (`src/views/ModrinthView.jsx`)
 
-- **Tokenize the orange fallback** — `ModrinthView.jsx:69`.
+- **Tokenize the orange fallback** - `ModrinthView.jsx:69`.
   `bg-orange-500/10 text-orange-400 border-orange-500/25` →
   `bg-status-warn/10 text-status-warn border-status-warn/25`. One-line
   mechanical change.
@@ -190,25 +190,25 @@ described in the "Concrete change list" section below.
   want a "Total X" / "Active Y" tile in iter 2), the file location
   already exists, and the cost is one file move with a small prop
   refactor.
-- **Replace the `colorClass` string prop with a typed `tone` prop** —
+- **Replace the `colorClass` string prop with a typed `tone` prop** -
   `KpiTile.jsx` (new). Values: `'online' | 'warn' | 'error' | 'primary'
   | 'neutral'`. The tile maps tone → both the left-border color and
   the icon-box tint via the new status tokens. Cleaner API than a
   free-form Tailwind class string.
-- **Drop the icon-box `border border-border bg-muted/40`** — new
+- **Drop the icon-box `border border-border bg-muted/40`** - new
   `KpiTile.jsx`. The "use fewer borders" refactoring rule from the
   investigation. Icon box becomes a flat `rounded-md bg-{tone}/10
   text-{tone}` 40×40 square.
 - **Replace `border-l-green-500` / `border-l-orange-500` /
-  `border-l-red-500` with status tokens** — `DashboardView.jsx:111-120`
+  `border-l-red-500` with status tokens** - `DashboardView.jsx:111-120`
   (the `kpiColor` and `tpsColor` maps). Becomes `border-l-status-online`,
   `border-l-status-warn`, `border-l-status-error`.
-- **Tokenize the sparkline stroke and fill** —
+- **Tokenize the sparkline stroke and fill** -
   `DashboardView.jsx:52, 56`. Replace hardcoded `#5EC9A0` and
   `rgba(94,201,160,0.08)` by reading `--chart-1` at draw time:
   `const c = getComputedStyle(document.documentElement).getPropertyValue('--chart-1').trim();
    ctx.strokeStyle = \`hsl(\${c})\`; ctx.fillStyle = \`hsl(\${c} / 0.08)\`;`
-- **Tokenize the disk-usage bar thresholds** — `DashboardView.jsx:199-201`.
+- **Tokenize the disk-usage bar thresholds** - `DashboardView.jsx:199-201`.
   `bg-red-500` → `bg-status-error`, `bg-orange-500` → `bg-status-warn`,
   `bg-primary` → keep.
 
@@ -218,50 +218,50 @@ Each item gets an iteration number (2 = components/density, 3 = polish/
 micro) and a one-line reason. **Be ruthless**: the next iterations
 will pick these up.
 
-- **Sidebar collapse-to-icons (220 px ↔ 48 px)** — **Iter 2**. Needs
+- **Sidebar collapse-to-icons (220 px ↔ 48 px)** - **Iter 2**. Needs
   the shadcn `tooltip.jsx` component (`@radix-ui/react-tooltip` is
   installed but `src/components/ui/tooltip.jsx` does not exist),
   localStorage state machine, width/opacity transitions. Too much
   behavior change for a "foundation" pass. The 220-px fixed surface
   in this iter is fine.
-- **Console view styling pass** — **Iter 2**. Terminal-grade
+- **Console view styling pass** - **Iter 2**. Terminal-grade
   typography, level-color tokens for `l-info / l-warn / l-error /
   l-chat / l-cmd`, `.console-area` background token (`#0e1012` →
   `--console-bg`). Out of scope per the brief.
-- **Table styling system** — **Iter 2**. Servers / Players / Modrinth
+- **Table styling system** - **Iter 2**. Servers / Players / Modrinth
   / Backups / Tasks / Users / Configs all need column widths, sticky
   headers, row hover, status column conventions. The `text-red-400`
   / `text-green-400` literal icons in `ServersView.jsx:396,398,401`
   and similar in other views stay untouched.
-- **Form/Input refinements** — **Iter 2**. Focus-ring token, error
+- **Form/Input refinements** - **Iter 2**. Focus-ring token, error
   state, help text. The `input.jsx` and `select.jsx` primitives are
   not touched in iter 1.
-- **Modal/Dialog visual pass** — **Iter 2**. The current `dialog.jsx`
+- **Modal/Dialog visual pass** - **Iter 2**. The current `dialog.jsx`
   uses generic shadcn defaults; iter 2 aligns shadows, radii, and
   spacing with the new scale.
-- **Empty states, loading skeletons, error states per view** — **Iter 3**.
+- **Empty states, loading skeletons, error states per view** - **Iter 3**.
   The `EmptyState` component stays as-is.
-- **Map view refinement** — **Iter 3**. Leaflet dark-tile theming
+- **Map view refinement** - **Iter 3**. Leaflet dark-tile theming
   is not a design-system concern.
-- **Login visual refresh** — **Iter 3** (or never — out of brief). The
+- **Login visual refresh** - **Iter 3** (or never - out of brief). The
   single-card-on-grid layout works.
-- **Light-mode token override under `.light`** — **Iter 3+**. The
+- **Light-mode token override under `.light`** - **Iter 3+**. The
   brief says dark-only; defining an unused `.light` block now is
   low value. The CSS vars are already theme-agnostic HSL components,
   so a future override is a 30-line addition.
-- **OKLCH migration** — **v2**. HSL matches shadcn v1 and the rest
+- **OKLCH migration** - **v2**. HSL matches shadcn v1 and the rest
   of the file. No urgency.
-- **Logo and brand identity** — **Never in this project** unless
+- **Logo and brand identity** - **Never in this project** unless
   asked. The `◆` glyph is a placeholder; out of scope per the brief.
-- **Full type-scale application (override Tailwind `fontSize`)** —
+- **Full type-scale application (override Tailwind `fontSize`)** -
   **Iter 2**. The investigation's proposed scale (`xs = 11px`,
   `sm = 12.5px`, `base = 13.5px`, …) would re-skin every `text-sm`
   and `text-xs` literal across 14 view files. Define the tokens
   now, sweep later. Iter 2 audits each view against the new scale.
-- **Tracking tokens applied to other headings** — **Iter 2**. Only
+- **Tracking tokens applied to other headings** - **Iter 2**. Only
   the Header title uses `tracking-tight` in this iter; no other
   headings change.
-- **Spacing-scale sweep** — **Iter 2**. The `--space-{n}` tokens
+- **Spacing-scale sweep** - **Iter 2**. The `--space-{n}` tokens
   are defined but Tailwind's default 4-px scale already covers
   them. The only "sweep" in this iter is removing the
   `pt-[calc(3.5rem+1.25rem)]` magic number, which is a one-line
@@ -273,38 +273,38 @@ These are in the investigation but should not happen.
 
 - **Move the `pulse-dot::after` rule's `ease-out` to `var(--ease-out)`
   AND also use it for a Radix Tooltip-driven "tooltip on the sidebar
-  icon"** — Reject. Tooltips need the `tooltip.jsx` component, which
+  icon"** - Reject. Tooltips need the `tooltip.jsx` component, which
   is not in scope for "Foundation & Architecture". The motion-token
   substitution happens, the tooltip doesn't.
-- **Add a `surface-elevated` token for the `glass` button variant** —
+- **Add a `surface-elevated` token for the `glass` button variant** -
   Reject. The investigation suggests this, but the cleanest move is
   to use the existing `bg-foreground/[0.04]` pattern (text-color at
-  4% alpha) — no new token needed.
+  4% alpha) - no new token needed.
 - **Add `--ls-orange` and `--ls-accent-dim` aliases for the new
-  status tokens** — Reject. The `--ls-*` tokens are used by
+  status tokens** - Reject. The `--ls-*` tokens are used by
   `.console-area` for level colors (info / warn / error / chat) and
   have different semantics from the new `--status-*` tokens (online /
   warn / offline / error). Keep both. Console view is iter 2.
 - **Decouple `--accent` and immediately use `bg-accent` for hover
-  states in the sidebar** — Reject. The investigation proposes
+  states in the sidebar** - Reject. The investigation proposes
   `--accent: 199 60% 22%` (a blue-grey) for hover/selected rows.
   Decoupling is in scope; using it for a new hover pattern is
   iter-2 work. The change ships the token, not the new hover.
-- **Bump Header `z-40` to `z-50`** — Reject. The investigation flags
+- **Bump Header `z-40` to `z-50`** - Reject. The investigation flags
   this as "quick check". No popover is leaking in the current code,
   so no change.
 - **Pill-radius for every status element (`$border-radius: 50rem`
-  in Kuma style)** — Reject. Kuma goes too far; pill rounding is
+  in Kuma style)** - Reject. Kuma goes too far; pill rounding is
   for status pills only, not buttons, inputs, or cards.
 
 ## Concrete change list
 
 Every change has a file, a one-line summary, and a copy-pasteable
-before/after. **Do not** invent variations — apply these exactly.
+before/after. **Do not** invent variations - apply these exactly.
 
 ---
 
-### Change 1 — Token refresh in `src/index.css`
+### Change 1 - Token refresh in `src/index.css`
 
 - **File**: `src/index.css`
 - **What**: Replace the `:root` block (lines 6-46) with the new token
@@ -316,7 +316,7 @@ before/after. **Do not** invent variations — apply these exactly.
 
 ```css
   :root {
-    /* shadcn/ui dark theme — refreshed for Lodestone */
+    /* shadcn/ui dark theme - refreshed for Lodestone */
     --background: 200 6% 8.5%;
     --foreground: 210 4% 78%;
 
@@ -448,7 +448,7 @@ before/after. **Do not** invent variations — apply these exactly.
 
 ---
 
-### Change 2 — Wire status / chart / sidebar colors + shadow + spacing in `tailwind.config.js`
+### Change 2 - Wire status / chart / sidebar colors + shadow + spacing in `tailwind.config.js`
 
 - **File**: `tailwind.config.js`
 - **What**: Add `status`, `chart`, `sidebar` color entries with the
@@ -544,7 +544,7 @@ The existing `keyframes` and `animation` blocks remain untouched.
 
 ---
 
-### Change 3 — Page shell refactor in `src/App.jsx`
+### Change 3 - Page shell refactor in `src/App.jsx`
 
 - **File**: `src/App.jsx`
 - **What**: Drop the `position: fixed` + `margin-left: var(--sidebar-w)`
@@ -576,7 +576,7 @@ The existing `keyframes` and `animation` blocks remain untouched.
 
 ---
 
-### Change 4 — Sidebar surface tokens + active bar + density
+### Change 4 - Sidebar surface tokens + active bar + density
 
 - **File**: `src/components/layout/Sidebar.jsx`
 - **What**: Use the new `--sidebar` / `--sidebar-border` tokens; add
@@ -612,7 +612,7 @@ the implementer can copy the whole line.)
 
 ---
 
-### Change 5 — Header sticky + tracking-tight title
+### Change 5 - Header sticky + tracking-tight title
 
 - **File**: `src/components/layout/Header.jsx`
 - **What**: Switch from `position: fixed` (with `left: var(--sidebar-w)`)
@@ -631,7 +631,7 @@ the implementer can copy the whole line.)
 
 ---
 
-### Change 6 — ServerSelector trigger surface
+### Change 6 - ServerSelector trigger surface
 
 - **File**: `src/components/layout/ServerSelector.jsx`
 - **What**: No structural change. The trigger's `bg-secondary/50` is
@@ -642,7 +642,7 @@ the implementer can copy the whole line.)
 
 ---
 
-### Change 7 — StatusPill tokenization
+### Change 7 - StatusPill tokenization
 
 - **File**: `src/components/shared/StatusPill.jsx`
 - **What**: Replace the four `STATUS_VARIANTS` strings with
@@ -680,10 +680,10 @@ export function StatusDot({ status = 'offline', className }) {
 
 ---
 
-### Change 8 — Badge tokenization
+### Change 8 - Badge tokenization
 
 - **File**: `src/components/ui/badge.jsx`
-- **What**: Same token swap as `StatusPill` — palette colors → status
+- **What**: Same token swap as `StatusPill` - palette colors → status
   tokens.
 - **Snippet**: Replace the `variant` map at `badge.jsx:9-17`:
 
@@ -701,7 +701,7 @@ export function StatusDot({ status = 'offline', className }) {
 
 ---
 
-### Change 9 — Button success / destructive / glass tokenization
+### Change 9 - Button success / destructive / glass tokenization
 
 - **File**: `src/components/ui/button.jsx`
 - **What**: Replace the `success`, `destructive`, and `glass` variant
@@ -729,7 +729,7 @@ unchanged.
 
 ---
 
-### Change 10 — Modrinth compat pill tokenization
+### Change 10 - Modrinth compat pill tokenization
 
 - **File**: `src/views/ModrinthView.jsx`
 - **What**: One-line swap on the orange fallback pill.
@@ -741,7 +741,7 @@ unchanged.
 
 ---
 
-### Change 11 — Extract KpiTile to `src/components/shared/KpiTile.jsx`
+### Change 11 - Extract KpiTile to `src/components/shared/KpiTile.jsx`
 
 - **File (new)**: `src/components/shared/KpiTile.jsx`
 - **What**: New file. Move the `KpiTile` function out of
@@ -794,7 +794,7 @@ export function KpiTile({ icon: Icon, label, value, sub, tone = 'neutral' }) {
 
 ---
 
-### Change 12 — Dashboard: tokenize kpi/tps colors, sparkline, disk bar; import the new KpiTile
+### Change 12 - Dashboard: tokenize kpi/tps colors, sparkline, disk bar; import the new KpiTile
 
 - **File**: `src/views/DashboardView.jsx`
 - **What**:
@@ -925,7 +925,7 @@ The implementer and reviewer both check these.
    if `--chart-1` is changed in DevTools).
 10. Disk bar uses `bg-status-error` / `bg-status-warn` /
     `bg-primary` (no Tailwind palette reds/oranges).
-11. All 14 views still render — `npm run dev` boots,
+11. All 14 views still render - `npm run dev` boots,
     `http://localhost:2121` loads, each sidebar entry
     navigates, and the dashboard shows a four-tile KPI strip
     with tokenized left borders and a sparkline that picks up

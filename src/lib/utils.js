@@ -6,7 +6,7 @@ export function cn(...inputs) {
 }
 
 export function fmtBytes(b) {
-  if (b == null) return '—';
+  if (b == null) return '-';
   const mb = b / 1048576;
   if (mb < 1024) return mb.toFixed(0) + ' MB';
   return (mb / 1024).toFixed(1) + ' GB';
@@ -32,7 +32,7 @@ export function fmtBytesRaw(b) {
 }
 
 export function fmtMB(mb) {
-  if (mb == null) return '—';
+  if (mb == null) return '-';
   if (mb < 1024) return Math.round(mb) + ' MB';
   return (mb / 1024).toFixed(1) + ' GB';
 }

@@ -33,7 +33,7 @@ function FieldRow({ schema, value, onChange, t }) {
     control = (
       <Select value={value || ''} onValueChange={onChange}>
         <SelectTrigger id={`cfg-${schema.key}`}>
-          <SelectValue placeholder="—" />
+          <SelectValue placeholder="-" />
         </SelectTrigger>
         <SelectContent>
           {(schema.options || []).map((opt) => (

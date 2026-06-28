@@ -164,7 +164,7 @@ function CurseForgeBrowser({ compat }) {
   const [error, setError] = useState('');
 
   // Default the loader filter to the active server's loader (if it's a mod
-  // loader). Leave empty on non-mod servers — the user can still pick one
+  // loader). Leave empty on non-mod servers - the user can still pick one
   // and browse, they just won't have an installable jar.
   useEffect(() => {
     if (compat?.canMods && compat.loaders?.length) {
