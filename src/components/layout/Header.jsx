@@ -17,7 +17,7 @@ const VIEW_KEYS = {
   users:    'nav.users',
 };
 
-export function Header({ currentView }) {
+export function Header({ currentView, onServerSwitch }) {
   const t = useT();
 
   return (
@@ -32,7 +32,7 @@ export function Header({ currentView }) {
         }}
       />
       <div className="flex items-center gap-3">
-        <ServerSelector />
+        <ServerSelector onSwitch={onServerSwitch} />
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {currentView && VIEW_KEYS[currentView] ? t(VIEW_KEYS[currentView]) : currentView}
         </h1>
