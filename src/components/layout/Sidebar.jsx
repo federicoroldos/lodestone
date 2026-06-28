@@ -4,6 +4,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { BrandMark } from '@/components/shared/BrandMark';
 import { SettingsDialog } from '@/components/shared/SettingsDialog';
 import { useAuth } from '@/context/AuthContext';
+import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
 import { cn } from '@/lib/utils';
 import {
@@ -12,43 +13,46 @@ import {
   ChevronDown, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 
+// `requiresServer` items are greyed out and unclickable until a server exists
+// (everything they show reads a server). `adminOnly` items are hidden from
+// operators entirely.
 const NAV_GROUPS = [
   {
     key: 'nav.groupOverview',
     items: [
       { view: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
       { view: 'servers',   labelKey: 'nav.servers',   icon: Server },
-      { view: 'metrics',   labelKey: 'nav.metrics',   icon: BarChart2 },
+      { view: 'metrics',   labelKey: 'nav.metrics',   icon: BarChart2, requiresServer: true },
     ],
   },
   {
     key: 'nav.groupOperate',
     items: [
-      { view: 'console', labelKey: 'nav.console', icon: Terminal },
-      { view: 'players', labelKey: 'nav.players', icon: Users },
-      { view: 'map',     labelKey: 'nav.map',     icon: Map },
+      { view: 'console', labelKey: 'nav.console', icon: Terminal, requiresServer: true },
+      { view: 'players', labelKey: 'nav.players', icon: Users, requiresServer: true },
+      { view: 'map',     labelKey: 'nav.map',     icon: Map, requiresServer: true },
     ],
   },
   {
     key: 'nav.groupContent',
     items: [
-      { view: 'plugins',  labelKey: 'nav.plugins',  icon: Puzzle },
-      { view: 'modrinth', labelKey: 'nav.modrinth', icon: Package },
-      { view: 'files',    labelKey: 'nav.files',    icon: FolderOpen },
-      { view: 'configs',  labelKey: 'nav.configs',  icon: FileText },
+      { view: 'plugins',  labelKey: 'nav.plugins',  icon: Puzzle, requiresServer: true },
+      { view: 'modrinth', labelKey: 'nav.modrinth', icon: Package, requiresServer: true },
+      { view: 'files',    labelKey: 'nav.files',    icon: FolderOpen, requiresServer: true },
+      { view: 'configs',  labelKey: 'nav.configs',  icon: FileText, requiresServer: true },
     ],
   },
   {
     key: 'nav.groupMaintenance',
     items: [
-      { view: 'backups', labelKey: 'nav.backups',   icon: Database },
-      { view: 'tasks',   labelKey: 'nav.schedules', icon: Clock },
+      { view: 'backups', labelKey: 'nav.backups',   icon: Database, requiresServer: true },
+      { view: 'tasks',   labelKey: 'nav.schedules', icon: Clock, requiresServer: true },
     ],
   },
   {
     key: 'nav.groupSettings',
     items: [
-      { view: 'users', labelKey: 'nav.users', icon: User },
+      { view: 'users', labelKey: 'nav.users', icon: User, adminOnly: true },
     ],
   },
 ];
@@ -72,8 +76,11 @@ function getInitialMode() {
 }
 
 export function Sidebar({ currentView, onNavigate }) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const { servers } = useServer();
   const t = useT();
+  const isAdmin = user?.role === 'admin';
+  const hasServers = (servers?.length || 0) > 0;
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [mode, setMode] = useState(getInitialMode);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -114,9 +121,13 @@ export function Sidebar({ currentView, onNavigate }) {
 
   const isCollapsed = mode === 'collapsed';
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ls-sidebar-w', isCollapsed ? '48px' : '220px');
+  }, [isCollapsed]);
+
   return (
     <aside className={cn(
-      'sticky top-0 z-10 flex h-screen shrink-0 flex-col overflow-hidden self-start border-r border-sidebar-border bg-sidebar transition-[width] duration-200 relative',
+      'fixed top-0 left-0 z-20 flex h-screen flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200',
       isCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
     )}>
       {/* Stone-tile texture, slightly darker than the main background */}
@@ -141,7 +152,10 @@ export function Sidebar({ currentView, onNavigate }) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => {
+          const items = group.items.filter((it) => !(it.adminOnly && !isAdmin));
+          if (items.length === 0) return null;
+          return (
           <div key={group.key} className="mb-1">
             {!isCollapsed && (
               <button
@@ -153,35 +167,44 @@ export function Sidebar({ currentView, onNavigate }) {
                 <ChevronDown className={cn('h-3 w-3 transition-transform', collapsed.has(group.key) && '-rotate-90')} />
               </button>
             )}
-            {(isCollapsed || !collapsed.has(group.key)) && group.items.map(({ view, labelKey, icon: Icon }) => {
+            {(isCollapsed || !collapsed.has(group.key)) && items.map(({ view, labelKey, icon: Icon, requiresServer }) => {
               const label = t(labelKey);
+              const disabled = requiresServer && !hasServers;
               const itemBtn = (
                 <button
                   key={view}
                   type="button"
-                  onClick={() => onNavigate(view)}
+                  onClick={() => { if (!disabled) onNavigate(view); }}
+                  aria-disabled={disabled}
                   className={cn(
                     'flex w-full items-center rounded-md border-l-2 py-1.5 text-sm transition-colors duration-75',
                     isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
-                    currentView === view
-                      ? 'border-l-primary bg-primary/10 text-primary'
-                      : 'border-l-transparent text-muted-foreground hover:bg-primary/15 hover:text-primary'
+                    disabled
+                      ? 'border-l-transparent text-muted-foreground/35 cursor-not-allowed'
+                      : currentView === view
+                        ? 'border-l-primary bg-primary/10 text-primary'
+                        : 'border-l-transparent text-muted-foreground hover:bg-primary/15 hover:text-primary'
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {!isCollapsed && <span className="truncate">{label}</span>}
                 </button>
               );
-              if (!isCollapsed) return itemBtn;
+              // Show a tooltip when collapsed (just the label) or when disabled
+              // (explain that a server is needed). Otherwise the bare button.
+              if (!isCollapsed && !disabled) return itemBtn;
               return (
                 <Tooltip key={view}>
                   <TooltipTrigger asChild>{itemBtn}</TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>{label}</TooltipContent>
+                  <TooltipContent side="right" sideOffset={8}>
+                    {disabled ? t('nav.requiresServerTip') : label}
+                  </TooltipContent>
                 </Tooltip>
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer */}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/useApi';
@@ -12,7 +12,8 @@ import { RestartBanner } from '@/components/configs/RestartBanner';
 import { HistoryDropdown } from '@/components/configs/HistoryDropdown';
 import { DiffPreview } from '@/components/configs/DiffPreview';
 import { FILE_GROUPS, groupFile } from '@/configs/groups';
-import { hasFriendlyForm } from '@/lib/configFile';
+import { hasFriendlyForm, parseProperties } from '@/lib/configFile';
+import { SERVER_PROPERTIES_SCHEMA } from '@/configs/schema';
 import { toast } from 'sonner';
 import { Repeat } from 'lucide-react';
 
@@ -116,6 +117,26 @@ export function ConfigsView() {
   const hasErrors = issues.some((i) => i.severity === 'error');
   const saveDisabled = noChanges || hasErrors || !selected;
 
+  // Destructive-change warnings for the save summary. Any schema entry
+  // with a `warning` i18n key contributes a line when its value actually
+  // differs between the file on disk and the form, so the user is
+  // reminded before e.g. changing the world type (which regenerates the
+  // world on next start).
+  const diffWarnings = useMemo(() => {
+    if (noChanges) return [];
+    const a = parseProperties(original || '');
+    const b = parseProperties(current || '');
+    const out = [];
+    for (const s of SERVER_PROPERTIES_SCHEMA) {
+      if (!s.warning) continue;
+      if ((a.values[s.key] ?? '') !== (b.values[s.key] ?? '')) {
+        const w = t(s.warning);
+        if (w && w !== s.warning) out.push(w);
+      }
+    }
+    return out;
+  }, [original, current, noChanges, t]);
+
   return (
     <Card>
       <CardHeader>
@@ -181,6 +202,7 @@ export function ConfigsView() {
         before={original}
         after={current}
         filename={base}
+        warnings={diffWarnings}
         onConfirm={async () => { setDiffOpen(false); await doSave(); }}
       />
     </Card>
