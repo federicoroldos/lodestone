@@ -2661,32 +2661,11 @@ app.post('/api/files/upload', fileUpload.array('files'), (req, res) => {
 
 const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'fabric', 'forge', 'neoforge'];
 
-// Minecraft version -> the NeoForge version "branch" (leading portion of the
-// version string, e.g. "21.4" for NeoForge 21.4.x). One branch per MC release.
-// 1.20.1 is not listed: the early NeoForge-as-Forge 1.20.1 (47.x) builds live
-// under the legacy `net.neoforged:forge` path, which is the same artifact as
-// Forge 1.20.1 — users wanting 1.20.1 modded can pick the Forge option. Add a
-// new entry when a new NeoForge branch ships for a new MC version.
-const NEOFORGE_BRANCHES = {
-  '1.20.2': '20.2',
-  '1.20.3': '20.3',
-  '1.20.4': '20.4',
-  '1.20.5': '20.5',
-  '1.20.6': '20.6',
-  '1.21': '21.0',
-  '1.21.1': '21.1',
-  '1.21.2': '21.2',
-  '1.21.3': '21.3',
-  '1.21.4': '21.4',
-  '1.21.5': '21.5',
-  '1.21.6': '21.6',
-  '1.21.7': '21.7',
-  '1.21.8': '21.8',
-  '1.21.9': '21.9',
-  '1.21.10': '21.10',
-  '1.21.11': '21.11',
-};
-const NEOFORGE_METADATA_URL = 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml';
+// NeoForge versions are listed dynamically from the same API neoforged.net's
+// own download page uses (no hardcoded MC->version table to maintain). The
+// API returns every NeoForge build oldest-first; we derive the Minecraft
+// version each one targets and keep stable releases only.
+const NEOFORGE_API_URL = 'https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge';
 
 async function fetchJson(url) {
   const r = await fetch(url, { headers: { 'User-Agent': UA } });
@@ -2802,43 +2781,59 @@ async function findLatestForgeCoordinate(mcVersion) {
   return null;
 }
 
-// Fetches the NeoForge Maven version list and returns the MC versions
-// advertised in NEOFORGE_BRANCHES that have at least one build, newest-first.
+// Derives the Minecraft version a NeoForge build targets, mirroring the exact
+// algorithm neoforged.net uses on its download page. Old scheme (major < 26):
+// "21.1.234" -> "1.21.1" (MC is "1." + the first two version numbers). New
+// scheme (major >= 26): "26.1.2.71" -> "26.1.2", dropping a trailing ".0"
+// third component so "26.1.0.5" -> "26.1".
+function mcVersionFromNeoForge(version) {
+  const s = version.split('.');
+  if (parseInt(s[0], 10) >= 26) {
+    let mc = `${s[0]}.${s[1]}`;
+    if (s[2] !== '0') mc += `.${s[2]}`;
+    return mc;
+  }
+  return `1.${s[0]}.${s[1]}`;
+}
+
+// A NeoForge build is a stable release only when it carries no pre-release or
+// snapshot suffix: digits-and-dots only. Drops "-beta"/"-alpha", "+snapshot"
+// builds, and April Fools versions like "0.25w14craftmine.x-beta".
+function isStableNeoForge(version) {
+  return /^\d+\.\d+\.\d+(\.\d+)?$/.test(version);
+}
+
+// Newest-first numeric ordering of dotted version strings ("21.1.234",
+// "26.1.2.76", "1.21.11", ...).
+function compareVersionDesc(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pb[i] || 0) - (pa[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+// Fetches every NeoForge build and returns the stable release strings only.
+async function fetchStableNeoForgeVersions() {
+  const data = await fetchJson(NEOFORGE_API_URL);
+  return (data.versions || []).filter(isStableNeoForge);
+}
+
+// Returns the MC versions that have at least one stable NeoForge build,
+// newest-first.
 async function listNeoForgeVersions() {
-  const xml = await fetchText(NEOFORGE_METADATA_URL);
-  const present = new Set([...xml.matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]));
-  return Object.keys(NEOFORGE_BRANCHES)
-    .filter((mc) => {
-      const branch = NEOFORGE_BRANCHES[mc];
-      // The branch counts as "available" if any version starts with the branch prefix.
-      for (const v of present) {
-        if (v === branch || v.startsWith(branch + '.')) return true;
-      }
-      return false;
-    })
-    .sort((a, b) => {
-      const pa = a.split('.').map(Number);
-      const pb = b.split('.').map(Number);
-      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-        const d = (pb[i] || 0) - (pa[i] || 0);
-        if (d) return d;
-      }
-      return 0;
-    });
+  const stable = await fetchStableNeoForgeVersions();
+  const mc = new Set(stable.map(mcVersionFromNeoForge));
+  return Array.from(mc).sort(compareVersionDesc);
 }
 
 async function findLatestNeoForgeCoordinate(mcVersion) {
-  const branch = NEOFORGE_BRANCHES[mcVersion];
-  if (!branch) return null;
-  const xml = await fetchText(NEOFORGE_METADATA_URL);
-  const matches = [...xml.matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]);
-  // Maven is sorted oldest-first within a branch (with a few non-deterministic
-  // appends near the tail), so the last matching entry is the newest build.
-  let latest = null;
-  for (const v of matches) {
-    if (v === branch || v.startsWith(branch + '.')) latest = v;
-  }
-  return latest;
+  const stable = await fetchStableNeoForgeVersions();
+  const matching = stable.filter((v) => mcVersionFromNeoForge(v) === mcVersion);
+  if (!matching.length) return null;
+  return matching.sort(compareVersionDesc)[0];
 }
 
 // Returns [latest..oldest] of MC versions installable for a type.
@@ -2935,15 +2930,15 @@ function runForgeInstaller(dir, installerFilename, label = 'Forge') {
 }
 
 // Picks the runnable server jar the Forge / NeoForge installer produced.
-// Modern Forge writes "<mc>-<forge>.jar" alongside the installer; modern
-// NeoForge writes just "<neoforge-version>.jar" (e.g. "21.1.66.jar" or, for
-// pre-release builds, "21.6.20-beta.jar"); older Forge releases used
+// Modern Forge writes "<mc>-<forge>.jar" alongside the installer; NeoForge
+// writes just "<neoforge-version>.jar" — "21.1.66.jar" (old scheme) or
+// "26.1.2.76.jar" (new four-part scheme); older Forge releases used
 // "minecraftforge-universal-<coord>.jar".
 function findForgeServerJar(dir) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jar'));
   const modern = files.find((f) => /^\d+\.\d+(?:\.\d+)?-\d+\.\d+\.\d+(\.\d+)?\.jar$/.test(f));
   if (modern) return modern;
-  const neo = files.find((f) => /^\d+(\.\d+){1,2}(-beta)?\.jar$/.test(f));
+  const neo = files.find((f) => /^\d+(\.\d+){1,3}\.jar$/.test(f));
   if (neo) return neo;
   const universal = files.find((f) => f.includes('minecraftforge-universal'));
   if (universal) return universal;
