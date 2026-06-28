@@ -114,9 +114,13 @@ export function Sidebar({ currentView, onNavigate }) {
 
   const isCollapsed = mode === 'collapsed';
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ls-sidebar-w', isCollapsed ? '48px' : '220px');
+  }, [isCollapsed]);
+
   return (
     <aside className={cn(
-      'sticky top-0 z-10 flex h-screen shrink-0 flex-col overflow-hidden self-start border-r border-sidebar-border bg-sidebar transition-[width] duration-200 relative',
+      'fixed top-0 left-0 z-20 flex h-screen flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200',
       isCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
     )}>
       {/* Stone-tile texture, slightly darker than the main background */}

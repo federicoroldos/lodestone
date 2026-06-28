@@ -325,16 +325,19 @@
   transition: opacity 700ms var(--ease-out);
 }
 
-/* AppShell fades in on mount, with a grayscale-to-color filter so the
-   handoff from the (grayscale) login screen doesn't snap. */
+/* AppShell fades in on mount. The previous version ended with
+   `filter: grayscale(0%)` and `animation-fill-mode: both`, which left a
+   permanent `filter` on the outer flex container. A non-`none` filter on
+   an ancestor of a `position: sticky` element makes that ancestor the
+   containing block and prevents the sticky child from sticking relative
+   to the viewport, so the main sidebar scrolled out with the page. The
+   fade-in is preserved via opacity only. */
 @keyframes app-shell-enter {
   from {
     opacity: 0;
-    filter: grayscale(100%);
   }
   to {
     opacity: 1;
-    filter: grayscale(0%);
   }
 }
 .app-shell-enter {

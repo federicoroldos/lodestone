@@ -37,7 +37,7 @@ function FieldRow({ schema, value, onChange, t }) {
         </SelectTrigger>
         <SelectContent>
           {(schema.options || []).map((opt) => (
-            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+            <SelectItem key={opt} value={opt}>{schema.labels?.[opt] || opt}</SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -94,7 +94,7 @@ export function ConfigForm({ file, original, current, onChange, onValidation }) 
   const t = useT();
   const isProps = isPropertiesFilename(file);
 
-  const parsed = useMemo(() => parseProperties(original), [original]);
+  const parsed = useMemo(() => parseProperties(current || original), [current, original]);
   const modeled = new Map(SERVER_PROPERTIES_SCHEMA.map((s) => [s.key, s]));
 
   const issues = useMemo(() => {

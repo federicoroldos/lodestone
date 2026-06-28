@@ -437,6 +437,7 @@
         "diffShowUnchanged": "Show unchanged",
         "diffSave": "Save changes",
         "diffCancel": "Cancel",
+        "diffWarnings": "Heads up",
         "historyTitle": "History",
         "historyEmpty": "No previous versions.",
         "historyRestore": "Restore",
@@ -472,7 +473,7 @@
           "enable-command-block": { "label": "Command blocks", "description": "Allow command blocks placed in the world to run commands." },
           "level-name":           { "label": "World folder name", "description": "Folder under the server root that holds the world data. Renaming creates a fresh world." },
           "level-seed":           { "label": "World seed", "description": "Seed used to generate the world. Leave blank to use the current seed." },
-          "level-type":           { "label": "World type", "description": "Shape of the world: default, flat, amplified, large biomes, etc." },
+          "level-type":           { "label": "World type", "description": "Shape of the world: default, flat, amplified, large biomes, etc.", "warning": "Changing the world type will regenerate the world on the next start and cannot be undone." },
           "generate-structures":  { "label": "Generate structures", "description": "Whether villages, temples, strongholds and other structures spawn in new chunks." }
         }
       },
@@ -1002,6 +1003,7 @@
         "diffShowUnchanged": "Mostrar líneas sin cambios",
         "diffSave": "Guardar cambios",
         "diffCancel": "Cancelar",
+        "diffWarnings": "Atención",
         "historyTitle": "Historial",
         "historyEmpty": "Sin versiones anteriores.",
         "historyRestore": "Restaurar",
@@ -1037,7 +1039,7 @@
           "enable-command-block": { "label": "Bloques de comandos", "description": "Permite que los bloques de comandos colocados en el mundo ejecuten comandos." },
           "level-name":           { "label": "Nombre de la carpeta del mundo", "description": "Carpeta dentro de la raíz del servidor que contiene los datos del mundo. Renombrarla crea un mundo nuevo." },
           "level-seed":           { "label": "Semilla del mundo", "description": "Semilla usada para generar el mundo. Déjala en blanco para usar la semilla actual." },
-          "level-type":           { "label": "Tipo de mundo", "description": "Forma del mundo: por defecto, plano, amplificado, biomas grandes, etc." },
+          "level-type":           { "label": "Tipo de mundo", "description": "Forma del mundo: por defecto, plano, amplificado, biomas grandes, etc.", "warning": "Cambiar el tipo de mundo regenerará el mundo en el próximo inicio y no se puede deshacer." },
           "generate-structures":  { "label": "Generar estructuras", "description": "Si aldeas, templos, fortalezas y otras estructuras aparecen en los chunks nuevos." }
         }
       },

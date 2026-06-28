@@ -12,6 +12,23 @@ function splitLines(text) {
   return String(text).split('\n').map((s) => s.replace(/\r$/, ''));
 }
 
+// Java .properties escape sequences the real server.properties actually
+// uses: \: / \= / \\ keep the separator/backslash out of the value, and
+// \n/\r/\t are the standard whitespace escapes. We don't decode the long
+// \uXXXX form (it never shows up in vanilla server.properties); an
+// unrecognised backslash is left as-is so nothing is lost silently.
+function unescapeValue(s) {
+  if (s == null) return s;
+  return String(s).replace(/\\([\\=:nrt])/g, (_, c) => {
+    switch (c) {
+      case 'n': return '\n';
+      case 'r': return '\r';
+      case 't': return '\t';
+      default:  return c;
+    }
+  });
+}
+
 export function parseProperties(text) {
   const order = [];
   const values = {};
@@ -29,7 +46,7 @@ export function parseProperties(text) {
       continue;
     }
     const key = m[1].trim();
-    const value = m[2];
+    const value = unescapeValue(m[2]);
     if (!(key in values)) order.push(key);
     values[key] = value;
     if (pending.length) {
