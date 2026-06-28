@@ -3,19 +3,38 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { PasswordStrength } from '@/components/shared/PasswordStrength';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
-import { Pencil, Trash2, Plus } from 'lucide-react';
+import { Pencil, Trash2, Plus, ShieldCheck, Wrench } from 'lucide-react';
 
-function UserModal({ open, onOpenChange, user, onSaved }) {
+function RoleBadge({ role }) {
+  const t = useT();
+  const admin = role === 'admin';
+  const Icon = admin ? ShieldCheck : Wrench;
+  return (
+    <span className={
+      'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase border ' +
+      (admin
+        ? 'bg-primary/15 text-primary border-primary/25'
+        : 'bg-secondary/40 text-muted-foreground border-border/60')
+    }>
+      <Icon className="h-2.5 w-2.5" />
+      {admin ? t('users.roleAdmin') : t('users.roleOperator')}
+    </span>
+  );
+}
+
+function UserModal({ open, onOpenChange, user, currentUser, onSaved }) {
   const api = useApi();
   const t = useT();
-  const [form, setForm] = useState({ name: '', email: '', username: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', username: '', password: '', role: 'operator' });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -26,13 +45,19 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
         email: user?.email || '',
         username: user?.username || '',
         password: '',
+        role: user?.role || 'operator',
       });
     }
   }, [open, user]);
 
+  const isSelf = user && currentUser && user.id === currentUser.id;
+
   async function save() {
     const body = { name: form.name, email: form.email, username: form.username };
     if (form.password || !user) body.password = form.password;
+    // Never send a role change for your own account (the server rejects it
+    // anyway); editing yourself can only touch profile fields and password.
+    if (!isSelf) body.role = form.role;
     try {
       if (user?.id) await api(`/api/users/${user.id}`, { method: 'PUT', body });
       else await api('/api/users', { method: 'POST', body });
@@ -60,9 +85,26 @@ function UserModal({ open, onOpenChange, user, onSaved }) {
             <Label>{t('users.fieldEmail')}</Label>
             <Input type="email" value={form.email} onChange={f('email')} placeholder={t('users.emailPlaceholder')} autoComplete="off" />
           </div>
+          {!isSelf && (
+            <div className="space-y-1.5">
+              <Label>{t('users.fieldRole')}</Label>
+              <NativeSelect
+                value={form.role}
+                onChange={f('role')}
+                options={[
+                  { value: 'operator', label: t('users.roleOperator') },
+                  { value: 'admin', label: t('users.roleAdmin') },
+                ]}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {form.role === 'admin' ? t('users.roleAdminDesc') : t('users.roleOperatorDesc')}
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>{user ? t('users.fieldPasswordEdit') : t('users.fieldPasswordNew')}</Label>
             <Input type="password" value={form.password} onChange={f('password')} placeholder={t('users.passwordPlaceholder')} autoComplete="new-password" />
+            <PasswordStrength password={form.password} />
           </div>
           {error && <p className="text-xs text-status-error">{error}</p>}
         </div>
@@ -126,6 +168,7 @@ export function UsersView() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground truncate">{primary}</span>
+                        <RoleBadge role={u.role} />
                         {isSelf && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase bg-primary/15 text-primary border border-primary/25">{t('users.youBadge')}</span>}
                       </div>
                       <div className="text-xs text-muted-foreground truncate">
@@ -151,6 +194,7 @@ export function UsersView() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         user={editUser}
+        currentUser={currentUser}
         onSaved={(msg) => { toast.success(msg); load(); }}
       />
       <ConfirmDialog
