@@ -21,3 +21,6 @@ Thumbs.db
 
 # one-off debug scripts with hardcoded local paths
 smoke-test.mjs
+
+# CodeGraph index (local build artifact)
+.codegraph/

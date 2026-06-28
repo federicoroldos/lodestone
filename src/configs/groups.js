@@ -5,18 +5,21 @@
 // case-insensitive to stay forgiving of the file system.
 //
 // 'advanced' is the catch-all bucket for editable text configs that
-// don't have a hand-curated group: .xml files (Forge / modded servers)
-// and any .properties file other than server.properties. They are
-// always edited in raw mode.
+// don't have a hand-curated group: .xml files (Forge / modded servers),
+// any .properties file other than server.properties, and any .json file
+// that isn't one of the curated world lists (ops/whitelist/bans). They
+// are always edited in raw mode.
 
 const ADVANCED_PROPS = new Set(['server.properties']);
 const YAML_EXTS = ['.yml', '.yaml'];
 const XML_EXTS = ['.xml'];
 const PROPS_EXTS = ['.properties'];
+const JSON_EXTS = ['.json'];
 
 function isAdvancedFile(name) {
   const lower = String(name || '').toLowerCase();
   if (XML_EXTS.some((ext) => lower.endsWith(ext))) return true;
+  if (JSON_EXTS.some((ext) => lower.endsWith(ext))) return true;
   if (PROPS_EXTS.some((ext) => lower.endsWith(ext)) && !ADVANCED_PROPS.has(lower)) return true;
   return false;
 }
@@ -41,6 +44,11 @@ const GROUPS_BY_FILE = (() => {
 
 export function groupFile(name) {
   if (!name) return 'other';
+  // Curated groups win first, so the well-known world lists (ops.json,
+  // whitelist.json, banned-*.json) stay in 'world' instead of being
+  // swept into the advanced .json catch-all.
+  const curated = GROUPS_BY_FILE.get(String(name).toLowerCase());
+  if (curated) return curated;
   if (isAdvancedFile(name)) return 'advanced';
-  return GROUPS_BY_FILE.get(String(name).toLowerCase()) || 'other';
+  return 'other';
 }
