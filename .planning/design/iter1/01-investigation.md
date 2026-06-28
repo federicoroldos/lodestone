@@ -1,4 +1,4 @@
-# Iter 1 — Investigation Report (Foundation & Architecture)
+# Iter 1 - Investigation Report (Foundation & Architecture)
 
 > **Important discrepancy with the brief.** The brief describes Lodestone as a
 > vanilla-HTML/CSS/JS, no-build, no-framework project with
@@ -15,7 +15,7 @@
 
 The hard rules that *do* still apply: **English only**, **no Claude
 co-author trailer**, **don't commit secrets**, **don't push without asking**.
-The "no build, no framework" rule is moot — the framework is already in
+The "no build, no framework" rule is moot - the framework is already in
 place; this iteration is about *polishing* its design system, not
 re-platforming it.
 
@@ -27,7 +27,7 @@ re-platforming it.
 
 - **Stack**: shadcn-style tokens (HSL CSS variables) in
   `src/index.css:6-46`, mapped to Tailwind utilities in
-  `tailwind.config.js:28-67`. Dark theme is hardcoded — `<html class="dark">`
+  `tailwind.config.js:28-67`. Dark theme is hardcoded - `<html class="dark">`
   in `index.html:2`, no light variant exists.
 - **Color palette** (HSL, current):
   - `background 200 6% 9%` → near-neutral charcoal, very slight cyan tint
@@ -37,19 +37,19 @@ re-platforming it.
   - `primary 156 46% 58%` → mint/teal green, used as accent and brand
   - `destructive 352 57% 57%` → desaturated red
   - `ls-orange 33 63% 55%` → warn color, only inside `.console-area`
-  - `ls-accent-dim` / `ls-accent-glow` as raw RGBA — not a token
+  - `ls-accent-dim` / `ls-accent-glow` as raw RGBA - not a token
 - **Typography**: body `font-size: 14px; line-height: 1.5` on
   `src/index.css:54-56`. Stack is macOS-first
   (`-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text…Arial`).
   Mono stack: SF Mono / JetBrains Mono / Cascadia Code. **No size scale is
-  defined** — every view uses `text-xs`, `text-sm`, `text-[10px]`,
+  defined** - every view uses `text-xs`, `text-sm`, `text-[10px]`,
   `text-[10.5px]`, `text-[11px]`, `text-xl` arbitrarily.
 - **Layout**: Sidebar `position: fixed; width: 220px` (`src/index.css:131`,
   `src/components/layout/Sidebar.jsx:76-79`). Main uses
   `margin-left: var(--sidebar-w)` (`src/App.jsx:138`). Header is also
   `position: fixed; left: var(--sidebar-w); right: 0; height: h-14` (56px,
   `src/components/layout/Header.jsx:21-23`).
-- **Spacing**: ad-hoc Tailwind utilities — `p-5`, `gap-4`, `gap-5`, `mb-3`,
+- **Spacing**: ad-hoc Tailwind utilities - `p-5`, `gap-4`, `gap-5`, `mb-3`,
   `py-2.5`, etc. No base unit declared; the 4-px grid is implicit.
 - **Radius**: `--radius: 0.5rem` (8px) at `src/index.css:36`, mapped to
   `borderRadius.lg/md/sm` in `tailwind.config.js:63-67`.
@@ -58,7 +58,7 @@ re-platforming it.
 - **Motion**: `fade-up 0.18s ease-out` for view transitions
   (`src/index.css:121-127`), `pulse-ring 1.4s ease-out infinite` for the
   online dot (`src/index.css:93-104`), `shimmer 2.5s linear infinite` defined
-  but only used by `.shimmer-btn` (which is never referenced in JSX — dead
+  but only used by `.shimmer-btn` (which is never referenced in JSX - dead
   code). Dialog open/close animations come from `tailwindcss-animate`.
 
 ### What's working
@@ -73,7 +73,7 @@ re-platforming it.
 3. **Lucide + Radix + CVA primitives.** The 9 `components/ui/*` files
    (button, card, dialog, input, select, tabs, etc.) follow the shadcn
    pattern with `React.forwardRef` + CVA variants. Button has 7 variants
-   and 6 sizes — solid foundation.
+   and 6 sizes - solid foundation.
 4. **Status pill pattern with pulse animation** (`StatusPill.jsx:23-37`)
    already uses an `animate-ping` ring on the inner dot. Worth keeping.
 5. **KPI tile composition** (`DashboardView.jsx:10-29`): icon-box + label +
@@ -82,7 +82,7 @@ re-platforming it.
 6. **Sparkline-on-canvas** (`DashboardView.jsx:32-58`): pure-DPR canvas,
    150-point rolling buffer per metric, line + area fill, accent-colored.
    Good primitive; just hardcodes `#5EC9A0` for the stroke.
-7. **No JS dependencies outside the existing list** — `package.json` has
+7. **No JS dependencies outside the existing list** - `package.json` has
    React, Radix, lucide, cva, clsx, tailwind-merge, sonner, tailwindcss-
    animate. The footprint matches the zero-config ethos once you accept
    the build step.
@@ -90,20 +90,20 @@ re-platforming it.
 ### What's dated or weak
 
 1. **Hardcoded Tailwind palette colors leak into JSX.** Examples:
-   - `DashboardView.jsx:112-120` — `border-l-green-500`, `border-l-orange-500`,
+   - `DashboardView.jsx:112-120` - `border-l-green-500`, `border-l-orange-500`,
      `border-l-red-500` on KPI tiles. A brand-color change requires editing
      these strings.
-   - `StatusPill.jsx:3-8` — `bg-green-500/10 text-green-400 border
+   - `StatusPill.jsx:3-8` - `bg-green-500/10 text-green-400 border
      border-green-500/20`, same for orange. The status palette is not
      tokenized.
-   - `button.jsx:24-26` — `bg-green-600/20 text-green-400 border
+   - `button.jsx:24-26` - `bg-green-600/20 text-green-400 border
      border-green-600/40` for the success variant. Same problem.
-   - `ConsoleView.jsx:72` — `text-red-400` on login error. Should be
+   - `ConsoleView.jsx:72` - `text-red-400` on login error. Should be
      `text-destructive`.
-   - `LoginView.jsx:36-40` — the login grid is
+   - `LoginView.jsx:36-40` - the login grid is
      `linear-gradient(hsl(var(--foreground)) 1px, transparent 1px)`. The
      `1px` line is too dark/opaque at 0.03 alpha on this background.
-   - `DashboardView.jsx:199-201` — disk-usage bar uses raw `bg-red-500`,
+   - `DashboardView.jsx:199-201` - disk-usage bar uses raw `bg-red-500`,
      `bg-orange-500`, `bg-primary` thresholds inline.
 2. **No light-mode tokens exist.** The brief says "dark mode dashboard"
    so this is acceptable, but defining `.light` scope tokens now costs
@@ -128,9 +128,9 @@ re-platforming it.
    and TVs.
 7. **KPI card has a 2-px left border that visually misaligns the icon
    box** (`DashboardView.jsx:13-16`). The icon box is also a
-   `border border-border bg-muted/40` square — busy. Drop the icon
+   `border border-border bg-muted/40` square - busy. Drop the icon
    background, use a flat tinted icon and a single left border.
-8. **Sparkline stroke color is hardcoded `#5EC9A0`** — should reference
+8. **Sparkline stroke color is hardcoded `#5EC9A0`** - should reference
    the primary token.
 9. **No backdrop-blur / translucent surface vocabulary.** The header has
    `bg-background/80 backdrop-blur-sm` (good), but nothing else does.
@@ -141,7 +141,7 @@ re-platforming it.
     (`src/index.css:79`). Should be a token so it stays in sync with the
     app surface.
 12. **Density of the dashboard body text is on the high side.** Body is
-    14 px with `text-[10.5px]`-uppercase labels everywhere — verges on
+    14 px with `text-[10.5px]`-uppercase labels everywhere - verges on
     cramped on a 1080p monitor at 100% scaling. A 13-px body with a clearer
     type scale reads better.
 
@@ -152,7 +152,7 @@ re-platforming it.
 Each item is a real, verifiable reference (URL, what to borrow, why it
 matters to Lodestone).
 
-### 1. shadcn/ui — Theming docs
+### 1. shadcn/ui - Theming docs
 - **URL**: https://ui.shadcn.com/docs/theming
 - **Why it matters for Lodestone**: the project is already a shadcn fork
   in everything-but-name. Adopting shadcn's *exact* token list (including
@@ -162,7 +162,7 @@ matters to Lodestone).
 - **Borrow**:
   1. The full token list including `chart-1..5`, `sidebar`, `sidebar-primary`,
      `sidebar-accent`, `sidebar-border`, `sidebar-ring`, `sidebar-foreground`,
-     `sidebar-primary-foreground`, `sidebar-accent-foreground` — defined in
+     `sidebar-primary-foreground`, `sidebar-accent-foreground` - defined in
      `:root` and overridden under `.dark` (or vice versa for our dark-first
      approach).
   2. The radius scale derivation: `--radius-sm = --radius * 0.6`,
@@ -171,16 +171,16 @@ matters to Lodestone).
   3. The semantic pair convention: every `bg-*` token has a matching
      `*-foreground`. So `bg-card` always pairs with `text-card-foreground`.
      Today Lodestone's `primary-foreground` is `158 46% 9%` (dark green on
-     light-green primary) — that's the *correct* shape.
+     light-green primary) - that's the *correct* shape.
 
-### 2. Uptime Kuma — `vars.scss`
+### 2. Uptime Kuma - `vars.scss`
 - **URL**: https://github.com/louislam/uptime-kuma/blob/master/src/assets/vars.scss
-- **Why it matters for Lodestone**: closest spiritual sibling — also a
+- **Why it matters for Lodestone**: closest spiritual sibling - also a
   self-hosted, single-process ops panel on Windows/Linux. Their color
   file is 23 lines of well-considered SCSS that we can read as a sanity
   check.
 - **Borrow**:
-  1. **Brand green** `#5cdd8b` — almost identical to Lodestone's
+  1. **Brand green** `#5cdd8b` - almost identical to Lodestone's
      `hsl(156 46% 58%)` ≈ `#5ec9a0`. Confirms our accent is on-trend for
      monitoring tools (vs. Linear's purple or Vercel's monochrome).
   2. **`$dark-bg: #0d1117`** for the page surface and **`$dark-bg2:
@@ -194,7 +194,7 @@ matters to Lodestone).
      `cubic-bezier()` values. Worth adopting rather than the generic
      `ease-out` we use today.
 
-### 3. Pterodactyl — `NavigationBar.tsx`
+### 3. Pterodactyl - `NavigationBar.tsx`
 - **URL**: https://github.com/pterodactyl/panel/blob/develop/resources/scripts/components/NavigationBar.tsx
 - **Why it matters for Lodestone**: Pterodactyl is the *direct* competitor
   in the game-server-panel space. Their top nav is a `bg-neutral-900`
@@ -204,15 +204,15 @@ matters to Lodestone).
   indicator in the category and works whether or not we end up on a
   top nav or a side nav.
 - **Borrow**:
-  1. **Active indicator pattern** — for sidebar items, a 2-px left
+  1. **Active indicator pattern** - for sidebar items, a 2-px left
      border or a tinted background + a left-side accent strip. (The
      current Lodestone sidebar already does `bg-primary/10`; we just need
      to standardize it as a token.)
-  2. **Header height** of 56 px — keep.
+  2. **Header height** of 56 px - keep.
   3. **`hover:text-foreground bg-black` reverse-hover** on the right-side
      nav links. This is the simplest, hardest-to-mess-up hover state.
 
-### 4. Refactoring UI — book
+### 4. Refactoring UI - book
 - **URL**: https://refactoringui.com
 - **Why it matters for Lodestone**: not a visual reference; a *design
   philosophy* reference. Adam Wathan and Steve Schoger are the authors
@@ -222,7 +222,7 @@ matters to Lodestone).
   1. **"Use fewer borders."** The dashboard currently draws a
      `border border-border` on the icon box *inside* the KPI card. Drop
      it; rely on the card border alone.
-  2. **"Ditch hex for HSL"** — we already do this, but their further
+  2. **"Ditch hex for HSL"** - we already do this, but their further
      advice is to also ditch raw `bg-white/10` and use named tokens.
      Today `class="bg-white/[0.04] border border-border/60 backdrop-blur-sm"`
      on the `glass` button variant (`button.jsx:26`) is a smell; replace
@@ -233,7 +233,7 @@ matters to Lodestone).
   4. **"Establish a spacing and sizing system."** We have 4-px and 8-px
      mixed freely. Standardize on a 4-px scale.
 
-### 5. Beszel — marketing site
+### 5. Beszel - marketing site
 - **URL**: https://beszel.dev
 - **Why it matters for Lodestone**: the *aesthetic* Beszel hits (clean,
   two-tone, dark by default, no marketing fluff) matches what we want
@@ -241,15 +241,15 @@ matters to Lodestone).
   hub is PocketBase-served, not on a public marketing page), but their
   visual language is the north star.
 - **Borrow**:
-  1. **One hero metric per card, no decoration** — Beszel's systems
+  1. **One hero metric per card, no decoration** - Beszel's systems
      table shows CPU%, MEM%, disk% as the *only* numbers on each row.
      We should resist the urge to add sub-metrics to every tile.
   2. **Time-window chips** at the top of every chart ("5m / 1h / 12h /
      24h / 7d"). Out of scope for this iteration but worth a follow-up.
   3. **Single-color status semantics** (green = good, orange = warn,
-     red = bad) — exactly what we already have, no change needed.
+     red = bad) - exactly what we already have, no change needed.
 
-### 6. Linear — `linear.app`
+### 6. Linear - `linear.app`
 - **URL**: https://linear.app
 - **Why it matters for Lodestone**: Linear's sidebar (grouped sections,
   icons + label, 220-px wide, no collapse-on-mobile) is the gold
@@ -259,44 +259,44 @@ matters to Lodestone).
   1. **13-px body** with `tracking-tight` on headings. We are at 14 px;
      step down to 13.5 px and re-check density.
   2. **Sidebar group labels in 10.5-px uppercase with 0.08em
-     letter-spacing, 40% opacity** — almost exactly what we have at
+     letter-spacing, 40% opacity** - almost exactly what we have at
      `text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60`
      on `Sidebar.jsx:93`. Keep it.
-  3. **Single-line nav items with 6-px vertical padding** — we are at
+  3. **Single-line nav items with 6-px vertical padding** - we are at
      `py-2` (8 px). Tighten to `py-1.5` for a denser look that matches
      Linear and Pterodactyl.
 
-### 7. Vercel — `vercel.com` dashboard
+### 7. Vercel - `vercel.com` dashboard
 - **URL**: https://vercel.com
 - **Why it matters for Lodestone**: Vercel is the densest "ops
   dashboard with status" in production today. Their header is a single
   line with project selector, environment switcher, deployment state
-  pill, and a "Promote to Production" primary button — almost exactly
+  pill, and a "Promote to Production" primary button - almost exactly
   the shape of our Header.
 - **Borrow**:
   1. **Header right-to-left action order**: status pill → secondary
      action → primary action. (We currently have Start → Restart → Stop
-     which is correct for our domain — keep, but render the destructive
+     which is correct for our domain - keep, but render the destructive
      Stop button last so the thumb targets it deliberately.)
   2. **Backdrop-blur header with 1-px bottom border**. We have
-     `bg-background/80 backdrop-blur-sm` — keep.
-  3. **View title lives on the *left* of the header, not above it** —
+     `bg-background/80 backdrop-blur-sm` - keep.
+  3. **View title lives on the *left* of the header, not above it** -
      we already do this. Confirms.
 
-### 8. Grafana Cloud — public dashboard
+### 8. Grafana Cloud - public dashboard
 - **URL**: https://grafana.com
 - **Why it matters for Lodestone**: Grafana is the densest panel in the
   world and we do not want to look like Grafana. We borrow only its
   *card layout* convention: 12-col grid, KPI strip on top, then a
   two-column area for time series + sidebar info.
 - **Borrow**:
-  1. **KPI strip is 4 tiles, full row, equal width** — we have
+  1. **KPI strip is 4 tiles, full row, equal width** - we have
      `grid-cols-2 xl:grid-cols-4`. Keep.
   2. **Below the KPI strip, a 2/3 + 1/3 split** for the main panel +
-     details card. We have `xl:grid-cols-5` with 3+2 — that's the same
+     details card. We have `xl:grid-cols-5` with 3+2 - that's the same
      proportion. Keep.
 
-### 9. shadcn/ui — Sidebar component (registry preview)
+### 9. shadcn/ui - Sidebar component (registry preview)
 - **URL**: https://ui.shadcn.com/docs/components/sidebar
 - **Why it matters for Lodestone**: the most recent shadcn sidebar is
   the canonical collapsible pattern: it uses a CSS variable
@@ -321,7 +321,7 @@ matters to Lodestone).
   canonical match to Lodestone's current
   `hsl(200 6% 9%) ≈ #161a1c`.
 - **Borrow**:
-  1. **Don't move to OKLCH in this iteration** — HSL works and matches
+  1. **Don't move to OKLCH in this iteration** - HSL works and matches
      the existing shadcn-style tokens. Flag as a v2 opportunity.
   2. **The `zinc` and `neutral` scales** are the closest reference for
      our `--border` and `--muted` shades; we are already in the same
@@ -361,11 +361,11 @@ matters to Lodestone).
 
 | Token                    | Current            | Proposed            | Notes                          |
 | ------------------------ | ------------------ | ------------------- | ------------------------------ |
-| `--primary`              | `156 46% 58%` (≈#5ec9a0) | `156 46% 58%`      | **No change** — confirmed against Kuma |
-| `--primary-foreground`   | `158 46% 9%` (≈#0e2419)  | `158 46% 9%`       | **No change** — dark-green text on light-green pill |
+| `--primary`              | `156 46% 58%` (≈#5ec9a0) | `156 46% 58%`      | **No change** - confirmed against Kuma |
+| `--primary-foreground`   | `158 46% 9%` (≈#0e2419)  | `158 46% 9%`       | **No change** - dark-green text on light-green pill |
 | `--accent`               | `156 46% 58%`     | `199 60% 22%` (≈#1c3a4a) | Decouple from primary; subtle blue-grey for hover/selected rows |
 | `--accent-foreground`    | `158 46% 9%`      | `210 4% 92%` (≈#e6eaee) | Light text on the blue-grey hover |
-| `--ring`                 | `156 46% 58%`     | `156 46% 58%`      | **No change** — focus ring = brand |
+| `--ring`                 | `156 46% 58%`     | `156 46% 58%`      | **No change** - focus ring = brand |
 
 ### Semantic status colors (new tokens, replacing inline Tailwind palette)
 
@@ -431,7 +431,7 @@ Type scale (replace the ad-hoc Tailwind sizes, used as `--text-{step}`):
 | `xl` | 20 px  | 1.3         | 600    | Page h1                      |
 | `2xl` | 28 px | 1.2         | 600    | Hero (login)                 |
 
-(Step down from 14 px to 13.5 px body — Linear is at 13, Vercel at 14,
+(Step down from 14 px to 13.5 px body - Linear is at 13, Vercel at 14,
 shadcn docs at 14. 13.5 is the middle ground for the dense panel we
 have. Confirm visually before locking in.)
 
@@ -456,17 +456,17 @@ In Tailwind: keep the existing utilities (`p-4`, `gap-3`, `mb-5`) but
 `App.jsx:146`. The header is 56 px (3.5 rem) and the desired content
 top padding is 20 px (`pt-5`). So `pt-[calc(3.5rem+1.25rem)]` should
 be `pt-20` (5 rem = 80 px, gives 24 px of breathing room under the
-header — actually close to right; confirm visually).
+header - actually close to right; confirm visually).
 
 ### Radius scale (derive from `--radius`)
 
 ```css
---radius:      0.5rem;   /* 8 px — base */
---radius-sm:   0.3rem;   /* 4.8 px — inputs, pills */
---radius-md:   0.4rem;   /* 6.4 px — buttons */
---radius-lg:   0.5rem;   /* 8 px — cards, modals */
---radius-xl:   0.7rem;   /* 11.2 px — popovers */
---radius-2xl:  0.9rem;   /* 14.4 px — hero login card */
+--radius:      0.5rem;   /* 8 px - base */
+--radius-sm:   0.3rem;   /* 4.8 px - inputs, pills */
+--radius-md:   0.4rem;   /* 6.4 px - buttons */
+--radius-lg:   0.5rem;   /* 8 px - cards, modals */
+--radius-xl:   0.7rem;   /* 11.2 px - popovers */
+--radius-2xl:  0.9rem;   /* 14.4 px - hero login card */
 --radius-pill: 9999px;   /* status pill */
 ```
 
@@ -490,13 +490,13 @@ Add to `tailwind.config.js` `theme.extend.borderRadius` so `rounded-md`,
 
 Wire to `theme.extend.boxShadow` in Tailwind so `shadow-sm`, `shadow-md`,
 etc. resolve to these. Today only `shadow-sm` (Card) and `shadow-xl`
-(ServerSelector popover) are used — we'll see the full scale appear as
+(ServerSelector popover) are used - we'll see the full scale appear as
 modals and the sidebar collapse menu get shadows.
 
 ### Motion
 
 ```css
---ease-out:   cubic-bezier(0.16, 1, 0.3, 1);   /* "expo out" — view change */
+--ease-out:   cubic-bezier(0.16, 1, 0.3, 1);   /* "expo out" - view change */
 --ease-in:    cubic-bezier(0.4, 0, 1, 1);
 --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* popovers */
@@ -567,11 +567,11 @@ make the sidebar collapse without recomputing the margin.
   `--background`).
 - **Bottom border**: `1px solid var(--border)` (today: `border-b`, keep).
 - **Z-index**: `z-40` (keep). Bump to `z-50` if popovers are leaking
-  over the header in practice — quick check.
+  over the header in practice - quick check.
 - **Content layout** (left → right):
   1. **Server selector** (keep, with `--sidebar` background instead of
      `bg-secondary/50` for visual continuity).
-  2. **View title** — `text-sm font-semibold tracking-tight` (was
+  2. **View title** - `text-sm font-semibold tracking-tight` (was
      `text-sm font-semibold`, add the tracking).
   3. **Right group**:
      - Status pill (keep).
@@ -580,7 +580,7 @@ make the sidebar collapse without recomputing the margin.
      - Restart button (`glass` variant).
      - Start button (`success` variant, primary left-to-right reading
        is *Start → Restart → Stop*, but visually we want Stop closest
-       to the edge — *Start, Restart, Stop* left-to-right, with
+       to the edge - *Start, Restart, Stop* left-to-right, with
        Start visually emphasized as the safe default).
 
 ### Dashboard view
@@ -603,7 +603,7 @@ KPI tile (refined):
 - Remove the inner icon-box `border border-border bg-muted/40`. Replace
   with a flat 40×40 rounded-md using `bg-primary/10` (or status-tinted
   bg) and the icon in `text-primary` (or status-tinted foreground).
-- Keep the `border-l-2` accent — change to `border-l-[2px]
+- Keep the `border-l-2` accent - change to `border-l-[2px]
   border-l-{status-online|status-warn|status-error|border}` mapped
   through the new semantic tokens.
 - Label: 10.5-px uppercase tracking-wider muted.
@@ -616,14 +616,14 @@ Live resources card:
 - Each row: label (12.5 px muted, left) + value (12.5 px semibold
   tabular-nums, right) + 36-px-tall sparkline (full width).
 - Row separator: 1-px `border-b border-border/60` (today `border-b
-  border-border` — soften the contrast).
+  border-border` - soften the contrast).
 - Sparkline stroke: use the chart-1 token
   (`hsl(var(--chart-1))`) instead of hardcoded `#5EC9A0`.
 
 Server info card:
 - Header: `Server info` only (no right-side sub).
 - Rows: label (12.5 px muted) + value (12 px mono, right-aligned,
-  truncate). No nested borders — use row dividers.
+  truncate). No nested borders - use row dividers.
 
 ---
 
@@ -641,31 +641,31 @@ Server info card:
 
 ### What needs API additions (out of scope, call out)
 
-- None. The data the dashboard shows — `status.status`,
+- None. The data the dashboard shows - `status.status`,
   `status.playerCount`, `status.maxPlayers`, `status.tps`, `stats.procMem`,
   `stats.procCpu`, `stats.memSystemUsed`, `stats.cpuSystem`, `stats.disk`
-  — is already in `/api/status` and the WebSocket `stats` frame. No
+  - is already in `/api/status` and the WebSocket `stats` frame. No
   backend change required.
 - The brief lists API surface and we do not need to extend it for this
   iteration.
 
 ### Conflicts with the hard rules
 
-- **No new dependencies** — we already have everything we need:
+- **No new dependencies** - we already have everything we need:
   Radix Tooltip is in `devDependencies` (`@radix-ui/react-tooltip`)
   and the file `src/components/ui/tooltip.jsx` does not yet exist but
   the dependency does, so the import will resolve. The shadcn-style
   tooltip component is ~40 lines. **If the team prefers "no new
   components in this iteration"**, the sidebar collapse can ship
   without tooltips in v1 and add them in v2.
-- **No build step** — already moot; the build is in place and produces
+- **No build step** - already moot; the build is in place and produces
   `public/assets/index-*.js` + `public/assets/index-*.css` which the
   existing `server.js` static handler serves. Token changes only
   require `npm run build` (or `npm run dev` for HMR).
-- **English only** — all proposed copy is English. The Dashboard
+- **English only** - all proposed copy is English. The Dashboard
   view's "Live resources" / "Server info" strings are already English
   in the codebase.
-- **No Claude co-author** — when this work is eventually committed
+- **No Claude co-author** - when this work is eventually committed
   (not in scope here), do it as the user only, per `CLAUDE.md`.
 
 ### Things explicitly out of scope for this iteration
@@ -687,16 +687,16 @@ iterations, not this one:
    generic shadcn defaults; later pass to align shadows, radii,
    spacing).
 5. **Empty states, loading skeletons, error states** for each view.
-6. **Map view refinement** (Leaflet dark-tile theming — currently
+6. **Map view refinement** (Leaflet dark-tile theming - currently
    pulls in OSM tiles; not design-system work).
 7. **Login visual** (today a single card on a grid; could become a
-   split-screen with a hero illustration — but the brief says no new
+   split-screen with a hero illustration - but the brief says no new
    visual identity work).
-8. **Light mode** — tokens can be scoped under `.light` for future
+8. **Light mode** - tokens can be scoped under `.light` for future
    use but no toggle is built.
-9. **OKLCH migration** — HSL is the shadcn v1 convention and matches
+9. **OKLCH migration** - HSL is the shadcn v1 convention and matches
    the rest of the file. v2.
-10. **Logo and brand identity** — `◆` is fine as a placeholder.
+10. **Logo and brand identity** - `◆` is fine as a placeholder.
 
 ### One open question for the next agent
 

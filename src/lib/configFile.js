@@ -90,7 +90,7 @@ export function isXmlFilename(name) {
 }
 
 // Only server.properties has a hand-curated friendly form. Every other
-// properties/yml/xml file is raw-only — the schema-driven friendly view
+// properties/yml/xml file is raw-only - the schema-driven friendly view
 // would just show an empty "Advanced keys" panel for them.
 export function hasFriendlyForm(name) {
   if (!name) return false;

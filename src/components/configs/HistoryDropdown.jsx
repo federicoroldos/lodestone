@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 function relTime(iso) {
   const then = new Date(iso).getTime();
   const diff = Date.now() - then;
-  if (diff < 0 || Number.isNaN(then)) return '—';
+  if (diff < 0 || Number.isNaN(then)) return '-';
   const s = Math.floor(diff / 1000);
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);

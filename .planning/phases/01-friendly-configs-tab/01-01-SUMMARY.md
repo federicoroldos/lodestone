@@ -1,11 +1,11 @@
 ---
 phase: 01-friendly-configs-tab
 plan: 01-01
-title: Friendly Configs tab — completed
+title: Friendly Configs tab - completed
 status: complete
 ---
 
-# Friendly Configs tab — Plan 01-01 summary
+# Friendly Configs tab - Plan 01-01 summary
 
 One-line description: the Configs tab now offers a labeled, typed, validated
 form for 20 known `server.properties` keys, a grouped left-rail file nav, a
@@ -14,37 +14,37 @@ restart, and a `.bak` history dropdown with restore.
 
 ## Files created
 
-- `src/lib/diff.js` — pure line-diff helper (`diffLines`, `joinDiff`).
-- `src/lib/configFile.js` — properties parser/serializer, filename predicates,
+- `src/lib/diff.js` - pure line-diff helper (`diffLines`, `joinDiff`).
+- `src/lib/configFile.js` - properties parser/serializer, filename predicates,
   and `validateValue`.
-- `src/configs/schema.js` — schema for the 20 modeled `server.properties` keys.
-- `src/configs/groups.js` — `FILE_GROUPS` (gameplay / performance / world /
+- `src/configs/schema.js` - schema for the 20 modeled `server.properties` keys.
+- `src/configs/groups.js` - `FILE_GROUPS` (gameplay / performance / world /
   other) and `groupFile(name)`.
-- `src/components/configs/ConfigForm.jsx` — friendly form for
+- `src/components/configs/ConfigForm.jsx` - friendly form for
   `server.properties` (with Advanced-keys disclosure for unmodeled keys).
-- `src/components/configs/ConfigRaw.jsx` — monospace raw editor with a light
+- `src/components/configs/ConfigRaw.jsx` - monospace raw editor with a light
   YAML/INI sanity check.
-- `src/components/configs/DiffPreview.jsx` — diff modal shown before save.
-- `src/components/configs/RestartBanner.jsx` — top-of-card restart-required
+- `src/components/configs/DiffPreview.jsx` - diff modal shown before save.
+- `src/components/configs/RestartBanner.jsx` - top-of-card restart-required
   banner with one-click restart.
-- `src/components/configs/HistoryDropdown.jsx` — `.bak` history dropdown and
+- `src/components/configs/HistoryDropdown.jsx` - `.bak` history dropdown and
   restore (uses the existing Radix `@radix-ui/react-dropdown-menu` primitive
   directly because no shadcn-style wrapper exists in `src/components/ui/`).
-- `src/components/configs/FileNav.jsx` — left-rail grouped file list.
-- `src/components/configs/ValidationPanel.jsx` — yellow issues panel.
+- `src/components/configs/FileNav.jsx` - left-rail grouped file list.
+- `src/components/configs/ValidationPanel.jsx` - yellow issues panel.
 
 ## Files modified
 
-- `server.js` — added `GET /api/configs/:name/backups` and
+- `server.js` - added `GET /api/configs/:name/backups` and
   `POST /api/configs/:name/restore`. Both reuse `resolveEditable` (path
   safety + allowlist) and the same auth/error shape as the existing
   `/api/configs/:name` routes. The restore endpoint writes a fresh `.bak`
   of the state it's about to overwrite so the user can undo the restore.
-- `i18n.json` — appended `en.dictionaries.en.configs.*` keys (banner,
+- `i18n.json` - appended `en.dictionaries.en.configs.*` keys (banner,
   groups, issues, diff, history, advanced, badges, switch, friendlyEmpty,
   restart toasts, and the 20 field labels/descriptions). The `es` block
   was left untouched.
-- `src/views/ConfigsView.jsx` — rewritten (under 300 lines) to wire the
+- `src/views/ConfigsView.jsx` - rewritten (under 300 lines) to wire the
   new components together, with per-file mode persisted in localStorage
   under `lodestone.configs.mode.<basename>`.
 
@@ -53,20 +53,20 @@ restart, and a `.bak` history dropdown with restore.
 | Check                                                              | Result |
 | ---                                                                | ---    |
 | `node --check server.js`                                           | PASS   |
-| `npm run build` (Vite production build)                            | PASS — 1711 modules, no warnings |
-| `package.json` / `package-lock.json` unchanged                     | PASS — no new dependencies |
+| `npm run build` (Vite production build)                            | PASS - 1711 modules, no warnings |
+| `package.json` / `package-lock.json` unchanged                     | PASS - no new dependencies |
 | `i18n.json` parses as valid JSON                                   | PASS   |
-| No new keys under `en.dictionaries.es.configs.*`                   | PASS — `es.configs` still has only `title`, `hint`, `savedToast` |
+| No new keys under `en.dictionaries.es.configs.*`                   | PASS - `es.configs` still has only `title`, `hint`, `savedToast` |
 | All 30 added `configs.*` keys present in `en.dictionaries.en.configs` | PASS |
 | All 20 `configs.field.<key>.label/description` pairs present         | PASS |
-| `serializeProperties(parseProperties(x))` byte-for-byte round-trip | PASS — verified for 4 sample inputs (header, blank-line sections, trailing whitespace, no-trailing-newline) |
-| `validateValue` covers bool/number/enum/string                     | PASS — 8 of 8 representative cases correct |
+| `serializeProperties(parseProperties(x))` byte-for-byte round-trip | PASS - verified for 4 sample inputs (header, blank-line sections, trailing whitespace, no-trailing-newline) |
+| `validateValue` covers bool/number/enum/string                     | PASS - 8 of 8 representative cases correct |
 | `SCHEMA_BY_KEY` exposes all 20 keys                                | PASS |
-| New server endpoints use `resolveEditable` + auth middleware       | PASS — `app.use('/api', ...)` middleware at line 844 enforces auth; both new routes use `resolveEditable` like the existing `/api/configs/:name` PUT/GET |
-| `restart` action in banner uses the same endpoint the Header uses   | PASS — both call `POST /api/server/restart` via `useApi` |
-| Plan-aspirational file `src/lib/api.js` not created                | PASS — used existing `useApi` hook instead |
-| Plan-aspirational file `src/i18n/index.js` not modified            | PASS — already exposes `t()` which the components import via `@/i18n` |
-| Test file deleted after round-trip check                           | PASS — `C:\Users\Federico\AppData\Local\Temp\opencode\roundtrip-test.mjs` removed |
+| New server endpoints use `resolveEditable` + auth middleware       | PASS - `app.use('/api', ...)` middleware at line 844 enforces auth; both new routes use `resolveEditable` like the existing `/api/configs/:name` PUT/GET |
+| `restart` action in banner uses the same endpoint the Header uses   | PASS - both call `POST /api/server/restart` via `useApi` |
+| Plan-aspirational file `src/lib/api.js` not created                | PASS - used existing `useApi` hook instead |
+| Plan-aspirational file `src/i18n/index.js` not modified            | PASS - already exposes `t()` which the components import via `@/i18n` |
+| Test file deleted after round-trip check                           | PASS - `C:\Users\Federico\AppData\Local\Temp\opencode\roundtrip-test.mjs` removed |
 
 ## Per-task status (16/16 complete)
 
@@ -108,14 +108,14 @@ restart, and a `.bak` history dropdown with restore.
   matched the real shape with `/\.[0-9TZ-]+\.bak$/i` so the new endpoints
   can actually find the backups the existing route writes.
 - **No `src/lib/api.js` or `src/i18n/index.js` modifications.** The
-  `files_modified` list in the plan was aspirational — neither file
+  `files_modified` list in the plan was aspirational - neither file
   exists (the latter is `src/i18n/index.js`, which already exposes the
   `t()` the components import). I used the existing `useApi` hook and
   the existing `@/i18n` import path.
 
 ## User to verify (manual, browser-based)
 
-1. `npm start` (or `node server.js`) — the panel boots without errors.
+1. `npm start` (or `node server.js`) - the panel boots without errors.
 2. Open `http://localhost:2121`, log in, click the **Configs** tab.
 3. Confirm the left rail groups files: **Gameplay** (server.properties,
    bukkit.yml), **Performance** (spigot.yml, paper-*.yml), **World**
@@ -123,7 +123,7 @@ restart, and a `.bak` history dropdown with restore.
 4. Open `server.properties`. Confirm the friendly form renders all 20
    modeled keys with labels, plain-English descriptions, and Restart /
    Hot-reload badges. Change `max-players` to 25, `gamemode` to
-   `creative`, `motd` to "Hello world". Click **Save** — the diff
+   `creative`, `motd` to "Hello world". Click **Save** - the diff
    modal shows the three line changes; confirm → the restart banner
    appears with a working **Restart now** button.
 5. Click **Switch to raw**. Confirm the raw textarea is editable and
@@ -134,7 +134,7 @@ restart, and a `.bak` history dropdown with restore.
    content reverts, a new `.bak` is created, and the restart banner
    re-appears.
 7. Open `spigot.yml` (or any `*.yml`). Confirm the raw editor renders.
-   Add a line that starts with a tab character — confirm the validation
+   Add a line that starts with a tab character - confirm the validation
    panel flags it as a blocking error. Remove the tab, save → diff
    shows only the legitimate change.
 8. Open `bukkit.yml` (YAML). Save without changes. Confirm the diff

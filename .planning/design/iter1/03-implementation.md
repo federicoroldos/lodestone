@@ -1,4 +1,4 @@
-# Iter 1 — Implementation Report (Foundation & Architecture)
+# Iter 1 - Implementation Report (Foundation & Architecture)
 
 > Agent C (Implementer) report. All 12 changes from
 > `.planning/design/iter1/02-feasibility.md` were applied in the order
@@ -39,7 +39,7 @@ public/assets/index-Btjg11hf.js       328.68 kB │ gzip: 99.75 kB
 ✓ built in 2.60s
 ```
 
-Zero errors, zero warnings. CSS bundle is 32.47 kB (was ~30 kB — the +2 kB
+Zero errors, zero warnings. CSS bundle is 32.47 kB (was ~30 kB - the +2 kB
 is the new `--shadow-*` and radius scale; the JS bundle is unchanged
 since the new `KpiTile.jsx` was just moving ~30 lines).
 
@@ -67,7 +67,7 @@ the post-change tree. All empty unless noted.
 | `colorClass=` on `<KpiTile>` | `grep -n "colorClass=" src/views/DashboardView.jsx` | **empty** (now `tone="…"`) |
 
 `grep -n "green-500|green-400|green-600|orange-500|orange-400|red-400|red-300|red-500" src/`
-returns 15 hits — all in views / main.jsx that the plan explicitly
+returns 15 hits - all in views / main.jsx that the plan explicitly
 defers to iter 2 (`ServersView.jsx:396,398,401` and the per-view delete
 icons / form errors). None are in the three files the plan's DoD item
 7 scopes.
@@ -80,7 +80,7 @@ and the disk-bar `cn(...)` rewrite). The plan's "Definition of done"
 items 1-10 are satisfied (item 11 is a manual UI check that requires
 the panel to be running, which is the reviewer's job).
 
-## Still off — picked up by iter 2 or iter 3
+## Still off - picked up by iter 2 or iter 3
 
 Things the plan explicitly defers but worth listing here so the next
 agent doesn't re-discover them:
@@ -130,5 +130,5 @@ Two token tweaks change the look more than the others:
 
 If the visual review later wants to revert either, both are one-line
 edits in `src/index.css:8-9`. Everything else (sidebar, status tokens,
-chart palette, sparkline, disk bar) is invisible-by-default — it only
+chart palette, sparkline, disk bar) is invisible-by-default - it only
 shows up if a button/header goes red/orange/green.

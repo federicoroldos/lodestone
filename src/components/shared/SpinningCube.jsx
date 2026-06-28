@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * A pure-CSS 3D cube textured with the Lodestone block face on all six sides,
- * slowly rotating. No 3D library needed — uses CSS transforms + pixel-art texture.
+ * slowly rotating. No 3D library needed - uses CSS transforms + pixel-art texture.
  *
  * @param {number|string} size      Edge length (px number or any CSS length). Default 96.
  * @param {number}        duration  Seconds per full rotation. Default 18.

@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { useT } from '@/context/I18nContext';
 
 /**
- * Lodestone brand mark — the actual `lodestone_face` pixel texture as the
+ * Lodestone brand mark - the actual `lodestone_face` pixel texture as the
  * icon, paired with a Press Start 2P wordmark. Used in the sidebar header
  * (also doubles as a "back to dashboard" shortcut).
  *

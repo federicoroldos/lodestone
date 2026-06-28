@@ -15,7 +15,7 @@ function niceMax(v) {
 }
 
 function fmtMB(mb) {
-  if (mb == null) return '—';
+  if (mb == null) return '-';
   if (mb < 1024) return Math.round(mb) + ' MB';
   return (mb / 1024).toFixed(1) + ' GB';
 }

@@ -803,7 +803,7 @@ function langFromAcceptLanguage(header) {
   return null;
 }
 
-// Treat loopback and private/ULA addresses as "no public IP" — geolocation
+// Treat loopback and private/ULA addresses as "no public IP" - geolocation
 // would be useless and the user is most likely sitting at the panel itself.
 function isPrivateOrLoopback(ip) {
   if (!ip) return true;
@@ -829,7 +829,7 @@ function pickRequestIp(req, bodyClientIp) {
   if (xff && !isPrivateOrLoopback(xff)) return xff;
   const sock = req.socket && (req.socket.remoteAddress || '');
   if (sock) {
-    // Node returns IPv6-mapped IPv4 as "::ffff:1.2.3.4" — strip the prefix.
+    // Node returns IPv6-mapped IPv4 as "::ffff:1.2.3.4" - strip the prefix.
     const cleaned = sock.replace(/^::ffff:/i, '');
     return cleaned;
   }
@@ -1017,7 +1017,7 @@ app.post('/api/login', async (req, res) => {
   }
   // The panel defaults to English. We only ever switch away from it when the
   // user explicitly picks a language (this request's `lang`, or one they saved
-  // before) — no IP geolocation guessing, so the default stays predictable.
+  // before) - no IP geolocation guessing, so the default stays predictable.
   user.language = chosen;
 
   res.json({ token: signToken(user), user: publicUser(user) });
@@ -1301,7 +1301,7 @@ app.get('/api/fs', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Native folder picker — pops the real OS folder dialog (Windows Explorer /
+// Native folder picker - pops the real OS folder dialog (Windows Explorer /
 // Linux zenity / macOS Finder) and returns the chosen absolute path. The
 // in-browser custom folder browser is still used for "Register server" but
 // the "Create a new server" flow uses this so the user gets the familiar
@@ -1466,7 +1466,7 @@ function pickFolderWindowsLegacy(defaultPath) {
   // tree-style picker instead of the modern Explorer one, but it ships in
   // every .NET Framework since 1.1 and never fails to display. We only set
   // properties that exist on every supported framework version (Description
-  // and ShowNewFolderButton) — UseDescriptionForTitle and the description-
+  // and ShowNewFolderButton) - UseDescriptionForTitle and the description-
   // as-title trick are .NET 4.0+ only and aren't on every PowerShell host.
   const ps = [
     `try {`,
@@ -1491,7 +1491,7 @@ function pickFolderWindowsLegacy(defaultPath) {
 
 function pickFolderLinux(defaultPath) {
   // Use the desktop's own native file chooser: zenity on GTK (what Nautilus,
-  // gedit, GNOME Settings, Firefox etc. shell out to — gives the actual GTK
+  // gedit, GNOME Settings, Firefox etc. shell out to - gives the actual GTK
   // file dialog), kdialog on Qt (what KDE apps use). If neither is installed
   // the caller surfaces a "Folder picker not available" error and the user
   // can type the path by hand.
@@ -1679,7 +1679,7 @@ app.put('/api/servers/:id', requireAdmin, (req, res) => {
 
 // Update only the map URL for a server. The map URL is a panel-UI concern
 // (it's just a link to the web map the user wants to embed) so it can be
-// changed while the Minecraft server is running — unlike the rest of the
+// changed while the Minecraft server is running - unlike the rest of the
 // server settings, which require the server to be stopped.
 app.put('/api/servers/:id/map', requireAdmin, (req, res) => {
   const s = findServer(req.params.id);
@@ -1822,7 +1822,7 @@ async function mojangUuid(name) {
 }
 
 // Players the server has seen recently (usercache.json), so they can be acted on
-// by clicking instead of typing — even while offline. Drops expired entries and
+// by clicking instead of typing - even while offline. Drops expired entries and
 // anyone already surfaced elsewhere (online / whitelist / ops / banned).
 function readUserCache(dir, exclude) {
   const arr = readJsonArray(path.join(dir, 'usercache.json'));
@@ -2341,7 +2341,7 @@ function pruneBackups(slug) {
 
   // 2) Size cap: walk oldest-first (end of the list), deleting until the
   //    surviving backups' total size fits under the cap. Never delete the
-  //    newest (index 0) — the just-created backup is always retained, even
+  //    newest (index 0) - the just-created backup is always retained, even
   //    if on its own it's bigger than the cap (we'd rather keep one fresh
   //    backup than none).
   if (maxSizeMB > 0) {
@@ -2617,7 +2617,7 @@ function splitCfCategories(cats) {
 }
 
 app.get(/^\/api\/curseforge\/mod\/(.+)$/, async (req, res) => {
-  // req.params[0] is whatever followed /api/curseforge/mod/ — could be a
+  // req.params[0] is whatever followed /api/curseforge/mod/ - could be a
   // numeric id, a short slug, or a slash-separated path (e.g.
   // "minecraft/mc-mods/sodium"). The match above accepts all three.
   const id = String((req.params && req.params[0]) || '').trim().replace(/^\/+|\/+$/g, '');
@@ -2738,7 +2738,7 @@ app.get('/api/system', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// File manager (browse/edit/upload/download — sandboxed to the server folder)
+// File manager (browse/edit/upload/download - sandboxed to the server folder)
 // ---------------------------------------------------------------------------
 
 // Resolve a user-supplied relative path against the server root, refusing any
@@ -3164,7 +3164,7 @@ function runForgeInstaller(dir, installerFilename, label = 'Forge') {
 
 // Picks the runnable server jar the Forge / NeoForge installer produced.
 // Modern Forge writes "<mc>-<forge>.jar" alongside the installer; NeoForge
-// writes just "<neoforge-version>.jar" — "21.1.66.jar" (old scheme) or
+// writes just "<neoforge-version>.jar" - "21.1.66.jar" (old scheme) or
 // "26.1.2.76.jar" (new four-part scheme); older Forge releases used
 // "minecraftforge-universal-<coord>.jar".
 function findForgeServerJar(dir) {
@@ -3231,7 +3231,7 @@ async function downloadToFile(url, destPath, onProgress, signal) {
 }
 
 // ---------------------------------------------------------------------------
-// Managed Java runtimes — the panel downloads and keeps a Temurin (Adoptium)
+// Managed Java runtimes - the panel downloads and keeps a Temurin (Adoptium)
 // JRE per Java major so the user never has to install Java themselves. Each
 // Minecraft version maps to the Java major it needs; the right runtime is
 // fetched on the first start of a server that needs it. Runtimes live under
@@ -3245,7 +3245,7 @@ const JAVA_EXE = process.platform === 'win32' ? 'java.exe' : 'java';
 function requiredJavaMajor(mcVersion) {
   const m = /^1\.(\d+)(?:\.(\d+))?/.exec(String(mcVersion || '').trim());
   // New-scheme versions (e.g. "26.1.2") and snapshots don't match the legacy
-  // "1.x" pattern; they need the newest managed LTS. This is only a floor —
+  // "1.x" pattern; they need the newest managed LTS. This is only a floor -
   // jarJavaMajor() reads the exact requirement from the jar at launch.
   if (!m) return 25;
   const minor = Number(m[1]);
@@ -3476,7 +3476,7 @@ app.post('/api/create', requireAdmin, async (req, res) => {
   let clientGone = false;
   // Detect a real client disconnect via the *response* stream. (Listening on
   // req.on('close') is wrong: on Node 18+ the request emits 'close' as soon as
-  // its body has been read — immediately for a small POST — which would abort
+  // its body has been read - immediately for a small POST - which would abort
   // the download before it even starts.)
   res.on('close', () => {
     if (res.writableEnded) return;
@@ -3554,7 +3554,7 @@ app.post('/api/create', requireAdmin, async (req, res) => {
     res.end();
   } catch (err) {
     if (err && (err.name === 'AbortError' || err.message === 'aborted' || clientGone)) {
-      // Client disconnected — keep what we have on disk for inspection but
+      // Client disconnected - keep what we have on disk for inspection but
       // don't register the server.
       try { log(`Create aborted by client before completion: ${dir}`); } catch (_) { /* noop */ }
       return;
