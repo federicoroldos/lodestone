@@ -169,8 +169,49 @@ function publicUser(u) {
     email: u.email || '',
     username: u.username || '',
     name: u.name || '',
+    role: u.role === 'operator' ? 'operator' : 'admin',
     language: i18n.normalizeLang(u.language),
   };
+}
+
+function isAdmin(u) {
+  return !!u && u.role === 'admin';
+}
+function adminCount() {
+  return (config.users || []).filter((u) => u.role === 'admin').length;
+}
+
+// --- password policy ---
+// A short blocklist of the most common weak passwords. The point isn't to be
+// exhaustive (that's what length + character variety enforce) but to reject the
+// handful of passwords that show up first in every credential-stuffing list.
+const COMMON_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+  'qwerty123', 'qwertyuiop', '11111111', '00000000', 'iloveyou', 'minecraft',
+  'letmein123', 'administrator', 'changeme', 'welcome1', 'admin123', 'abc12345',
+  'baseball', 'football', 'sunshine', 'superman', 'trustno1', 'passw0rd',
+]);
+const MIN_PASSWORD_LENGTH = 8;
+
+// First-run admin account. The default password satisfies the password policy
+// (length + variety, not a common password) and is printed at startup so a
+// fresh install can sign in. It is meant to be changed immediately.
+const DEFAULT_ADMIN_EMAIL = 'admin@lodestone.io';
+const DEFAULT_ADMIN_USERNAME = 'admin';
+const DEFAULT_ADMIN_PASSWORD = 'Lodestone1';
+// Returns an i18n error key when the password is unacceptable, or null when ok.
+function passwordIssue(pw) {
+  if (typeof pw !== 'string') return 'passwordTooShort';
+  if (pw.length < MIN_PASSWORD_LENGTH) return 'passwordTooShort';
+  if (pw.length > 200) return 'passwordTooLong';
+  if (COMMON_PASSWORDS.has(pw.toLowerCase())) return 'passwordTooCommon';
+  let classes = 0;
+  if (/[a-z]/.test(pw)) classes++;
+  if (/[A-Z]/.test(pw)) classes++;
+  if (/[0-9]/.test(pw)) classes++;
+  if (/[^A-Za-z0-9]/.test(pw)) classes++;
+  if (classes < 2) return 'passwordTooWeak';
+  return null;
 }
 
 // Migrate a legacy single-server config (serverDir/jar/...) into config.servers[].
@@ -233,12 +274,25 @@ function migrateConfig() {
   if (!Array.isArray(config.users) || !config.users.length) {
     config.users = [{
       id: genId(),
-      username: 'admin',
-      email: 'admin@lodestone.io',
+      username: DEFAULT_ADMIN_USERNAME,
+      email: DEFAULT_ADMIN_EMAIL,
       name: 'Admin',
-      passwordHash: hashPassword(config.password || 'admin'),
+      role: 'admin',
+      passwordHash: hashPassword(config.password || DEFAULT_ADMIN_PASSWORD),
     }];
     delete config.password;
+    changed = true;
+  }
+  // Every account must have a role. Accounts that predate the role system
+  // (or any malformed value) become admins, so existing single-user setups
+  // keep full access after the upgrade.
+  for (const u of config.users) {
+    if (u.role !== 'admin' && u.role !== 'operator') { u.role = 'admin'; changed = true; }
+  }
+  // Never leave a config without at least one admin (e.g. a hand-edited file
+  // where every account was set to operator): promote the first account.
+  if (config.users.length && !config.users.some((u) => u.role === 'admin')) {
+    config.users[0].role = 'admin';
     changed = true;
   }
   if (changed) saveConfig(config);
@@ -877,13 +931,81 @@ function authMiddleware(req, res, next) {
   next();
 }
 
+// Require an admin account. Used to gate account management, the server
+// registry, and global settings. Authorization is always enforced server-side;
+// the UI hiding these for operators is only a convenience.
+function requireAdmin(req, res, next) {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: tErr(req.user, 'errors.forbidden') });
+  }
+  next();
+}
+
+// --- login brute-force throttling (in-memory; single-process panel) ---
+// Two independent counters: one per account identifier (so guessing one
+// account's password can't be done indefinitely) and one per client IP (so a
+// single host can't spray many accounts). Both reset on a successful login.
+const LOGIN_MAX_ATTEMPTS = 5;       // per identifier
+const LOGIN_IP_MAX_ATTEMPTS = 15;   // per IP across all identifiers
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const loginAttempts = new Map(); // key -> { count, firstAt, lockUntil }
+
+function clientKey(req, body) {
+  // Prefer the socket's remote address (can't be spoofed by a request header).
+  // Fall back to the browser-reported IP only when the socket address is
+  // missing, which shouldn't normally happen.
+  const ip = (req.socket && req.socket.remoteAddress) || (body && body.clientIp) || 'unknown';
+  return String(ip);
+}
+
+function loginLockRemainingMs(key) {
+  const rec = loginAttempts.get(key);
+  if (!rec) return 0;
+  const now = Date.now();
+  if (rec.lockUntil && rec.lockUntil > now) return rec.lockUntil - now;
+  // Window expired: forget the record so counts don't accumulate forever.
+  if (now - rec.firstAt > LOGIN_WINDOW_MS) loginAttempts.delete(key);
+  return 0;
+}
+
+function noteLoginFailure(key, max) {
+  const now = Date.now();
+  let rec = loginAttempts.get(key);
+  if (!rec || now - rec.firstAt > LOGIN_WINDOW_MS) {
+    rec = { count: 0, firstAt: now, lockUntil: 0 };
+  }
+  rec.count += 1;
+  if (rec.count >= max) rec.lockUntil = now + LOGIN_LOCK_MS;
+  loginAttempts.set(key, rec);
+}
+
+function clearLoginFailures(...keys) {
+  for (const k of keys) loginAttempts.delete(k);
+}
+
 app.post('/api/login', async (req, res) => {
   const { email, username, password, clientIp, lang } = req.body || {};
   const identifier = (username != null && String(username).trim()) || (email != null && String(email).trim()) || '';
+  const ipKey = `ip:${clientKey(req, req.body)}`;
+  const idKey = `id:${identifier.toLowerCase()}`;
+
+  // Refuse early when either counter is locked, without revealing whether the
+  // account exists. Surface a retry-after hint so the client can show minutes.
+  const lockMs = Math.max(loginLockRemainingMs(ipKey), identifier ? loginLockRemainingMs(idKey) : 0);
+  if (lockMs > 0) {
+    res.set('Retry-After', String(Math.ceil(lockMs / 1000)));
+    const minutes = Math.max(1, Math.ceil(lockMs / 60000));
+    return res.status(429).json({ error: tErr({ language: lang }, 'errors.tooManyAttempts', { minutes }) });
+  }
+
   const user = findUserByLogin(identifier);
   if (!user || !verifyPassword(password, user.passwordHash)) {
+    noteLoginFailure(ipKey, LOGIN_IP_MAX_ATTEMPTS);
+    if (identifier) noteLoginFailure(idKey, LOGIN_MAX_ATTEMPTS);
     return res.status(401).json({ error: tErr({ language: lang }, 'errors.wrongCredentials') });
   }
+  clearLoginFailures(ipKey, idKey);
 
   // Decide which language to use for this session:
   //   - An explicit `lang` field on the body (manual switcher before login) wins.
@@ -935,7 +1057,54 @@ function validateIdentifier({ email, username }) {
 
 app.get('/api/me', (req, res) => res.json(publicUser(req.user)));
 
-// Manual language switch — the user can change it any time from the header.
+// Self-service profile edit. A user can change their own name, email, and
+// username, but never their own role (that would let an operator promote
+// themselves) and never another account.
+app.put('/api/me', (req, res) => {
+  const user = req.user;
+  const { email, username, name } = req.body || {};
+  if (email !== undefined) {
+    const e = normalizeEmail(email);
+    if (e && !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailInvalid') });
+    if (e) {
+      const clash = findUserByEmail(e);
+      if (clash && clash.id !== user.id) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
+    }
+    user.email = e;
+  }
+  if (username !== undefined) {
+    const u = normalizeUsername(username);
+    if (u && !USERNAME_RE.test(u)) return res.status(400).json({ error: tErr(req.user, 'errors.usernameInvalid') });
+    if (u) {
+      const clash = findUserByUsername(u);
+      if (clash && clash.id !== user.id) return res.status(400).json({ error: tErr(req.user, 'errors.usernameTaken') });
+    }
+    user.username = u;
+  }
+  if (!user.email && !user.username) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.identifierRequired') });
+  }
+  if (name !== undefined) user.name = String(name || '').trim();
+  saveConfig(config);
+  res.json({ user: publicUser(user) });
+});
+
+// Self-service password change. Requires the current password, so a hijacked
+// session (or a shoulder-surfer) can't silently swap it.
+app.put('/api/me/password', (req, res) => {
+  const user = req.user;
+  const { currentPassword, newPassword } = req.body || {};
+  if (!verifyPassword(currentPassword, user.passwordHash)) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.currentPasswordWrong') });
+  }
+  const pwIssue = passwordIssue(newPassword);
+  if (pwIssue) return res.status(400).json({ error: tErr(req.user, `errors.${pwIssue}`, { min: MIN_PASSWORD_LENGTH }) });
+  user.passwordHash = hashPassword(newPassword);
+  saveConfig(config);
+  res.json({ ok: true });
+});
+
+// Manual language switch. The user can change it any time from the header.
 app.put('/api/me/language', (req, res) => {
   const next = i18n.normalizeLang((req.body || {}).language);
   if (!i18n.SUPPORTED_LANGS.includes(next)) {
@@ -948,26 +1117,33 @@ app.put('/api/me/language', (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
-app.get('/api/users', (req, res) => {
+function normalizeRole(role) {
+  return role === 'operator' ? 'operator' : role === 'admin' ? 'admin' : null;
+}
+
+app.get('/api/users', requireAdmin, (req, res) => {
   res.json({ users: (config.users || []).map(publicUser) });
 });
 
-app.post('/api/users', (req, res) => {
-  const { email, username, name, password } = req.body || {};
+app.post('/api/users', requireAdmin, (req, res) => {
+  const { email, username, name, password, role } = req.body || {};
   const v = validateIdentifier({ email, username });
   if (v.error === 'emailInvalid') return res.status(400).json({ error: tErr(req.user, 'errors.emailInvalid') });
   if (v.error === 'usernameInvalid') return res.status(400).json({ error: tErr(req.user, 'errors.usernameInvalid') });
   if (!v.email && !v.username) return res.status(400).json({ error: tErr(req.user, 'errors.identifierRequired') });
-  if (typeof password !== 'string' || password.length < 4) {
-    return res.status(400).json({ error: tErr(req.user, 'errors.passwordTooShort') });
-  }
+  const pwIssue = passwordIssue(password);
+  if (pwIssue) return res.status(400).json({ error: tErr(req.user, `errors.${pwIssue}`, { min: MIN_PASSWORD_LENGTH }) });
   if (v.email && findUserByEmail(v.email)) return res.status(400).json({ error: tErr(req.user, 'errors.emailTaken') });
   if (v.username && findUserByUsername(v.username)) return res.status(400).json({ error: tErr(req.user, 'errors.usernameTaken') });
+  // New accounts default to operator (least privilege); an admin can grant the
+  // admin role explicitly.
+  const newRole = normalizeRole(role) || 'operator';
   const user = {
     id: genId(),
     email: v.email || '',
     username: v.username || '',
     name: String(name || '').trim(),
+    role: newRole,
     passwordHash: hashPassword(password),
   };
   config.users.push(user);
@@ -975,10 +1151,20 @@ app.post('/api/users', (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', requireAdmin, (req, res) => {
   const user = findUser(req.params.id);
   if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
-  const { email, username, name, password } = req.body || {};
+  const { email, username, name, password, role } = req.body || {};
+  if (role !== undefined) {
+    const r = normalizeRole(role);
+    if (!r) return res.status(400).json({ error: tErr(req.user, 'errors.roleInvalid') });
+    // Don't allow demoting the last remaining admin (would lock everyone out of
+    // user management and global settings).
+    if (user.role === 'admin' && r !== 'admin' && adminCount() <= 1) {
+      return res.status(400).json({ error: tErr(req.user, 'errors.lastAdmin') });
+    }
+    user.role = r;
+  }
   if (email !== undefined) {
     const e = normalizeEmail(email);
     if (e && !e.includes('@')) return res.status(400).json({ error: tErr(req.user, 'errors.emailInvalid') });
@@ -1003,20 +1189,23 @@ app.put('/api/users/:id', (req, res) => {
   }
   if (name !== undefined) user.name = String(name || '').trim();
   if (password !== undefined && password !== '') {
-    if (typeof password !== 'string' || password.length < 4) {
-      return res.status(400).json({ error: tErr(req.user, 'errors.passwordTooShort') });
-    }
+    const pwIssue = passwordIssue(password);
+    if (pwIssue) return res.status(400).json({ error: tErr(req.user, `errors.${pwIssue}`, { min: MIN_PASSWORD_LENGTH }) });
     user.passwordHash = hashPassword(password);
   }
   saveConfig(config);
   res.json({ user: publicUser(user) });
 });
 
-app.delete('/api/users/:id', (req, res) => {
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
   const user = findUser(req.params.id);
   if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
   if (config.users.length <= 1) return res.status(400).json({ error: tErr(req.user, 'errors.cannotDeleteLastUser') });
   if (user.id === req.user.id) return res.status(400).json({ error: tErr(req.user, 'errors.cannotDeleteSelf') });
+  // Keep at least one admin alive.
+  if (user.role === 'admin' && adminCount() <= 1) {
+    return res.status(400).json({ error: tErr(req.user, 'errors.lastAdmin') });
+  }
   config.users = config.users.filter((u) => u.id !== user.id);
   saveConfig(config);
   res.json({ ok: true });
@@ -1036,7 +1225,7 @@ app.get('/api/config', (req, res) => res.json(publicConfig()));
 // Update only the backup-retention settings. After saving, prune every
 // server's existing backups so a newly-lowered limit takes effect right
 // away (not just on the next backup).
-app.put('/api/config/backups', (req, res) => {
+app.put('/api/config/backups', requireAdmin, (req, res) => {
   const b = req.body || {};
   const toNonNegInt = (v) => {
     const n = Number(v);
@@ -1454,7 +1643,7 @@ function normalizeMapUrl(raw) {
   }
 }
 
-app.post('/api/servers', (req, res) => {
+app.post('/api/servers', requireAdmin, (req, res) => {
   const v = validateServerInput(req.body || {}, req.user);
   if (v.error) return res.status(400).json({ error: localizeErr(req.user, v.error) });
   const entry = {
@@ -1469,7 +1658,7 @@ app.post('/api/servers', (req, res) => {
   res.json({ ok: true, server: serverWithStatus(entry) });
 });
 
-app.put('/api/servers/:id', (req, res) => {
+app.put('/api/servers/:id', requireAdmin, (req, res) => {
   const s = findServer(req.params.id);
   if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const m = getManager(s.id);
@@ -1492,7 +1681,7 @@ app.put('/api/servers/:id', (req, res) => {
 // (it's just a link to the web map the user wants to embed) so it can be
 // changed while the Minecraft server is running — unlike the rest of the
 // server settings, which require the server to be stopped.
-app.put('/api/servers/:id/map', (req, res) => {
+app.put('/api/servers/:id/map', requireAdmin, (req, res) => {
   const s = findServer(req.params.id);
   if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const mapUrl = normalizeMapUrl((req.body || {}).mapUrl);
@@ -1503,7 +1692,7 @@ app.put('/api/servers/:id/map', (req, res) => {
   res.json({ ok: true, server: serverWithStatus(s) });
 });
 
-app.delete('/api/servers/:id', (req, res) => {
+app.delete('/api/servers/:id', requireAdmin, (req, res) => {
   const s = findServer(req.params.id);
   if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const m = getManager(s.id);
@@ -1632,21 +1821,63 @@ async function mojangUuid(name) {
   return null;
 }
 
+// Players the server has seen recently (usercache.json), so they can be acted on
+// by clicking instead of typing — even while offline. Drops expired entries and
+// anyone already surfaced elsewhere (online / whitelist / ops / banned).
+function readUserCache(dir, exclude) {
+  const arr = readJsonArray(path.join(dir, 'usercache.json'));
+  const now = Date.now();
+  const seen = new Set();
+  const out = [];
+  for (const x of arr) {
+    const name = x && x.name;
+    if (!name || seen.has(name.toLowerCase())) continue;
+    if (x.expiresOn) {
+      const exp = Date.parse(x.expiresOn);
+      if (!Number.isNaN(exp) && exp < now) continue;
+    }
+    if (exclude.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push({ name, uuid: x.uuid || '' });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 app.get('/api/playerlists', (req, res) => {
   const m = targetManager(req);
-  if (!m || !m.dir()) return res.json({ online: [], whitelist: [], ops: [], banned: [], whitelistEnabled: false, running: false });
+  if (!m || !m.dir()) return res.json({ online: [], whitelist: [], ops: [], banned: [], recent: [], whitelistEnabled: false, running: false });
   const d = m.dir();
   const wl = readJsonArray(path.join(d, 'whitelist.json')).map((x) => x.name).filter(Boolean);
   const ops = readJsonArray(path.join(d, 'ops.json')).map((x) => x.name).filter(Boolean);
   const banned = readJsonArray(path.join(d, 'banned-players.json')).map((x) => ({ name: x.name, reason: x.reason || '' })).filter((x) => x.name);
+  const online = [...m.players].sort((a, b) => a.localeCompare(b));
+  const exclude = new Set([...online, ...wl, ...ops, ...banned.map((b) => b.name)].map((n) => n.toLowerCase()));
   res.json({
-    online: [...m.players].sort((a, b) => a.localeCompare(b)),
+    online,
     whitelist: wl.sort((a, b) => a.localeCompare(b)),
     ops: ops.sort((a, b) => a.localeCompare(b)),
     banned,
+    recent: readUserCache(d, exclude),
     whitelistEnabled: whitelistEnabled(d),
     running: m.isRunning(),
   });
+});
+
+// Validate a never-before-seen name against Mojang and return its head-ready
+// canonical name + UUID, so the "add player" search can confirm before adding.
+app.get('/api/players/lookup', async (req, res) => {
+  const name = (req.query.name || '').trim();
+  if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return res.status(400).json({ error: tErr(req.user, 'errors.invalidPlayerName') });
+  try {
+    const d = await fetchJson(`https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(name)}`);
+    if (d && d.id && d.name) {
+      const uuid = d.id.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+      return res.json({ ok: true, name: d.name, uuid });
+    }
+    return res.status(404).json({ error: tErr(req.user, 'errors.couldNotResolvePlayer') });
+  } catch (_) {
+    return res.status(404).json({ error: tErr(req.user, 'errors.couldNotResolvePlayer') });
+  }
 });
 
 // Toggle the whitelist on/off (sends command when running, edits server.properties when offline).
@@ -1674,6 +1905,8 @@ app.post('/api/playerlists/:kind/:op', async (req, res) => {
   if (!['whitelist', 'op', 'ban'].includes(kind) || !['add', 'remove'].includes(op)) {
     return res.status(400).json({ error: tErr(req.user, 'errors.unknownAction') });
   }
+  // Optional free-text ban reason (only used when kind === 'ban' && op === 'add').
+  const reason = (req.body && typeof req.body.reason === 'string' ? req.body.reason : '').trim().slice(0, 200);
   const m = targetManager(req);
   if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
 
@@ -1682,7 +1915,7 @@ app.post('/api/playerlists/:kind/:op', async (req, res) => {
     const cmds = {
       'whitelist:add': `whitelist add ${name}`, 'whitelist:remove': `whitelist remove ${name}`,
       'op:add': `op ${name}`, 'op:remove': `deop ${name}`,
-      'ban:add': `ban ${name}`, 'ban:remove': `pardon ${name}`,
+      'ban:add': reason ? `ban ${name} ${reason}` : `ban ${name}`, 'ban:remove': `pardon ${name}`,
     };
     return res.json(localizeManagerResult(req, m.sendCommand(cmds[`${kind}:${op}`])));
   }
@@ -1705,7 +1938,7 @@ app.post('/api/playerlists/:kind/:op', async (req, res) => {
     if (arr.some((x) => (x.name || '').toLowerCase() === name.toLowerCase())) return res.json({ ok: true, note: 'Already listed.' });
     if (kind === 'whitelist') arr.push({ uuid, name });
     else if (kind === 'op') arr.push({ uuid, name, level: 4, bypassesPlayerLimit: false });
-    else if (kind === 'ban') arr.push({ uuid, name, created: new Date().toISOString(), source: 'Lodestone', expires: 'forever', reason: 'Banned by an operator' });
+    else if (kind === 'ban') arr.push({ uuid, name, created: new Date().toISOString(), source: 'Lodestone', expires: 'forever', reason: reason || 'Banned by an operator' });
     writeJsonArray(file, arr);
     return res.json({ ok: true, note: 'Updated (server offline).' });
   } catch (e) { return res.status(500).json({ error: e.message }); }
@@ -3203,7 +3436,7 @@ function ensureRuntime(major, onProgress) {
   return p;
 }
 
-app.post('/api/create', async (req, res) => {
+app.post('/api/create', requireAdmin, async (req, res) => {
   const body = req.body || {};
   const type = String(body.type || '').toLowerCase();
   const name = String(body.name || '').trim();
@@ -3422,6 +3655,15 @@ app.post('/api/tasks/:id/run', (req, res) => {
 app.use('/resources', express.static(path.join(__dirname, 'resources')));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// SPA fallback: any non-API GET that didn't match a real static file returns
+// the app shell, so client-side routes (e.g. /console, /users) keep working on
+// direct navigation and on refresh. API and resource paths are left alone.
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path === '/api') return next();
+  if (req.path.startsWith('/resources/')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ---------------------------------------------------------------------------
 // System resources (monitor)
 // ---------------------------------------------------------------------------
@@ -3632,9 +3874,40 @@ function doScheduledRestart(m) {
 
 setupSchedulers();
 
+// Print the default sign-in once at startup, but only while the default admin
+// still has the default password. As soon as the password is changed the stored
+// hash stops matching, so real credentials are never echoed to the console.
+function logDefaultCredentials() {
+  try {
+    const admin = findUserByEmail(DEFAULT_ADMIN_EMAIL);
+    if (!admin) return;
+    // Show whichever known default password still matches: the current default,
+    // or the legacy "admin" from older installs that predate the policy. Once
+    // the admin sets their own password, none match and the banner stops.
+    const knownDefaults = [DEFAULT_ADMIN_PASSWORD, 'admin'];
+    const current = knownDefaults.find((pw) => verifyPassword(pw, admin.passwordHash));
+    if (!current) return;
+    const host = config.panelHost === '0.0.0.0' ? 'localhost' : config.panelHost;
+    const bar = '='.repeat(58);
+    console.log('');
+    console.log(bar);
+    console.log('  Lodestone default sign-in  (CHANGE THIS PASSWORD!)');
+    console.log(bar);
+    console.log(`  URL:       http://${host}:${config.panelPort}`);
+    console.log(`  Username:  ${DEFAULT_ADMIN_USERNAME}   (or email ${DEFAULT_ADMIN_EMAIL})`);
+    console.log(`  Password:  ${current}`);
+    console.log(bar);
+    console.log('  Sign in, then change it in Settings > Change password.');
+    console.log('  This notice disappears once the password is changed.');
+    console.log(bar);
+    console.log('');
+  } catch (_) { /* never block startup on the banner */ }
+}
+
 server.listen(config.panelPort, config.panelHost, () => {
   log(`${config.appName} listening on http://${config.panelHost}:${config.panelPort}`);
   log(`Registered servers: ${config.servers.length}`);
+  logDefaultCredentials();
 });
 
 // Clean shutdown

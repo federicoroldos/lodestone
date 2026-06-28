@@ -7,10 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { StatusPill } from '@/components/shared/StatusPill';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useServer } from '@/context/ServerContext';
+import { useAuth } from '@/context/AuthContext';
 import { useApi } from '@/hooks/useApi';
 import { useApiStream } from '@/hooks/useApiStream';
 import { useT } from '@/context/I18nContext';
-import { fmtUptime, fmtBytes, fmtBytesRaw } from '@/lib/utils';
+import { fmtUptime, fmtBytes, fmtBytesRaw, osExamplePath } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -151,7 +152,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
             <div className="space-y-1.5">
               <Label>{t('servers.fieldFolder')}</Label>
               <div className="flex gap-2">
-                <Input value={form.dir} onChange={f('dir')} placeholder={t('servers.folderPlaceholder')} className="flex-1" />
+                <Input value={form.dir} onChange={f('dir')} placeholder={t('servers.folderPlaceholder', { path: osExamplePath('server') })} className="flex-1" />
                 <Button variant="glass" size="sm" type="button" onClick={() => setFsOpen(true)}>
                   <FolderOpen className="h-3.5 w-3.5" />
                   {t('servers.browse')}
@@ -341,7 +342,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
           <div className="space-y-1.5">
             <Label>{t('servers.fieldParent')}</Label>
             <div className="flex gap-2">
-              <Input value={form.parentDir} onChange={f('parentDir')} disabled={loading} placeholder={t('servers.parentPlaceholder')} className="flex-1" />
+              <Input value={form.parentDir} onChange={f('parentDir')} disabled={loading} placeholder={t('servers.parentPlaceholder', { path: osExamplePath('parent') })} className="flex-1" />
               <Button variant="glass" size="sm" type="button" disabled={loading} onClick={async () => {
                 const data = await api(`/api/pick-folder?defaultPath=${encodeURIComponent(form.parentDir)}`);
                 if (data?.path) setForm(f => ({ ...f, parentDir: data.path }));
@@ -404,6 +405,8 @@ export function ServersView({ onSetActive, onRefresh }) {
   const api = useApi();
   const t = useT();
   const { servers, activeServerId, statuses } = useServer();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [registerOpen, setRegisterOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editServer, setEditServer] = useState(null);
@@ -428,15 +431,17 @@ export function ServersView({ onSetActive, onRefresh }) {
       <Card>
         <CardHeader>
           <CardTitle>{t('servers.registeredTitle')}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              {t('servers.createNew')}
-            </Button>
-            <Button variant="glass" size="sm" onClick={() => { setEditServer(null); setRegisterOpen(true); }}>
-              {t('servers.registerExisting')}
-            </Button>
-          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                {t('servers.createNew')}
+              </Button>
+              <Button variant="glass" size="sm" onClick={() => { setEditServer(null); setRegisterOpen(true); }}>
+                {t('servers.registerExisting')}
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-4">{(() => {
@@ -498,8 +503,8 @@ export function ServersView({ onSetActive, onRefresh }) {
                             <Button variant="ghost" size="icon-xs" title={t('servers.btnRestart')} onClick={() => action('restart', s)}><RotateCcw className="h-3.5 w-3.5" /></Button>
                             <Button variant="ghost" size="icon-xs" title={t('servers.btnStop')} disabled={!running} onClick={() => action('stop', s)}><Square className="h-3.5 w-3.5 text-status-error" /></Button>
                             <Button variant="ghost" size="icon-xs" title={t('servers.btnSetActive')} disabled={isActive} onClick={() => action('active', s)}><Star className={cn('h-3.5 w-3.5', isActive && 'text-primary fill-primary')} /></Button>
-                            <Button variant="ghost" size="icon-xs" title={t('servers.btnEdit')} onClick={() => { setEditServer(s); setRegisterOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="icon-xs" title={t('servers.btnRemove')} onClick={() => setConfirmDelete(s)}><Trash2 className="h-3.5 w-3.5 text-status-error" /></Button>
+                            {isAdmin && <Button variant="ghost" size="icon-xs" title={t('servers.btnEdit')} onClick={() => { setEditServer(s); setRegisterOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>}
+                            {isAdmin && <Button variant="ghost" size="icon-xs" title={t('servers.btnRemove')} onClick={() => setConfirmDelete(s)}><Trash2 className="h-3.5 w-3.5 text-status-error" /></Button>}
                           </div>
                         </td>
                       </tr>

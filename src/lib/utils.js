@@ -52,6 +52,32 @@ export function isJwtExpired(jwt) {
   }
 }
 
+// Best-effort guess of the OS the browser is running on, so path examples in
+// the UI look native (Windows backslashes vs. POSIX slashes) instead of always
+// showing a Windows path. Falls back to Linux-style when unsure.
+export function detectOs() {
+  const p = (
+    (typeof navigator !== 'undefined' &&
+      (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent)) || ''
+  ).toLowerCase();
+  if (p.includes('win')) return 'windows';
+  if (p.includes('mac') || p.includes('iphone') || p.includes('ipad')) return 'mac';
+  return 'linux';
+}
+
+// Example filesystem path for the current OS. `kind` is 'parent' (a folder to
+// create a server inside) or 'server' (a specific server folder).
+export function osExamplePath(kind = 'parent') {
+  const os = detectOs();
+  if (os === 'windows') {
+    return kind === 'server' ? 'C:\\Servers\\My Server' : 'C:\\Servers';
+  }
+  if (os === 'mac') {
+    return kind === 'server' ? '/Users/you/Servers/My Server' : '/Users/you/Servers';
+  }
+  return kind === 'server' ? '/home/you/servers/my-server' : '/home/you/servers';
+}
+
 export function joinRel(base, name) {
   return base ? base + '/' + name : name;
 }

@@ -1,15 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
+} from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useApi } from '@/hooks/useApi';
 import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
-import { RefreshCw, X } from 'lucide-react';
+import {
+  RefreshCw, Crown, Check, Ban, LogOut, Search, Loader2, X, ShieldX,
+} from 'lucide-react';
 
-// Friendly, terse confirmation per player action (e.g. "Kicked Steve").
+// Per-action friendly confirmation.
 const ACTION_MSG = {
   op: 'players.opped',
   deop: 'players.deopped',
@@ -18,71 +24,234 @@ const ACTION_MSG = {
   pardon: 'players.pardoned',
 };
 
-function PlayerChip({ name, onAction }) {
+const headUrl = (name, px) => `https://minotar.net/helm/${encodeURIComponent(name)}/${px}.png`;
+
+function Head({ name, px = 32, className }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 px-3 py-2">
-      <img
-        src={`https://minotar.net/helm/${encodeURIComponent(name)}/22.png`}
-        alt=""
-        className="h-6 w-6 rounded"
-        onError={e => { e.target.style.visibility = 'hidden'; }}
-      />
-      <span className="flex-1 text-sm font-medium text-foreground">{name}</span>
-      <div className="flex items-center gap-1">
-        <Button variant="glass" size="xs" onClick={() => onAction('op', name)}>OP</Button>
-        <Button variant="glass" size="xs" onClick={() => onAction('kick', name)}>Kick</Button>
-        <Button variant="destructive" size="xs" onClick={() => onAction('ban', name)}>Ban</Button>
+    <img
+      src={headUrl(name, px)}
+      alt=""
+      width={px / 2}
+      height={px / 2}
+      className={className}
+      style={{ imageRendering: 'pixelated' }}
+      onError={(e) => { e.target.style.visibility = 'hidden'; }}
+    />
+  );
+}
+
+// One clickable player tile: head, name, and tiny state badges.
+function PlayerCard({ name, flags, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-left transition-colors hover:bg-secondary/60 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="relative shrink-0">
+        <Head name={name} px={44} className="h-[22px] w-[22px] rounded" />
+        {flags.online && (
+          <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-card bg-status-online" />
+        )}
       </div>
-    </div>
+      <span className="flex-1 min-w-0 truncate text-sm font-medium text-foreground">{name}</span>
+      <span className="flex items-center gap-1 text-muted-foreground">
+        {flags.op && <Crown className="h-3.5 w-3.5 text-status-warn" />}
+        {flags.whitelisted && <Check className="h-3.5 w-3.5 text-status-online" />}
+        {flags.banned && <Ban className="h-3.5 w-3.5 text-status-error" />}
+      </span>
+    </button>
   );
 }
 
-function PlayerList({ id, items, kind, onRemove }) {
-  const EMPTY_MSG = { whitelist: 'Whitelist is empty.', op: 'No operators.', ban: 'No banned players.' };
-  if (!items?.length) return <EmptyState message={EMPTY_MSG[kind] || 'Empty.'} />;
+// A titled card holding a responsive grid of player tiles.
+function PlayerSection({ title, icon: Icon, count, players, getFlags, onSelect, emptyMessage }) {
   return (
-    <div className="max-h-72 overflow-y-auto space-y-1">
-      {items.map((it, i) => {
-        const name = typeof it === 'string' ? it : it.name;
-        const reason = (it && typeof it === 'object' && it.reason) ? it.reason : '';
-        return (
-          <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary/50 group">
-            <img
-              src={`https://minotar.net/helm/${encodeURIComponent(name)}/22.png`}
-              alt=""
-              className="h-5 w-5 rounded"
-              onError={e => { e.target.style.visibility = 'hidden'; }}
-            />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm text-foreground">{name}</span>
-              {reason && <span className="block text-xs text-muted-foreground">{reason}</span>}
-            </div>
-            <button
-              onClick={() => onRemove(kind, name)}
-              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-status-error transition-all text-sm"
-              title={kind === 'ban' ? 'Pardon' : 'Remove'}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+          {title}
+          {count > 0 && <span className="text-xs font-normal text-muted-foreground">({count})</span>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {players.length === 0 ? (
+          <EmptyState message={emptyMessage} />
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {players.map((name) => (
+              <PlayerCard key={name} name={name} flags={getFlags(name)} onClick={() => onSelect(name)} />
+            ))}
           </div>
-        );
-      })}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-function AddPlayerForm({ kind, onAdd, placeholder, buttonLabel, buttonVariant = 'default' }) {
-  const [name, setName] = useState('');
-  const submit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    onAdd(kind, 'add', name.trim()).then(() => setName(''));
-  };
+// Detail panel for a single player: big head, badges, and state-aware actions.
+function PlayerDetail({ name, flags, reason, uuid, onAction, onClose, t }) {
+  const [banning, setBanning] = useState(false);
+  const [banReason, setBanReason] = useState('');
+  useEffect(() => { setBanning(false); setBanReason(''); }, [name]);
+
+  const run = (fn) => fn();
+
   return (
-    <form onSubmit={submit} className="flex gap-2 mb-3">
-      <Input value={name} onChange={e => setName(e.target.value)} placeholder={placeholder} className="flex-1 h-8 text-xs" />
-      <Button type="submit" variant={buttonVariant} size="xs">{buttonLabel}</Button>
-    </form>
+    <Dialog open={!!name} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            <Head name={name || ''} px={72} className="h-9 w-9 rounded" />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-foreground">{name}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {flags.online && <Badge variant="online">{t('players.badgeOnline')}</Badge>}
+                {flags.op && <Badge variant="starting">{t('players.badgeOp')}</Badge>}
+                {flags.whitelisted && <Badge variant="active">{t('players.badgeWhitelisted')}</Badge>}
+                {flags.banned && <Badge variant="destructive">{t('players.badgeBanned')}</Badge>}
+                {!flags.online && !flags.op && !flags.whitelisted && !flags.banned && (
+                  <Badge variant="offline">{t('players.badgeOffline')}</Badge>
+                )}
+              </div>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          {flags.banned && reason && (
+            <p className="rounded bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{t('players.reasonLabel')}:</span> {reason}
+            </p>
+          )}
+          {uuid && (
+            <p className="select-all break-all font-mono text-[11px] text-muted-foreground">{uuid}</p>
+          )}
+
+          <div className="grid grid-cols-1 gap-2">
+            {flags.online && (
+              <Button variant="glass" onClick={() => run(() => onAction.kick(name))} className="justify-start">
+                <LogOut className="h-4 w-4" /> {t('players.kick')}
+              </Button>
+            )}
+
+            {flags.op ? (
+              <Button variant="glass" onClick={() => run(() => onAction.opRemove(name))} className="justify-start">
+                <ShieldX className="h-4 w-4" /> {t('players.removeOp')}
+              </Button>
+            ) : (
+              <Button variant="glass" onClick={() => run(() => onAction.opAdd(name))} className="justify-start">
+                <Crown className="h-4 w-4" /> {t('players.makeOp')}
+              </Button>
+            )}
+
+            {flags.whitelisted ? (
+              <Button variant="glass" onClick={() => run(() => onAction.whitelistRemove(name))} className="justify-start">
+                <X className="h-4 w-4" /> {t('players.removeWhitelist')}
+              </Button>
+            ) : (
+              <Button variant="glass" onClick={() => run(() => onAction.whitelistAdd(name))} className="justify-start">
+                <Check className="h-4 w-4" /> {t('players.addWhitelist')}
+              </Button>
+            )}
+
+            {flags.banned ? (
+              <Button variant="glass" onClick={() => run(() => onAction.pardon(name))} className="justify-start">
+                <Check className="h-4 w-4" /> {t('players.pardon')}
+              </Button>
+            ) : banning ? (
+              <div className="space-y-2 rounded-lg border border-destructive/40 p-2">
+                <Input
+                  autoFocus
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  placeholder={t('players.reasonPlaceholder')}
+                  className="h-8 text-xs"
+                />
+                <div className="flex gap-2">
+                  <Button variant="destructive" size="sm" className="flex-1" onClick={() => onAction.ban(name, banReason.trim())}>
+                    <Ban className="h-4 w-4" /> {t('players.confirmBan')}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setBanning(false)}>{t('common.cancel')}</Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="destructive" onClick={() => setBanning(true)} className="justify-start">
+                <Ban className="h-4 w-4" /> {t('players.ban')}
+              </Button>
+            )}
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Top bar: validate a never-before-seen name against Mojang, then add it to a list.
+function AddPlayerBar({ onAdd, t }) {
+  const api = useApi();
+  const [query, setQuery] = useState('');
+  const [state, setState] = useState({ status: 'idle' }); // idle | looking | found | notfound
+  const timer = useRef(null);
+
+  useEffect(() => {
+    const name = query.trim();
+    if (timer.current) clearTimeout(timer.current);
+    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) { setState({ status: 'idle' }); return; }
+    setState({ status: 'looking' });
+    timer.current = setTimeout(async () => {
+      try {
+        const d = await api(`/api/players/lookup?name=${encodeURIComponent(name)}`, { silent: true });
+        setState({ status: 'found', name: d.name, uuid: d.uuid });
+      } catch (_) {
+        setState({ status: 'notfound' });
+      }
+    }, 450);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [query, api]);
+
+  const found = state.status === 'found';
+  const add = async (kind) => {
+    await onAdd(kind, state.name);
+    setQuery('');
+    setState({ status: 'idle' });
+  };
+
+  return (
+    <Card>
+      <CardContent className="py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('players.addPlaceholder')}
+              className="pl-8"
+            />
+          </div>
+          {found && <Head name={state.name} px={48} className="h-6 w-6 rounded" />}
+          {found && <span className="text-sm font-medium text-foreground">{state.name}</span>}
+          <div className="flex items-center gap-2">
+            {state.status === 'looking' && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            {state.status === 'notfound' && <span className="text-xs text-status-error">{t('players.notFound')}</span>}
+            {found && (
+              <>
+                <Button variant="glass" size="sm" onClick={() => add('whitelist')}>
+                  <Check className="h-4 w-4" /> {t('players.whitelistTitle')}
+                </Button>
+                <Button variant="glass" size="sm" onClick={() => add('op')}>
+                  <Crown className="h-4 w-4" /> {t('players.op')}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => add('ban')}>
+                  <Ban className="h-4 w-4" /> {t('players.ban')}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -91,10 +260,10 @@ export function PlayersView() {
   const t = useT();
   const { activeServerId, statuses } = useServer();
   const status = activeServerId ? (statuses[activeServerId] || {}) : {};
-  const players = status.players || [];
+  const livePlayers = status.players || [];
 
-  const [lists, setLists] = useState({ whitelist: [], ops: [], banned: [], whitelistEnabled: false });
-  const [manualName, setManualName] = useState('');
+  const [lists, setLists] = useState({ online: [], recent: [], whitelist: [], ops: [], banned: [], whitelistEnabled: false });
+  const [selected, setSelected] = useState(null);
 
   async function loadLists() {
     try {
@@ -104,18 +273,51 @@ export function PlayersView() {
   }
 
   useEffect(() => { loadLists(); }, [activeServerId]);
+  // Refresh lists when the live online set changes (join/leave).
+  useEffect(() => { loadLists(); }, [livePlayers.join(',')]);
 
+  // Cross-reference sets for badges + state-aware actions.
+  const sets = useMemo(() => {
+    const lc = (a) => new Set(a.map((x) => x.toLowerCase()));
+    const online = lc([...new Set([...livePlayers, ...(lists.online || [])])]);
+    const banReason = new Map((lists.banned || []).map((b) => [b.name.toLowerCase(), b.reason || '']));
+    return {
+      online,
+      op: lc(lists.ops || []),
+      whitelist: lc(lists.whitelist || []),
+      ban: new Set([...banReason.keys()]),
+      banReason,
+    };
+  }, [livePlayers, lists]);
+
+  const getFlags = (name) => {
+    const k = name.toLowerCase();
+    return {
+      online: sets.online.has(k),
+      op: sets.op.has(k),
+      whitelisted: sets.whitelist.has(k),
+      banned: sets.ban.has(k),
+    };
+  };
+
+  const onlineNames = useMemo(
+    () => [...new Set([...livePlayers, ...(lists.online || [])])].sort((a, b) => a.localeCompare(b)),
+    [livePlayers, lists.online]
+  );
+
+  // --- action helpers ---
   async function playerAction(action, name) {
     try {
       await api(`/api/players/${action}`, { method: 'POST', body: { name } });
       toast.success(t(ACTION_MSG[action] || 'players.actionApplied', { action, name }));
-      if (['ban', 'op', 'deop'].includes(action)) setTimeout(loadLists, 1200);
+      loadLists();
+      setTimeout(loadLists, 1200);
     } catch (e) { toast.error(e.message); }
   }
 
-  async function plAction(kind, op, name) {
+  async function plAction(kind, op, name, reason) {
     try {
-      const r = await api(`/api/playerlists/${kind}/${op}`, { method: 'POST', body: { name } });
+      const r = await api(`/api/playerlists/${kind}/${op}`, { method: 'POST', body: { name, reason } });
       if (r?.error) { toast.error(r.error); return; }
       toast.success(r?.note || t('players.listOp', { kind, op, name }));
       loadLists();
@@ -123,99 +325,86 @@ export function PlayersView() {
     } catch (e) { toast.error(e.message); }
   }
 
+  // Actions wired for the detail panel.
+  const actions = {
+    kick: (n) => playerAction('kick', n),
+    opAdd: (n) => plAction('op', 'add', n),
+    opRemove: (n) => plAction('op', 'remove', n),
+    whitelistAdd: (n) => plAction('whitelist', 'add', n),
+    whitelistRemove: (n) => plAction('whitelist', 'remove', n),
+    ban: (n, reason) => { plAction('ban', 'add', n, reason); setSelected(null); },
+    pardon: (n) => plAction('ban', 'remove', n),
+  };
+
   async function toggleWhitelist(e) {
+    const enabled = e.target.checked;
     try {
-      const r = await api('/api/whitelist/toggle', { method: 'POST', body: { enabled: e.target.checked } });
-      toast.success(r?.note || t(e.target.checked ? 'players.whitelistEnabled' : 'players.whitelistDisabled'));
+      const r = await api('/api/whitelist/toggle', { method: 'POST', body: { enabled } });
+      toast.success(r?.note || t(enabled ? 'players.whitelistEnabled' : 'players.whitelistDisabled'));
       loadLists();
-    } catch (e) { toast.error(e.message); loadLists(); }
+    } catch (err) { toast.error(err.message); loadLists(); }
   }
 
-  async function refreshList() {
-    await api('/api/command', { method: 'POST', body: { cmd: 'list' } }).catch(() => {});
-  }
+  // Add-from-search: route to the right list.
+  const addNew = (kind, name) => plAction(kind, 'add', name);
+
+  const selFlags = selected ? getFlags(selected) : {};
+  const selReason = selected ? (sets.banReason.get(selected.toLowerCase()) || '') : '';
 
   return (
     <div className="space-y-5">
-      {/* Online players */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Online players</CardTitle>
-          <Button variant="glass" size="xs" onClick={refreshList}>
-            <RefreshCw className="h-3 w-3" />
-            Refresh
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {players.length === 0 ? (
-            <EmptyState message="No players online." />
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {players.map(name => (
-                <PlayerChip key={name} name={name} onAction={playerAction} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Manual action */}
-      <Card>
-        <CardHeader><CardTitle>Manual player action</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={manualName}
-              onChange={e => setManualName(e.target.value)}
-              placeholder="Player name"
-              className="w-40"
-            />
-            {['op', 'deop', 'kick'].map(a => (
-              <Button key={a} variant="glass" size="sm" onClick={() => {
-                if (!manualName.trim()) { toast.error(t('players.enterName')); return; }
-                playerAction(a, manualName.trim());
-              }}>{a.toUpperCase()}</Button>
-            ))}
-            <Button variant="destructive" size="sm" onClick={() => {
-              if (!manualName.trim()) { toast.error(t('players.enterName')); return; }
-              playerAction('ban', manualName.trim());
-            }}>Ban</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lists */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Whitelist</CardTitle>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-              <input type="checkbox" checked={lists.whitelistEnabled} onChange={toggleWhitelist} className="accent-primary" />
-              Enabled
+      {/* Top controls: add new player + whitelist toggle + refresh */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+        <div className="flex-1"><AddPlayerBar onAdd={addNew} t={t} /></div>
+        <Card className="shrink-0">
+          <CardContent className="flex h-full items-center gap-4 py-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={!!lists.whitelistEnabled} onChange={toggleWhitelist} className="accent-primary" />
+              {t('players.whitelistTitle')}
             </label>
-          </CardHeader>
-          <CardContent>
-            <AddPlayerForm kind="whitelist" onAdd={plAction} placeholder="Add player…" buttonLabel="Add" />
-            <PlayerList kind="whitelist" items={lists.whitelist} onRemove={(kind, name) => plAction(kind, 'remove', name)} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Operators</CardTitle></CardHeader>
-          <CardContent>
-            <AddPlayerForm kind="op" onAdd={plAction} placeholder="Add operator…" buttonLabel="Add" />
-            <PlayerList kind="op" items={lists.ops} onRemove={(kind, name) => plAction(kind, 'remove', name)} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Banned players</CardTitle></CardHeader>
-          <CardContent>
-            <AddPlayerForm kind="ban" onAdd={plAction} placeholder="Ban player…" buttonLabel="Ban" buttonVariant="destructive" />
-            <PlayerList kind="ban" items={lists.banned} onRemove={(kind, name) => plAction(kind, 'remove', name)} />
+            <Button variant="glass" size="sm" onClick={loadLists}>
+              <RefreshCw className="h-3.5 w-3.5" /> {t('players.refresh')}
+            </Button>
           </CardContent>
         </Card>
       </div>
+
+      <PlayerSection
+        title={t('players.onlineTitle')} count={onlineNames.length} players={onlineNames}
+        getFlags={getFlags} onSelect={setSelected} emptyMessage={t('players.onlineEmpty')}
+      />
+
+      <PlayerSection
+        title={t('players.recentTitle')} count={(lists.recent || []).length}
+        players={(lists.recent || []).map((p) => p.name)}
+        getFlags={getFlags} onSelect={setSelected} emptyMessage={t('players.recentEmpty')}
+      />
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <PlayerSection
+          title={t('players.whitelistTitle')} icon={Check} count={(lists.whitelist || []).length}
+          players={lists.whitelist || []} getFlags={getFlags} onSelect={setSelected}
+          emptyMessage={t('players.whitelistEmpty')}
+        />
+        <PlayerSection
+          title={t('players.opsTitle')} icon={Crown} count={(lists.ops || []).length}
+          players={lists.ops || []} getFlags={getFlags} onSelect={setSelected}
+          emptyMessage={t('players.opsEmpty')}
+        />
+        <PlayerSection
+          title={t('players.bannedTitle')} icon={Ban} count={(lists.banned || []).length}
+          players={(lists.banned || []).map((b) => b.name)} getFlags={getFlags} onSelect={setSelected}
+          emptyMessage={t('players.bannedEmpty')}
+        />
+      </div>
+
+      {selected && (
+        <PlayerDetail
+          name={selected} flags={selFlags} reason={selReason}
+          uuid={(lists.recent || []).find((p) => p.name === selected)?.uuid || ''}
+          onAction={actions} onClose={() => setSelected(null)} t={t}
+        />
+      )}
     </div>
   );
 }

@@ -25,12 +25,29 @@ import { ConfigsView } from '@/views/ConfigsView';
 import { BackupsView } from '@/views/BackupsView';
 import { TasksView } from '@/views/TasksView';
 import { UsersView } from '@/views/UsersView';
+import { viewToPath, pathToView } from '@/lib/routes';
 
 // Views that touch the server's on-disk content (plugins, mods, configs, files).
 // Navigating into any of them while the active server has never been started
 // triggers the "Start the server first" prompt so mods/plugins install into a
 // fully generated folder tree instead of a half-empty one.
 const CONTENT_VIEWS = ['plugins', 'modrinth', 'files', 'configs'];
+
+// Views that are meaningless without at least one registered server: every one
+// of them reads a server's status, files, or config. With zero servers they are
+// blocked (the sidebar greys them out and direct URLs bounce to Servers).
+const SERVER_REQUIRED_VIEWS = new Set([
+  'metrics', 'console', 'players', 'map',
+  'plugins', 'modrinth', 'files', 'configs',
+  'backups', 'tasks',
+]);
+
+// Views only admins may open.
+const ADMIN_VIEWS = new Set(['users']);
+
+function initialView() {
+  return pathToView(window.location.pathname) || 'dashboard';
+}
 
 function dismissedKey(serverId) {
   return `ls-fs-dismissed:${serverId || ''}`;
@@ -53,9 +70,21 @@ function AppShell({ onLoggedIn }) {
   const api = useApi();
   const t = useT();
 
-  const [currentView, setCurrentView] = useState('servers');
+  const [currentView, setCurrentView] = useState(initialView);
+  const [serversLoaded, setServersLoaded] = useState(false);
   const [consoleLines, setConsoleLines] = useState([]);
   const [connState, setConnState] = useState('connecting');
+
+  const isAdmin = user?.role === 'admin';
+
+  // Push (or replace) the URL so it matches the shown view. Pushing adds a
+  // history entry so Back/Forward (and the mouse back button) can return here.
+  const syncUrl = useCallback((view, replace = false) => {
+    const path = viewToPath(view);
+    if (window.location.pathname === path) return;
+    if (replace) window.history.replaceState({ view }, '', path);
+    else window.history.pushState({ view }, '', path);
+  }, []);
 
   // Bumped whenever the active server transitions to "online" after a
   // first-start prompt, so the current view re-mounts and re-fetches its data
@@ -64,6 +93,76 @@ function AppShell({ onLoggedIn }) {
   const [firstStart, setFirstStart] = useState({ open: false, pendingView: null, starting: false });
   const [confirmRestart, setConfirmRestart] = useState(false);
   const awaitingFirstStart = useRef(false);
+
+  // Central navigation entry point. Applies the no-server, admin, and
+  // first-start guards, then shows the view and updates the URL.
+  const goTo = useCallback((view, { fromHistory = false } = {}) => {
+    // Block server-only sections until at least one server exists.
+    if (SERVER_REQUIRED_VIEWS.has(view) && serversLoaded && servers.length === 0) {
+      toast.error(t('nav.requiresServerToast'));
+      setCurrentView('servers');
+      syncUrl('servers', true);
+      return;
+    }
+    // Block admin-only sections for non-admins.
+    if (ADMIN_VIEWS.has(view) && user && !isAdmin) {
+      setCurrentView('dashboard');
+      syncUrl('dashboard', true);
+      return;
+    }
+    // First-start prompt for content views on a never-started server. Only on
+    // in-app navigation; on Back/Forward we just show the page (the URL already
+    // moved, and the prompt is still reachable from the section itself).
+    if (!fromHistory && CONTENT_VIEWS.includes(view)) {
+      const active = servers.find(s => s.id === activeServerId);
+      const generated = !active || active.hasGenerated || isDismissed(active.id);
+      const live = active ? getServerStatus(active.id) : null;
+      const online = !!(live && live.status && live.status !== 'offline');
+      if (active && !generated && !online) {
+        setFirstStart({ open: true, pendingView: view, starting: false });
+        return;
+      }
+    }
+    setCurrentView(view);
+    syncUrl(view, fromHistory);
+  }, [serversLoaded, servers, activeServerId, user, isAdmin, getServerStatus, syncUrl, t]);
+
+  const navigate = useCallback((view) => goTo(view), [goTo]);
+
+  // Commit to a view unconditionally (used once the first-start dialog resolves).
+  const commitView = useCallback((view) => {
+    setCurrentView(view);
+    syncUrl(view, false);
+  }, [syncUrl]);
+
+  // Browser Back/Forward and the mouse back button fire popstate; mirror the URL
+  // back into the shown view (re-running the same guards).
+  useEffect(() => {
+    const onPop = () => goTo(pathToView(window.location.pathname) || 'dashboard', { fromHistory: true });
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [goTo]);
+
+  // Normalize the URL to the initial view once on mount (e.g. an unknown path
+  // collapses to '/'), seeding a history entry so the first Back works.
+  useEffect(() => {
+    syncUrl(currentView, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Once servers/user are known, bounce out of any view the current state no
+  // longer allows (deleted the last server while on Console, opened /users as a
+  // non-admin via a direct link, etc.).
+  useEffect(() => {
+    if (!serversLoaded) return;
+    if (SERVER_REQUIRED_VIEWS.has(currentView) && servers.length === 0) {
+      setCurrentView('servers');
+      syncUrl('servers', true);
+    } else if (ADMIN_VIEWS.has(currentView) && user && !isAdmin) {
+      setCurrentView('dashboard');
+      syncUrl('dashboard', true);
+    }
+  }, [serversLoaded, servers, currentView, user, isAdmin, syncUrl]);
 
   // Boot: load /api/me if we have a token but no user yet
   useEffect(() => {
@@ -92,6 +191,7 @@ function AppShell({ onLoggedIn }) {
       const act = srvs.find(s => s.id === (activeServerId || data.activeServerId || srvs[0]?.id));
       if (act?.status) updateStatus(act.status);
     } catch (e) { toast.error(e.message); }
+    finally { setServersLoaded(true); }
   }
 
   // WebSocket
@@ -153,24 +253,6 @@ function AppShell({ onLoggedIn }) {
     sendMessage({ type: 'command', cmd });
   }
 
-  function navigate(view) {
-    if (!CONTENT_VIEWS.includes(view)) {
-      setCurrentView(view);
-      return;
-    }
-    const active = servers.find(s => s.id === activeServerId);
-    if (!active || active.hasGenerated || isDismissed(active.id)) {
-      setCurrentView(view);
-      return;
-    }
-    const liveStatus = getServerStatus(active.id);
-    if (liveStatus && liveStatus.status && liveStatus.status !== 'offline') {
-      setCurrentView(view);
-      return;
-    }
-    setFirstStart({ open: true, pendingView: view, starting: false });
-  }
-
   function closeFirstStart() {
     setFirstStart({ open: false, pendingView: null, starting: false });
   }
@@ -183,7 +265,7 @@ function AppShell({ onLoggedIn }) {
     const pendingView = firstStart.pendingView;
     try {
       await api('/api/server/start', { method: 'POST' });
-      setCurrentView(pendingView);
+      commitView(pendingView);
       closeFirstStart();
       toast(t('firstStart.startingToast'));
       loadServers();
@@ -196,7 +278,7 @@ function AppShell({ onLoggedIn }) {
 
   function continueFromFirstStart() {
     if (activeServerId) markDismissed(activeServerId);
-    setCurrentView(firstStart.pendingView);
+    commitView(firstStart.pendingView);
     closeFirstStart();
   }
 
