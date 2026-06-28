@@ -2117,7 +2117,8 @@ function editableFiles(dir) {
     if (!e.isFile()) continue;
     const lower = e.name.toLowerCase();
     if (lower.endsWith('.yml') || lower.endsWith('.yaml')
-        || lower.endsWith('.xml') || lower.endsWith('.properties')) {
+        || lower.endsWith('.xml') || lower.endsWith('.json')
+        || lower.endsWith('.properties')) {
       allowed.push(e.name);
     }
   }
