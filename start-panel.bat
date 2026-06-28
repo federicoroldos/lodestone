@@ -13,7 +13,7 @@ REM --- Check Node.js is installed ---
 where node >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] Node.js was not found in PATH.
-  echo Install it from https://nodejs.org/ (LTS, version 18 or newer^) and try again.
+  echo Install it from https://nodejs.org/ ^(LTS, version 18 or newer^) and try again.
   echo.
   pause
   exit /b 1
@@ -33,7 +33,7 @@ if not exist "node_modules" (
 REM --- Build the frontend on every launch so source edits always take effect ---
 REM  (Set LODESTONE_SKIP_BUILD=1 before running to skip and serve the existing bundle.)
 if "%LODESTONE_SKIP_BUILD%"=="1" (
-  echo Skipping frontend build (LODESTONE_SKIP_BUILD=1).
+  echo Skipping frontend build ^(LODESTONE_SKIP_BUILD=1^).
 ) else (
   echo Building frontend...
   call npm run build
@@ -66,7 +66,7 @@ if not exist "config.json" (
 
 REM --- Kill any previous panel instance still holding the port ---
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr "0.0.0.0:2121 " 2^>nul') do (
-  echo Stopping previous panel instance (PID %%p^)...
+  echo Stopping previous panel instance ^(PID %%p^)...
   taskkill /f /pid %%p >nul 2>nul
 )
 
