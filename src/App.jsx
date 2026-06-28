@@ -229,7 +229,7 @@ function AppShell({ onLoggedIn }) {
           }}
         />
         <Sidebar currentView={currentView} onNavigate={navigate} />
-        <div className="relative z-10 flex min-h-screen flex-1 min-w-0 flex-col">
+        <div className="relative z-10 flex min-h-screen flex-1 min-w-0 flex-col pl-[var(--ls-sidebar-w,220px)] transition-[padding] duration-200">
           <Header currentView={currentView} />
           <main className="flex-1 p-5 pb-28">
             <div className="view-enter" key={`${currentView}:${viewNonce}`}>

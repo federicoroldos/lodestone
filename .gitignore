@@ -18,3 +18,6 @@ runtimes/
 Thumbs.db
 .vscode/
 .idea/
+
+# one-off debug scripts with hardcoded local paths
+smoke-test.mjs
