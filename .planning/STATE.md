@@ -5,7 +5,7 @@
 
 ## Project
 
-Lodestone — a self-hosted web panel for managing Minecraft servers on
+Lodestone - a self-hosted web panel for managing Minecraft servers on
 Windows. See `../CLAUDE.md` for the full project brief.
 
 ## Active milestone
@@ -14,7 +14,7 @@ Friendlier Panel for Non-Tech Operators (see `../ROADMAP.md`).
 
 ## Current focus
 
-Phase 1 — Friendly Configs tab. Planned, ready for execution.
+Phase 1 - Friendly Configs tab. Planned, ready for execution.
 
 ## Accumulated context
 

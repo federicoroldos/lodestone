@@ -32,7 +32,7 @@ function startCubeFly(cubeEl, formEl) {
   // time so the cube appears to "leave" the card.
   //
   // The flying copy is a *clone* lifted into a fixed overlay on <body> so it
-  // escapes the card's opacity fade — animating the in-card original would
+  // escapes the card's opacity fade - animating the in-card original would
   // just inherit the card's `opacity: 0` and never be seen in flight.
   const rect = cubeEl.getBoundingClientRect();
   const size = rect.width || 88;
@@ -74,7 +74,7 @@ function startCubeFly(cubeEl, formEl) {
   // Force a reflow so the browser commits the initial (identity) transform
   // *with* the transition attached, before we add the play class. Without
   // this the two class additions collapse into a single paint and the
-  // transition never runs — the cube would just snap to the end state.
+  // transition never runs - the cube would just snap to the end state.
   void clone.offsetWidth;
   clone.classList.add('cube-login-anim--play');
 
@@ -133,7 +133,7 @@ export function LoginView({ onLogin }) {
       return;
     }
 
-    // Login OK — kick off the cube fly + form fade, then hand off.
+    // Login OK - kick off the cube fly + form fade, then hand off.
     const el = cubeRef.current;
     const cleanupFly = el ? startCubeFly(el, formRef.current) : null;
 
@@ -168,7 +168,7 @@ export function LoginView({ onLogin }) {
         onSubmit={handleSubmit}
         className="login-card view-enter relative z-10 w-full max-w-[400px] rounded-2xl bg-card/85 px-8 pt-9 pb-7 shadow-2xl backdrop-blur-md"
       >
-        {/* Spinning cube — FLIPs to the background cube's spot on successful login */}
+        {/* Spinning cube - FLIPs to the background cube's spot on successful login */}
         <div
           ref={cubeRef}
           className="mx-auto mb-12 mt-2 flex items-center justify-center"

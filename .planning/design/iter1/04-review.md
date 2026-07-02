@@ -1,4 +1,4 @@
-# Iter 1 — Review Report (Foundation & Architecture)
+# Iter 1 - Review Report (Foundation & Architecture)
 
 > Agent D (Reviewer) verification of the Agent C implementation at
 > `.planning/design/iter1/03-implementation.md` against the approved plan
@@ -47,7 +47,7 @@ Comparison to implementer's report:
 | Time            | 2.60 s         | 2.44 s         | ~ (run-to-run variance) |
 
 Zero errors, zero warnings. Bundle sizes identical (impossible to
-fake — content-hashed asset names would diverge otherwise).
+fake - content-hashed asset names would diverge otherwise).
 
 ## Per-change audit
 
@@ -92,13 +92,13 @@ The plan's "Definition of done" greps, re-run on the post-change tree.
 | `bg-orange-500/10 text-orange-400` in Modrinth compat | `grep "bg-orange-500/10 text-orange-400" src/views/ModrinthView.jsx` | **empty** |
 | Local `KpiTile` in DashboardView | `grep "function KpiTile" src/views/DashboardView.jsx` | **empty** |
 | `colorClass=` on `<KpiTile>` | `grep "colorClass=" src/views/DashboardView.jsx` | **empty** |
-| `position: fixed` / `className="…fixed…"` in shell/header | `grep "position: fixed\|className=\".*fixed" src/` | only `LoginView.jsx:33` (`fixed inset-0` on the login screen wrapper — pre-existing, not in scope) |
+| `position: fixed` / `className="…fixed…"` in shell/header | `grep "position: fixed\|className=\".*fixed" src/` | only `LoginView.jsx:33` (`fixed inset-0` on the login screen wrapper - pre-existing, not in scope) |
 | Raw HSL arbitrary values (`bg-[hsl…` / `text-[hsl…` / `border-[hsl…`) | `grep "bg-\[hsl\|text-\[hsl\|border-\[hsl" src/` | **empty** |
-| `green-500` / `red-500` / `blue-500` anywhere in `src/` | `grep "green-500\|red-500\|blue-500" src/` | only `main.jsx:20` (`border-red-500/40` on the Sonner `<Toaster>` error style — explicitly deferred to iter 2) |
+| `green-500` / `red-500` / `blue-500` anywhere in `src/` | `grep "green-500\|red-500\|blue-500" src/` | only `main.jsx:20` (`border-red-500/40` on the Sonner `<Toaster>` error style - explicitly deferred to iter 2) |
 | Wider palette leak (`green-{400,500,600}` / `orange-{400,500}` / `red-{300,400,500}`) anywhere | `grep "green-500\|green-400\|green-600\|orange-500\|orange-400\|red-400\|red-300\|red-500" src/` | 15 hits, **all in deferred files** (BackupsView, FileManagerView, LoginView, MapView?, MetricsView?, PlayersView, PluginsView, ServersView, TasksView, UsersView, main.jsx). None in the three files the plan's DoD item 7 scopes. |
 
 The 15 deferred-file matches exactly match what the implementer listed
-in their report's `Still off — picked up by iter 2 or iter 3` section
+in their report's `Still off - picked up by iter 2 or iter 3` section
 (plus the `Toaster` error style in `main.jsx:20`).
 
 ### Cross-reference checks
@@ -107,7 +107,7 @@ in their report's `Still off — picked up by iter 2 or iter 3` section
 |-------|--------|
 | `grep "KpiTile" src/views/DashboardView.jsx` | 5 hits: 1 import + 4 call sites (lines 7, 103, 110, 117, 123) ✓ |
 | `grep "KpiTile" src/components/shared/KpiTile.jsx` | 1 hit: `export function KpiTile(...)` at line 19 ✓ |
-| `grep "import.*from '\.\./ui" src/components/shared/` | empty (shared components don't import from `ui/`, which is correct — `KpiTile` is a leaf component with no UI primitive dependencies) ✓ |
+| `grep "import.*from '\.\./ui" src/components/shared/` | empty (shared components don't import from `ui/`, which is correct - `KpiTile` is a leaf component with no UI primitive dependencies) ✓ |
 | `grep "from '@/components/shared/KpiTile'" src/` | 1 hit: `DashboardView.jsx:7` ✓ |
 
 ## Side-effect / shell check
@@ -127,7 +127,7 @@ End-to-end read of `src/App.jsx` (168 lines), `src/views/DashboardView.jsx`
   call to `getComputedStyle(document.documentElement)` works because
   `--chart-1` is set on `:root` (verified at `src/index.css:51`). The
   disk bar's `cn(...)` keeps the threshold logic identical to before
-  (≥0.9 → error, ≥0.75 → warn, else primary) — only the class strings
+  (≥0.9 → error, ≥0.75 → warn, else primary) - only the class strings
   changed.
 - **KpiTile.jsx**: pure presentation, no side effects, no external
   imports beyond `cn`. Five `tone` values, all valid. Default `tone` is
@@ -154,18 +154,18 @@ tailwind.config.js                   (edited in same wave)
 
 Untouched in iter 1 (all earlier today, pre-iter-1):
 
-- `src/views/ConsoleView.jsx` — iter 2 (terminal styling)
-- `src/views/FileManagerView.jsx` — iter 2 (table styling)
-- `src/views/MetricsView.jsx` — iter 2 (table styling + chart palette)
-- `src/views/LoginView.jsx` — iter 3 (login visual)
-- `src/views/ServersView.jsx` (line 396/398/401 raw palette icons) — iter 2
+- `src/views/ConsoleView.jsx` - iter 2 (terminal styling)
+- `src/views/FileManagerView.jsx` - iter 2 (table styling)
+- `src/views/MetricsView.jsx` - iter 2 (table styling + chart palette)
+- `src/views/LoginView.jsx` - iter 3 (login visual)
+- `src/views/ServersView.jsx` (line 396/398/401 raw palette icons) - iter 2
 - `src/views/PluginsView.jsx`, `BackupsView.jsx`, `TasksView.jsx`,
-  `UsersView.jsx`, `PlayersView.jsx` — iter 2/3 (delete-icon palette
+  `UsersView.jsx`, `PlayersView.jsx` - iter 2/3 (delete-icon palette
   sweep)
-- `src/views/ConfigsView.jsx` — iter 2/3
-- `src/views/MapView.jsx` — iter 3 (out of design-system scope)
-- `src/main.jsx:20` (`<Toaster>` error style) — iter 2
-- `src/hooks/*`, `src/context/*`, `src/lib/*` — out of scope
+- `src/views/ConfigsView.jsx` - iter 2/3
+- `src/views/MapView.jsx` - iter 3 (out of design-system scope)
+- `src/main.jsx:20` (`<Toaster>` error style) - iter 2
+- `src/hooks/*`, `src/context/*`, `src/lib/*` - out of scope
 
 **Scope discipline: clean.** The implementer touched exactly the 10
 files the plan called for (9 modified + 1 new) and nothing else.
@@ -179,14 +179,14 @@ Non-blocking, suitable for a future iteration:
    look slightly oversized at higher DPIs. Visually verify on a real
    run; if it feels heavy, drop to `text-lg` (16 px). The plan specified
    `text-xl` (18 px was the investigation's proposal, plan says `text-lg`
-   is "20 px" in the table — actually `text-xl` in Tailwind = 20 px
+   is "20 px" in the table - actually `text-xl` in Tailwind = 20 px
    line-height 1.4; `text-lg` = 16 px). Not a bug, just a visual call.
 2. **`text-[11px]` is still used in `KpiTile.jsx:33`** for the label.
    The plan defines `--text-xs: 11px` as a token but didn't wire it to
    Tailwind. Iter 2 will sweep the type-scale application.
 3. **`bg-muted/40` is used in the KpiTile neutral icon box**
    (`KpiTile.jsx:16`). The plan's `ICON_BG.neutral` row says
-   `'bg-muted/40 text-muted-foreground'` — the same string. Note that
+   `'bg-muted/40 text-muted-foreground'` - the same string. Note that
    the plan reused `bg-muted/40` even though the investigation flagged
    "use fewer borders" here. The two are not in conflict: the icon box
    is a flat tint, not a bordered surface. Looks intentional.

@@ -17,7 +17,7 @@ REM --- Check Node.js is installed ---
 where node >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] Node.js was not found in PATH.
-  echo Install it from https://nodejs.org/ (LTS, version 18 or newer^) and try again.
+  echo Install it from https://nodejs.org/ ^(LTS, version 18 or newer^) and try again.
   echo.
   pause
   exit /b 1
@@ -56,16 +56,16 @@ if not exist "config.json" (
 
 REM --- Kill any previous backend instance still holding the port ---
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr "0.0.0.0:2121 " 2^>nul') do (
-  echo Stopping previous backend instance (PID %%p^)...
+  echo Stopping previous backend instance ^(PID %%p^)...
   taskkill /f /pid %%p >nul 2>nul
 )
 
 echo.
-echo Starting Lodestone backend (port 2121) in a separate window...
+echo Starting Lodestone backend ^(port 2121^) in a separate window...
 start "Lodestone Backend" cmd /k node server.js
 
 echo Starting Vite dev server with hot reload...
-echo Open http://localhost:5173 in your browser (it should open automatically^).
+echo Open http://localhost:5173 in your browser ^(it should open automatically^).
 echo Frontend changes under src/ reload instantly. Close this window to stop Vite;
 echo close the "Lodestone Backend" window to stop the backend.
 echo.

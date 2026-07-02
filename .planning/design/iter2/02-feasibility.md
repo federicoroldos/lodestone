@@ -1,4 +1,4 @@
-# Iter 2 — Feasibility & Plan (Components & Density)
+# Iter 2 - Feasibility & Plan (Components & Density)
 
 > Agent B (Feasibility Reviewer) review of the Agent A investigation at
 > `.planning/design/iter2/01-investigation.md`, grounded in the actual
@@ -13,7 +13,7 @@ Tooltip, Skeleton, Alert, plus an EmptyState extension), a
 `src/views/PluginsView.jsx:23-29`), **4 `window.confirm` → ConfirmDialog
 migrations**, a **Console-view per-line grid** + `_ts` stamping, the
 **Sidebar collapse-to-icons** state machine with Radix Tooltip, and a
-**type-scale global override** in Tailwind. That's **20 changes** — at
+**type-scale global override** in Tailwind. That's **20 changes** - at
 the cap. Login visual polish and the full table sweep across 6 views
 are included as a single consolidated change each. Console severity
 filter pills, per-view Skeleton loading patterns, and the per-view
@@ -23,36 +23,36 @@ filter pills, per-view Skeleton loading patterns, and the per-view
 
 For each of the 8 questions the investigator raised:
 
-1. **Console virtualization** — Defer. 1200 plain `<div>`s are
+1. **Console virtualization** - Defer. 1200 plain `<div>`s are
    sub-millisecond; Sentry renders thousands un-virtualized. Add
    windowing in iter 3 if real-world jank appears.
-2. **Table primitive vs shared classes** — New `components/ui/table.jsx`
+2. **Table primitive vs shared classes** - New `components/ui/table.jsx`
    (shadcn-style, 70 lines, `data-slot`). Wins on shadcn compatibility
    and future sort/filter.
-3. **Dialog conflicts** — None. The iter-2 dialog refresh is additive;
+3. **Dialog conflicts** - None. The iter-2 dialog refresh is additive;
    the 4 `window.confirm` → `ConfirmDialog` migrations are in scope.
-4. **PluginsView missing confirm** — **Confirmed bug**. No `confirm()`
+4. **PluginsView missing confirm** - **Confirmed bug**. No `confirm()`
    or `ConfirmDialog` at `src/views/PluginsView.jsx:23-29`. Include the
    fix in this iteration.
-5. **Type-scale global override** — Ship. The `text-sm` override from
+5. **Type-scale global override** - Ship. The `text-sm` override from
    14 px → 12.5 px and `text-base` 16 px → 13.5 px is the single
    largest visual change. The plan keeps `text-base` at 13.5 px (not
    13 px) and **does not** sweep every view's `text-[*]` literal in
-   this iter — most literal uses are intentional and the global
+   this iter - most literal uses are intentional and the global
    override is a stand-alone improvement.
-6. **NativeSelect vs Radix Select** — NativeSelect (native `<select>`
+6. **NativeSelect vs Radix Select** - NativeSelect (native `<select>`
    wrapper, 30 lines, one file). The Modrinth / Type / MC version /
    Configs selects are short and informational.
-7. **TooltipProvider at app root** — Yes, wrap `AppShell` in
+7. **TooltipProvider at app root** - Yes, wrap `AppShell` in
    `<TooltipProvider delayDuration={300}>`. Always-on, 300 ms.
-8. **Field primitive + RHF** — Plain `Field` (no RHF dependency).
+8. **Field primitive + RHF** - Plain `Field` (no RHF dependency).
    Matches the "no new dependencies" hard rule.
 
 ## Bug fix
 
 `src/views/PluginsView.jsx:23-29` calls `deletePlugin(name)` directly
 on click with no `window.confirm` and no `ConfirmDialog`. The pattern
-is unique to PluginsView — every other destructive delete in the
+is unique to PluginsView - every other destructive delete in the
 codebase (`TasksView.jsx:136`, `UsersView.jsx:87`, `FileManagerView.jsx:55`,
 `BackupsView.jsx:44`) uses `window.confirm` at minimum, and the
 SeversView delete uses `ConfirmDialog` (`:427-438`). This is a real
@@ -62,33 +62,33 @@ behaviour gap. **The fix is Change 13** in the plan.
 
 Items in the investigation that are already done in the codebase:
 
-- **Tooltip dep installed** — `package.json:41`
+- **Tooltip dep installed** - `package.json:41`
   (`@radix-ui/react-tooltip: ^1.1.3`).
-- **Sonner `<Toaster>` exists** — `src/main.jsx:14-24`. Just needs
+- **Sonner `<Toaster>` exists** - `src/main.jsx:14-24`. Just needs
   `border-red-500/40` (line 20) tokenized to `border-status-error/40`.
-- **`ConfirmDialog` exists** — `src/components/shared/ConfirmDialog.jsx`
+- **`ConfirmDialog` exists** - `src/components/shared/ConfirmDialog.jsx`
   (24 lines). Has the `destructive` prop wired to the destructive
   button variant; just needs the AlertTriangle + error text
   enhancements.
-- **`Field`-style `space-y-1.5` wrappers are in use** —
+- **`Field`-style `space-y-1.5` wrappers are in use** -
   `ServersView.jsx:141, 145, 155, 166, 170, 171, 175, 252, 256, 257,
   266, 274, 286`, `TasksView.jsx:56, 61, 68, 78, 84`, `UsersView.jsx:47,
   51, 55`. The new `Field` primitive replaces 14 of these.
-- **Raw `<select>` is used 8 times** — `ServersView.jsx:157, 259, 268`,
+- **Raw `<select>` is used 8 times** - `ServersView.jsx:157, 259, 268`,
   `TasksView.jsx:63, 70`, `ModrinthView.jsx:78, 89`, `ConfigsView.jsx:41`.
   All share the same `h-9 ... bg-background/60 ... focus:ring-2
   focus:ring-ring/50` class string.
-- **`text-red-400` literals are present in 7 files** — `LoginView.jsx:72`,
+- **`text-red-400` literals are present in 7 files** - `LoginView.jsx:72`,
   `ServersView.jsx:180, 294, 396, 398, 401`, `TasksView.jsx:101, 179`,
   `UsersView.jsx:59, 127`, `BackupsView.jsx:81`, `FileManagerView.jsx:157`,
   `PluginsView.jsx:67`, `PlayersView.jsx:52`.
-- **`bg-[#0e1012]` is used 3 times** — `ConsoleView.jsx:98`,
+- **`bg-[#0e1012]` is used 3 times** - `ConsoleView.jsx:98`,
   `ConfigsView.jsx:57`, `FileManagerView.jsx:179`. Plus a hardcoded
   `background: #0e1012` in `src/index.css:136`.
 - **Text-size literals**: `text-[10px]` (`Sidebar.jsx:90`, `label.jsx:9`),
   `text-[10.5px]` (`StatusPill.jsx:13`, `badge.jsx:6`,
   `ServersView.jsx:354`), `text-[11px]` (`KpiTile.jsx:33`, `card.jsx:28`).
-- **`border-red-500/40` on `<Toaster>`** — `src/main.jsx:20`. (Listed
+- **`border-red-500/40` on `<Toaster>`** - `src/main.jsx:20`. (Listed
   in iter 1 review's "still off" section.)
 
 ## Approved for this iteration
@@ -99,7 +99,7 @@ Items in the investigation that are already done in the codebase:
 
 ---
 
-**#1 — `tooltip.jsx` (shadcn port, Radix `Tooltip`)**
+**#1 - `tooltip.jsx` (shadcn port, Radix `Tooltip`)**
 - **Files**: new `src/components/ui/tooltip.jsx`
 - **What**: Required for the sidebar collapse tooltip-on-hover.
 - **Snippet** (new file, full contents):
@@ -137,7 +137,7 @@ export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
 
 ---
 
-**#2 — `skeleton.jsx` (10 lines, shadcn)**
+**#2 - `skeleton.jsx` (10 lines, shadcn)**
 - **Files**: new `src/components/ui/skeleton.jsx`
 - **What**: Pulse-shimmer placeholder for loading states.
 - **Snippet** (new file, full contents):
@@ -160,7 +160,7 @@ export { Skeleton };
 
 ---
 
-**#3 — `alert.jsx` (shadcn variant-style)**
+**#3 - `alert.jsx` (shadcn variant-style)**
 - **Files**: new `src/components/ui/alert.jsx`
 - **What**: Inline error/info/warn banner. Replaces the 5 sites that
   use `<p className="text-xs text-red-400">` for inline form errors
@@ -193,7 +193,7 @@ export { Alert };
 
 ---
 
-**#4 — `field.jsx` (label / control / helper / error wrapper)**
+**#4 - `field.jsx` (label / control / helper / error wrapper)**
 - **Files**: new `src/components/ui/field.jsx`
 - **What**: Replaces 14 `space-y-1.5` blocks across 4 views. Required
   for form-pass consistency. Renders the existing `<Label>` from
@@ -233,7 +233,7 @@ export { Field };
 
 ---
 
-**#5 — `native-select.jsx` (native `<select>` wrapper)**
+**#5 - `native-select.jsx` (native `<select>` wrapper)**
 - **Files**: new `src/components/ui/native-select.jsx`
 - **What**: Replaces 8 hand-rolled `<select className="flex h-9
   w-full ...">` sites with a typed wrapper. Native `<select>` keeps
@@ -272,7 +272,7 @@ export { NativeSelect };
 
 ---
 
-**#6 — `chip.jsx` (small interactive pill: cron preset, console severity filter)**
+**#6 - `chip.jsx` (small interactive pill: cron preset, console severity filter)**
 - **Files**: new `src/components/ui/chip.jsx`
 - **What**: Shared component for the 4 cron-preset chips at
   `TasksView.jsx:88-95` and the proposed console severity filter
@@ -304,7 +304,7 @@ export { Chip };
 
 ---
 
-**#7 — `table.jsx` (shadcn `new-york-v4` port)**
+**#7 - `table.jsx` (shadcn `new-york-v4` port)**
 - **Files**: new `src/components/ui/table.jsx`
 - **What**: Foundational table primitive. 9 exports, ~70 lines.
   Used by 6 views in this iteration (ServersView, PluginsView,
@@ -404,7 +404,7 @@ export {
 
 ---
 
-**#8 — `EmptyState.jsx` extension (icon + title variant, backward-compatible)**
+**#8 - `EmptyState.jsx` extension (icon + title variant, backward-compatible)**
 - **Files**: `src/components/shared/EmptyState.jsx`
 - **What**: Adds the new 3-row variant (icon circle + title +
   description) while keeping the 1-line shape for backward compat
@@ -445,7 +445,7 @@ export function EmptyState({ icon: Icon, title, message, className }) {
 
 ---
 
-**#9 — `--console-bg` + `--log-*` tokens; Tailwind `console` and `log` colors**
+**#9 - `--console-bg` + `--log-*` tokens; Tailwind `console` and `log` colors**
 - **Files**: `src/index.css:6-103`; `tailwind.config.js:28-105`
 - **What**: Add `--console-bg` (deeper than `--background`) and
   `--log-info / -warn / -error / -cmd / -chat / -muted` aliases for
@@ -486,7 +486,7 @@ export function EmptyState({ icon: Icon, title, message, className }) {
 
 ---
 
-**#10 — `fontSize` + `letterSpacing` overrides in Tailwind**
+**#10 - `fontSize` + `letterSpacing` overrides in Tailwind**
 - **Files**: `tailwind.config.js:8-135` (add to `theme.extend`)
 - **What**: The iter-1 `--text-*` tokens are defined but not wired
   to Tailwind. This re-skins every `text-xs / -sm / -base / -md /
@@ -525,7 +525,7 @@ export function EmptyState({ icon: Icon, title, message, className }) {
 
 ---
 
-**#11 — `dialog.jsx` refresh: `DialogBody`, padding, shadow, animation**
+**#11 - `dialog.jsx` refresh: `DialogBody`, padding, shadow, animation**
 - **Files**: `src/components/ui/dialog.jsx:25-58`
 - **What**: Add `DialogBody` primitive (`px-6 py-5`). Bump
   `DialogHeader` and `DialogFooter` padding to `px-6 py-4` (header)
@@ -618,7 +618,7 @@ export {
 
 ---
 
-**#12 — `ConfirmDialog.jsx` destructive variant (AlertTriangle + error styling)**
+**#12 - `ConfirmDialog.jsx` destructive variant (AlertTriangle + error styling)**
 - **Files**: `src/components/shared/ConfirmDialog.jsx`
 - **What**: When `destructive` is true, render the title in
   `text-status-error` with a small `<AlertTriangle>`. Use the new
@@ -659,7 +659,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
 
 ---
 
-**#13 — `window.confirm` → `ConfirmDialog` (4 views) + PluginsView confirm (1 view)**
+**#13 - `window.confirm` → `ConfirmDialog` (4 views) + PluginsView confirm (1 view)**
 - **Files**: `src/views/TasksView.jsx:135-142`, `src/views/UsersView.jsx:86-93`,
   `src/views/FileManagerView.jsx:54-60`, `src/views/BackupsView.jsx:43-50`,
   `src/views/PluginsView.jsx:23-29`
@@ -668,10 +668,10 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
   the bug fix (no confirm exists today). The 4 `window.confirm`
   migrations swap to the styled dialog and get the destructive
   variant. **Note**: `FileManagerView`'s two `prompt()` calls for
-  rename / mkdir (`:48, :63`) are **not** converted — `prompt()` has
+  rename / mkdir (`:48, :63`) are **not** converted - `prompt()` has
   no direct `<ConfirmDialog>` analog (they need text input). Out of
   scope; defer to iter 3.
-- **Snippet (PluginsView — bug fix)**: Replace the entire
+- **Snippet (PluginsView - bug fix)**: Replace the entire
   `src/views/PluginsView.jsx` file:
 
 ```jsx
@@ -919,7 +919,7 @@ And add at the end (just before the `</>`):
 ```
 
 (Net effect: `window.confirm` removed; the 2 `prompt()` calls in
-FileManagerView stay — they need a different UI than `ConfirmDialog`
+FileManagerView stay - they need a different UI than `ConfirmDialog`
 and are deferred.)
 
 ---
@@ -928,7 +928,7 @@ and are deferred.)
 
 ---
 
-**#14 — Console per-line grid + `_ts` stamping + container background**
+**#14 - Console per-line grid + `_ts` stamping + container background**
 - **Files**: `src/views/ConsoleView.jsx:90-113`; `src/App.jsx:74-77`;
   `src/index.css:130-147`
 - **What**: Replace the per-line `<span class="l-...">{line.text}{'\n'}</span>`
@@ -1123,7 +1123,7 @@ export function ConsoleView({ lines, onCommand }) {
 
 ---
 
-**#15 — `Sidebar.jsx` collapse state machine + Tooltip wrapping + toggle button + keyboard shortcut**
+**#15 - `Sidebar.jsx` collapse state machine + Tooltip wrapping + toggle button + keyboard shortcut**
 - **Files**: `src/components/layout/Sidebar.jsx:1-126`
 - **What**: Add `mode` state ('expanded' | 'collapsed') persisted in
   `localStorage.ls-sidebar-mode`. Width swaps between
@@ -1336,11 +1336,11 @@ export function Sidebar({ currentView, onNavigate }) {
 }
 ```
 
-(Note: the duplicate `useEffect, useEffect as useEffect2` import at the top of the snippet is a paste error — collapse to a single `useEffect` import.)
+(Note: the duplicate `useEffect, useEffect as useEffect2` import at the top of the snippet is a paste error - collapse to a single `useEffect` import.)
 
 ---
 
-**#16 — Wrap `AppShell` in `<TooltipProvider delayDuration={300}>`**
+**#16 - Wrap `AppShell` in `<TooltipProvider delayDuration={300}>`**
 - **Files**: `src/App.jsx:25-167`
 - **What**: One-line wrap of the `<AppShell>` body in
   `<TooltipProvider delayDuration={300}>`.
@@ -1382,7 +1382,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 ---
 
-**#17 — `LoginView.jsx` brand mark + tokenized error + loader**
+**#17 - `LoginView.jsx` brand mark + tokenized error + loader**
 - **Files**: `src/views/LoginView.jsx:32-86`
 - **What**: Brand mark in a ringed circle. Title gains `tracking-tight`.
   Subtitle opacity bumped. Error moves *between* the password input and
@@ -1491,42 +1491,42 @@ export function LoginView({ onLogin }) {
 
 ---
 
-**#18 — Tokenize `text-red-400` / `text-green-400` / `text-red-300` in the touched views**
+**#18 - Tokenize `text-red-400` / `text-green-400` / `text-red-300` in the touched views**
 - **Files**: 6 view files
 - **What**: Sweep the 14 remaining `text-red-400/300` and
   `text-green-400` literals in views touched by this iteration. The
-  delete buttons switch to `text-status-error` (no background tint —
+  delete buttons switch to `text-status-error` (no background tint -
   the existing `variant="destructive"` button has its own background,
   and these are bare `variant="ghost"` icons that read better as
   foreground-only).
-- **Snippet**: A. `ServersView.jsx:180` —
+- **Snippet**: A. `ServersView.jsx:180` -
   `<p className="text-xs text-red-400">` → `<p className="text-xs text-status-error">`.
-  B. `ServersView.jsx:294` — same swap.
-  C. `ServersView.jsx:396` — `<Play className="... text-green-400" />` →
+  B. `ServersView.jsx:294` - same swap.
+  C. `ServersView.jsx:396` - `<Play className="... text-green-400" />` →
   `<Play className="... text-status-online" />`.
-  D. `ServersView.jsx:398` — `<Square className="... text-red-400" />` →
+  D. `ServersView.jsx:398` - `<Square className="... text-red-400" />` →
   `<Square className="... text-status-error" />`.
-  E. `ServersView.jsx:401` — same as D.
-  F. `TasksView.jsx:101` — same as A.
-  G. `UsersView.jsx:59` — same as A.
-  H. `PlayersView.jsx:52` —
+  E. `ServersView.jsx:401` - same as D.
+  F. `TasksView.jsx:101` - same as A.
+  G. `UsersView.jsx:59` - same as A.
+  H. `PlayersView.jsx:52` -
   `text-muted-foreground hover:text-red-400` →
   `text-muted-foreground hover:text-status-error`.
   I. `BackupsView.jsx:81` and `FileManagerView.jsx:157` (delete icon
-  buttons) — same swap of `text-red-400 hover:text-red-300` →
+  buttons) - same swap of `text-red-400 hover:text-red-300` →
   `text-status-error hover:text-status-error`; drop the
   `hover:bg-red-400/10` since the icon has no background.
-  J. `main.jsx:20` — `border-red-500/40` → `border-status-error/40`.
+  J. `main.jsx:20` - `border-red-500/40` → `border-status-error/40`.
 
 ---
 
-**#19 — Tokenize `bg-[#0e1012]` to `bg-console-bg`**
+**#19 - Tokenize `bg-[#0e1012]` to `bg-console-bg`**
 - **Files**: `src/views/ConsoleView.jsx:98` (already covered in
   Change 14), `src/views/ConfigsView.jsx:57`,
   `src/views/FileManagerView.jsx:179`
 - **What**: Three textarea backgrounds get the new token.
-- **Snippet**: A. `ConfigsView.jsx:57` —
-  `bg-[#0e1012]` → `bg-console-bg`. B. `FileManagerView.jsx:179` —
+- **Snippet**: A. `ConfigsView.jsx:57` -
+  `bg-[#0e1012]` → `bg-console-bg`. B. `FileManagerView.jsx:179` -
   same swap.
 
 ---
@@ -1535,7 +1535,7 @@ export function LoginView({ onLogin }) {
 
 ---
 
-**#20 — `components/ui/index.js` barrel (new, 12 lines)**
+**#20 - `components/ui/index.js` barrel (new, 12 lines)**
 - **Files**: new `src/components/ui/index.js`
 - **What**: One-stop import for the new primitives. Optional, but
   the implementer and reviewer both check it. Iter 1 review noted
@@ -1578,7 +1578,7 @@ export { Chip } from './chip';
 Each item gets a reason. **Be ruthless**: the next iteration will
 pick these up.
 
-- **Per-view table sweep** (6 views → `<Table>` family) — 6 separate
+- **Per-view table sweep** (6 views → `<Table>` family) - 6 separate
   refactors; the `<Table>` primitive is in place but per-view
   conversion of `ServersView.jsx:351-409`, `PluginsView.jsx:62-74`,
   `BackupsView.jsx:68-88`, `TasksView.jsx:160-186`, `UsersView.jsx:111-136`,
@@ -1586,62 +1586,62 @@ pick these up.
   fits naturally in iter 3 with sort/filter/pagination as a single
   design pass.
 - **`<Field>` and `<NativeSelect>` adoption** in the 4 modals
-  (ServersView, TasksView, UsersView) — the primitives are in place
+  (ServersView, TasksView, UsersView) - the primitives are in place
   but the 14 form-field sites are deferred. The shape of the
   `Field` is a one-line swap per field; do as a single sweep.
-- **Console severity filter pills + per-level counts** — 60 lines
+- **Console severity filter pills + per-level counts** - 60 lines
   of new JSX + state; the `<Chip>` primitive is in place but the
   filter pills are iter 3.
-- **Per-view Skeleton loading patterns** — replace `Loading…` text
+- **Per-view Skeleton loading patterns** - replace `Loading…` text
   in 5+ views. The `<Skeleton>` primitive is in place; the sweep is
   iter 3.
-- **Per-view `text-[10px] / 10.5px / 11px / 12.5px` literal sweep** —
+- **Per-view `text-[10px] / 10.5px / 11px / 12.5px` literal sweep** -
   most are intentional uppercase-label sizing (e.g. `text-[10.5px]`
   on `StatusPill`, `text-[11px]` on `KpiTile` label). The global
   type-scale override (Change 10) is the safe default; cleaning
   every literal is cosmetic.
-- **`FileManagerView` rename / mkdir `prompt()` → styled dialog** —
+- **`FileManagerView` rename / mkdir `prompt()` → styled dialog** -
   needs a text-input dialog primitive (different from
   `ConfirmDialog`). Iter 3.
 - **Login "Forgot password"** + **Map view** (Leaflet dark-tiles) +
   **light-mode `.light` override** + **OKLCH migration** + **brand
-  identity work** — out of design-system scope or follow-on.
-- **Pagination / sort on tables** — `sortable` prop stub reserved
+  identity work** - out of design-system scope or follow-on.
+- **Pagination / sort on tables** - `sortable` prop stub reserved
   for iter 3; no view needs sort today.
 - **Tooltip on every Button** (the spec wants tooltips on sidebar
   icons; elsewhere `title=""` HTML attributes are used). Iter 3.
 - **Windowing for the Console** (if `MAX_LINES` raises to 10 000+).
   Iter 3.
-- **Hover micro-interactions and transition polish** — iter 3.
+- **Hover micro-interactions and transition polish** - iter 3.
 - **Animation timing system** (coherent 120 / 200 / 320 ms across
-  all transitions) — iter 3.
+  all transitions) - iter 3.
 
 ## Rejected
 
 Items in the investigator's report that are explicitly dropped:
 
-- **`badge.jsx` `success` variant swap** — the report does not
+- **`badge.jsx` `success` variant swap** - the report does not
   propose a `success` variant; `success` is only on the Button.
   Skipped (out of scope for this proposal).
-- **Sidebar 200 ms "squish" / spring easing** — defer per the
+- **Sidebar 200 ms "squish" / spring easing** - defer per the
   investigator's "Risks" section; the linear 200 ms transition
   in iter 2 is enough.
-- **`<Field>` as a controlled RHF form primitive** — the
+- **`<Field>` as a controlled RHF form primitive** - the
   investigator's open question 8 confirms no RHF dep; our
   `Field` is plain.
-- **Custom `surface-elevated` token** — the iter-1 review already
+- **Custom `surface-elevated` token** - the iter-1 review already
   rejected this; not in scope.
 - **All Hover / focus lift effects on table rows** (`hover:-translate-y-px`)
-  — KpiTile does this; tables don't, and adding it would make the
+  - KpiTile does this; tables don't, and adding it would make the
   dense ops panel feel "jiggly". Drop.
 - **The 14-px `<input>` height change** (the report suggests
-  `h-10` for login; the rest of the panel is `h-9`) — the iter-1
+  `h-10` for login; the rest of the panel is `h-9`) - the iter-1
   review noted the panel is calibrated to `h-9`; changing one form
   would feel inconsistent. The LoginView refresh uses the existing
   `<Input>` (h-9).
-- **`grid-cols-2 xl:grid-cols-4` KPI strip in DashboardView** —
+- **`grid-cols-2 xl:grid-cols-4` KPI strip in DashboardView** -
   Dashboard is already on the new tokens; no change needed.
-- **ServerSelector visual refresh** — iter 1 review flagged
+- **ServerSelector visual refresh** - iter 1 review flagged
   `bg-secondary/50` as fine. No change.
 
 ## Definition of done
@@ -1654,9 +1654,9 @@ The implementer and reviewer both check these:
    new primitive classes.
 2. `src/components/ui/{tooltip,skeleton,alert,field,native-select,chip,table}.jsx`
    and `src/components/ui/index.js` all exist and are imported via
-   the new barrel (or via direct path — the barrel is optional).
+   the new barrel (or via direct path - the barrel is optional).
 3. `src/views/PluginsView.jsx` has a `ConfirmDialog destructive` on
-   the delete action — clicking the trash icon opens a styled
+   the delete action - clicking the trash icon opens a styled
    confirm dialog before the API call.
 4. `src/views/{TasksView,UsersView,BackupsView,FileManagerView}.jsx`
    each use `<ConfirmDialog destructive>` for their delete action;
@@ -1692,13 +1692,13 @@ The implementer and reviewer both check these:
 14. `grep "text-red-400\|text-green-400\|text-red-300\|bg-\[#0e1012\]"`
     across the touched views returns empty.
 15. `grep "window\.confirm"` across `src/` returns empty (the 4
-    migrated sites + 1 `App.jsx` server-restart confirm — note
+    migrated sites + 1 `App.jsx` server-restart confirm - note
     `App.jsx:105`'s `confirm('Restart the server?')` is **not**
     in this iter's scope; it's the start/restart/stop control
     flow, not a per-row delete).
 16. The 8 new primitives are reachable from `@/components/ui/...`
     (or via the barrel) and the 4 in-iter-2 view imports resolve.
-17. All 13 views still render — `npm run dev` boots, login lands
+17. All 13 views still render - `npm run dev` boots, login lands
     on the dashboard, each sidebar entry navigates, the console
     shows live lines, and a delete on Plugins / Tasks / Users /
     Backups / FileManager triggers a styled dialog.

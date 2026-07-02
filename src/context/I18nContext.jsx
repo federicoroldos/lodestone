@@ -27,7 +27,7 @@ export function I18nProvider({ initialLang, children }) {
   });
 
   // Whenever the language coming from the server changes (e.g. right after
-  // login we learn the user's chosen/detected language), adopt it — unless
+  // login we learn the user's chosen/detected language), adopt it - unless
   // the user has explicitly picked one in this browser before, in which case
   // the stored preference wins.
   useEffect(() => {

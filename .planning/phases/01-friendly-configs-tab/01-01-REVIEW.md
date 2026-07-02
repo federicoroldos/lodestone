@@ -46,12 +46,12 @@ matches the SUMMARY's claim.
    passes a non-properties filename to this component and then later
    switches to a properties filename, React will see the hook count
    change between renders. **Fix:** compute `isProps` first, then
-   optionally early-return — never gate hooks behind a conditional.
+   optionally early-return - never gate hooks behind a conditional.
 
 2. **[major] `setMode` discards unsaved edits (`ConfigsView.jsx:90`).**
    `setMode` calls `setCurrent(original)`, which silently throws away
    any changes the user made in the friendly form (or raw) before
-   flipping modes. **Fix:** when switching, keep `current` as-is — the
+   flipping modes. **Fix:** when switching, keep `current` as-is - the
    other editor (friendly ↔ raw) will replace it on its own
    `useEffect([original])` re-parse, or serialize a fresh value the
    first time the user touches the new mode.
@@ -62,7 +62,7 @@ matches the SUMMARY's claim.
    whenever *any* issue has `severity: 'error'`. Either the code is
    right (save is blocked) and the SUMMARY wording is wrong, or the
    SUMMARY is right and save should be re-enabled over hard errors.
-   Pick one and align both. (My read: blocking is the right call —
+   Pick one and align both. (My read: blocking is the right call -
    fix the SUMMARY.)
 
 4. **[minor] `Badge variant="warn"` is undefined
@@ -90,7 +90,7 @@ matches the SUMMARY's claim.
    this is acceptable, but worth a TODO.
 
 7. **[minor] `set-based` diff, not LCS (`src/lib/diff.js`).** The plan
-   said "A simple LCS-based line diff is fine — no need for Myers or
+   said "A simple LCS-based line diff is fine - no need for Myers or
    any library." The implementer wrote a set-based diff that walks
    the two line arrays in parallel using set membership. It works
    fine for the property-file use case (small, mostly key=value, few
@@ -107,7 +107,7 @@ matches the SUMMARY's claim.
 
 9. **[minor] `pairs` table redundancy (`ConfigRaw.jsx:18-19`).** The
    `pairs` and `closers` maps duplicate information. Also the
-   `opener: c` field pushed onto the stack (line 23) is never read —
+   `opener: c` field pushed onto the stack (line 23) is never read -
    `top.ch` is what `closers[c]` is compared against. Not a bug, just
    cleanup.
 
@@ -122,7 +122,7 @@ matches the SUMMARY's claim.
     existing `PUT /api/configs/:name` route is the ISO-stamp
     `2026-06-27T12-30-00-000Z` (because
     `new Date().toISOString().replace(/[:.]/g, '-')` produces that)"
-    — fine, just slightly long. No action needed.
+    - fine, just slightly long. No action needed.
 
 ## Deviation assessment
 
@@ -131,7 +131,7 @@ matches the SUMMARY's claim.
 | **Switch → Checkbox** | Yes | No shadcn `Switch` exists in `src/components/ui/`. Using the existing `Checkbox` is consistent with how `ConsoleView.jsx` already does booleans (autoscroll). The "true/false" text label next to the box keeps the meaning explicit, which actually beats a Switch for non-tech users. |
 | **Radix `DropdownMenu` used directly (no shadcn wrapper)** | Yes | The codebase has no `DropdownMenu` wrapper in `src/components/ui/`. Adding one for a single use site would be premature abstraction; the rest of the file uses `bg-popover` / `border-border` / etc. directly, so it's stylistically consistent. |
 | **`.bak` filename regex matches the real on-disk format** | Yes, and **necessary** | The plan suggested `^\d{8}-\d{6}$`, but the actual `bakStamp()` produces `2026-06-27T12-30-00-000Z` (ISO with dashes). If the implementer had used the plan's regex, no real backup would ever match, and the History dropdown would always be empty. The deviation is a bug fix, not a stylistic choice. |
-| **No new `src/lib/api.js` or `src/i18n/index.js`** | Yes | The plan's `files_modified` was aspirational — neither file exists. The codebase already exposes `useApi()` (in `src/hooks/useApi.js`) and `t()` (via `@/i18n`). The implementer correctly reused the existing primitives instead of inventing new ones. |
+| **No new `src/lib/api.js` or `src/i18n/index.js`** | Yes | The plan's `files_modified` was aspirational - neither file exists. The codebase already exposes `useApi()` (in `src/hooks/useApi.js`) and `t()` (via `@/i18n`). The implementer correctly reused the existing primitives instead of inventing new ones. |
 
 ## User verification readiness
 
@@ -141,7 +141,7 @@ clarifications would help:
 
 - **Step 4** calls the toggle a "link", but it's actually a `Button`
   labeled with the `Repeat` icon. Minor; the user will find it.
-- **Step 5** says "round-tripped from the form" — be aware that
+- **Step 5** says "round-tripped from the form" - be aware that
   `serializeProperties` always appends a trailing newline (idempotent
   but a different byte sequence than the original file if the original
   lacked one). For files that already end in `\n` (which is the
@@ -153,10 +153,10 @@ needed for Phase 1; the static side of the review is clean enough.
 
 ## Build / syntax status
 
-- `node --check server.js` — PASS (no output, exit 0).
-- `npm run build` — PASS (`1711 modules transformed`, 0 warnings, 3.15s).
-- `package.json` / `package-lock.json` — unchanged.
-- `git log --oneline -3` — still `6dd544f` HEAD, no commits made.
+- `node --check server.js` - PASS (no output, exit 0).
+- `npm run build` - PASS (`1711 modules transformed`, 0 warnings, 3.15s).
+- `package.json` / `package-lock.json` - unchanged.
+- `git log --oneline -3` - still `6dd544f` HEAD, no commits made.
 
 ## Recommendation
 
@@ -168,5 +168,5 @@ per-key search, presets, first-run wizard).
 
 ---
 
-*Reviewer: opencode (minimax-m3) — static review only; the 10 manual
+*Reviewer: opencode (minimax-m3) - static review only; the 10 manual
 browser steps are owned by the user.*

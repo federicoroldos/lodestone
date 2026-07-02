@@ -243,7 +243,7 @@ function AppShell({ onLoggedIn }) {
   }
 
   function serverAction(action) {
-    // Restart is disruptive (kicks everyone) — confirm with the app's own
+    // Restart is disruptive (kicks everyone) - confirm with the app's own
     // dialog instead of the browser's native confirm box.
     if (action === 'restart') { setConfirmRestart(true); return; }
     runServerAction(action);

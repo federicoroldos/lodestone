@@ -1,10 +1,10 @@
-# Iter 2 — Investigation Report (Components & Density)
+# Iter 2 - Investigation Report (Components & Density)
 
-> Agent A (Iteration 2, Stage 1) — design investigation for the
+> Agent A (Iteration 2, Stage 1) - design investigation for the
 > post-foundation pass. Covers the eight in-scope areas from the brief:
 > Console view, table sweep, forms/inputs, dialogs/modals,
 > empty/loading/error, sidebar collapse, type-scale wiring, and the
-> login view. Investigation only — no source code is modified here.
+> login view. Investigation only - no source code is modified here.
 
 ## Already shipped (do not re-propose)
 
@@ -62,24 +62,24 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **shadcn/ui Table (registry new-york-v4)** — https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/new-york-v4/ui/table.tsx
+- **shadcn/ui Table (registry new-york-v4)** - https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/new-york-v4/ui/table.tsx
   Establishes the precedent that even log-shaped content benefits from a
   primitive (a 2-col "table" of timestamp + body) and that dense
   monospaced rows are best rendered as **block elements**, not `<span>`s
   with literal `'\n'` (the current approach in `ConsoleView.jsx:90-96`,
   which breaks alignment, prevents per-column styling, and prevents
   click-to-copy on the timestamp).
-- **Dribbble — Terminal Logs** — https://dribbble.com/search/terminal-logs
+- **Dribbble - Terminal Logs** - https://dribbble.com/search/terminal-logs
   The pattern that wins: monospaced body, 1-px left or right
   severity indicator bar (3-px wide), dimmed timestamp column on the
   left (`text-muted-foreground/40`), severity color in the gutter or the
   first non-whitespace word.
-- **Sentry Issue Details log lines** — https://sentry.io/welcome/ —
+- **Sentry Issue Details log lines** - https://sentry.io/welcome/ -
   1000+ lines, no virtualization, plain `<div>` per row at
   `line-height: 1.5`, monospaced, 12.5–13 px. This is the density we
   want; if Sentry can do 1000s un-virtualized we don't need
   `react-window` at 1200 lines.
-- **Tailwind v3 docs — customizing font family** — https://v3.tailwindcss.com/docs/font-family
+- **Tailwind v3 docs - customizing font family** - https://v3.tailwindcss.com/docs/font-family
   Confirms the existing mono stack
   (`SF Mono / JetBrains Mono / Cascadia Code / Consolas`) is appropriate
   for terminal output. Keep it.
@@ -123,10 +123,10 @@ and token-consistent.
    stamp one either. Either (a) parse `HH:MM:SS` out of the line
    itself (most Minecraft logs start with `[12:34:56] [INFO] ...`),
    or (b) stamp on receive in `App.jsx`'s `onLine` callback
-   (`App.jsx:74-77`) and add a `_ts` field. **(b)** is cleaner — one
-   line: `_ts: msg.ts || Date.now()` — and is what we recommend.
+   (`App.jsx:74-77`) and add a `_ts` field. **(b)** is cleaner - one
+   line: `_ts: msg.ts || Date.now()` - and is what we recommend.
 
-4. **Level colorization** — keep the existing
+4. **Level colorization** - keep the existing
    `.l-info / .l-warn / .l-error / .l-chat / .l-cmd` rules in
    `src/index.css:142-147` (the `--ls-*` aliases are there on purpose).
    Add two more:
@@ -135,7 +135,7 @@ and token-consistent.
    - `.l-system` (the `Done (Xs)!` ready line) →
      `color: hsl(var(--primary)); font-weight: 600;`
 
-5. **Severity filter pills** — strip of small toggles above the log
+5. **Severity filter pills** - strip of small toggles above the log
    area, the same shape as `badge.jsx` but interactive:
 
    ```jsx
@@ -163,7 +163,7 @@ and token-consistent.
    on each render is sub-millisecond). The `all` pill is the default
    and shows the total count.
 
-6. **Virtualization — do not add.** Current `MAX_LINES = 1200`
+6. **Virtualization - do not add.** Current `MAX_LINES = 1200`
    (`ConsoleView.jsx:21`). At ~20 px per row + the existing 62 vh
    container, that's ~30 visible rows out of 1200. 1200 plain
    `<div>`s is well under any rendering budget. The
@@ -181,7 +181,7 @@ and token-consistent.
 
    ```css
    --console-bg: 200 10% 5%;
-   /* one shade deeper than --background (8.5%) — gives the log
+   /* one shade deeper than --background (8.5%) - gives the log
       stream a subtle "stage" that reads as a different surface
       without needing a visible border */
    ```
@@ -196,7 +196,7 @@ and token-consistent.
    --log-info:    156 46% 58%;   /* same hue as --primary; for "info" level */
    --log-warn:    33  80% 56%;   /* matches --status-warn */
    --log-error:   352 70% 60%;   /* matches --status-error */
-   --log-cmd:     199 80% 60%;   /* matches --chart-2 — distinct from info */
+   --log-cmd:     199 80% 60%;   /* matches --chart-2 - distinct from info */
    --log-chat:    280 50% 70%;   /* purple, distinct from the rest */
    --log-muted:   210 4% 56%;
    ```
@@ -209,7 +209,7 @@ and token-consistent.
    `tailwind.config.js:28`:
    `log: { info: 'hsl(var(--log-info) / <alpha-value>)', ... }`.
 
-9. **Autoscroll polish** — keep the "near bottom" detection at
+9. **Autoscroll polish** - keep the "near bottom" detection at
    `ConsoleView.jsx:33` but reduce the threshold from 120 px to 64 px
    so a 3-line jump at the bottom doesn't fail to trigger. Also: when
    the user scrolls up, hide the autoscroll checkbox and replace it
@@ -217,7 +217,7 @@ and token-consistent.
    area (a 28-px circle, `bg-primary/20 text-primary`, lucide
    `ArrowDown`).
 
-10. **Command input** at `ConsoleView.jsx:98-113` — keep the shape
+10. **Command input** at `ConsoleView.jsx:98-113` - keep the shape
     (mono input + `>` glyph + Send button), but:
     - Replace `bg-[#0e1012]` with `bg-console-bg`.
     - Replace the raw `<input>` (which is invisible to the `Input`
@@ -242,12 +242,12 @@ and token-consistent.
 
 ### Specific file targets
 
-- `src/index.css:130-147` — refresh `.console-area` rules, add
+- `src/index.css:130-147` - refresh `.console-area` rules, add
   `.l-stack` and `.l-system`.
-- `src/views/ConsoleView.jsx:21-114` — restructure render to
+- `src/views/ConsoleView.jsx:21-114` - restructure render to
   per-line grid, add severity filter pills, change container
   background to `bg-console-bg`, add "Jump to live" button.
-- `src/App.jsx:74-77` — stamp `_ts: msg.ts || Date.now()` on receive.
+- `src/App.jsx:74-77` - stamp `_ts: msg.ts || Date.now()` on receive.
 
 ---
 
@@ -255,14 +255,14 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **shadcn/ui Table** — https://ui.shadcn.com/docs/components/table +
+- **shadcn/ui Table** - https://ui.shadcn.com/docs/components/table +
   https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/new-york-v4/ui/table.tsx
   The canonical primitive composition: `Table / TableHeader / TableBody
   / TableFooter / TableHead / TableRow / TableCell / TableCaption`. The
   current codebase has none of these; every view rolls its own rows.
   That's the smell to fix.
-- **Dribbble — Table Dark UI** — https://dribbble.com/search/table-dark-ui
-  The wins: 1-px row dividers (`border-b border-border/60` — softer
+- **Dribbble - Table Dark UI** - https://dribbble.com/search/table-dark-ui
+  The wins: 1-px row dividers (`border-b border-border/60` - softer
   than the current `border-border` at `ServersView.jsx:369, 354`),
   hover tint `hover:bg-muted/40` (slightly more visible than the
   current `hover:bg-secondary/40`), monospace for IDs/paths/dates
@@ -270,15 +270,15 @@ and token-consistent.
   with `text-right tabular-nums`, sticky header at
   `sticky top-0 bg-card/95 backdrop-blur-sm` (the new
   `--shadow-xs` sits under the sticky line).
-- **Linear app — Issues table** — https://linear.app
+- **Linear app - Issues table** - https://linear.app
   Linear's table is the gold standard for ops-panel density: 32-px row
   height (their `py-2`), `text-[13px]` body, `text-muted-foreground`
   for secondary columns, status pill inline. Their header is
-  `text-[11px] uppercase tracking-wider text-muted-foreground/60` —
+  `text-[11px] uppercase tracking-wider text-muted-foreground/60` -
   exactly the pattern already used in the header rows at
   `ServersView.jsx:354` and `MetricsView.jsx:138`. Confirm and
   standardise.
-- **Vercel — Activity log table** — https://vercel.com/docs/activity-log
+- **Vercel - Activity log table** - https://vercel.com/docs/activity-log
   Vercel uses a single `border-y border-border` on the table itself
   and `border-b border-border/60` per row. Cleaner than 1-px
   border-around-card-and-rows.
@@ -355,7 +355,7 @@ and token-consistent.
      don't use it now but it costs nothing and unblocks future
      shadcn-derived components.
 
-2. **Cell padding scale** — three sizes (px = 12, py = 10) are
+2. **Cell padding scale** - three sizes (px = 12, py = 10) are
    baked into the primitive; per-view overrides via
    `className="px-2 py-1.5"` for dense tables (UsersView, TasksView)
    or `className="px-4 py-3.5"` for comfortable tables (the wide
@@ -368,12 +368,12 @@ and token-consistent.
    - **Comfortable** (icon + 2-line content): `px-3.5 py-3`. Used in
      BackupsView header rows, FileManagerView folder rows.
 
-3. **Row height** — the primitive defaults to 40 px (py-2.5 + ~14-px
+3. **Row height** - the primitive defaults to 40 px (py-2.5 + ~14-px
    text + line-height). For "tall" rows (icon + 2 lines of body) the
    per-view `<TableRow className="h-16">` overrides. The existing
    patterns:
    - `ServersView.jsx:369` row (icon + name + dir, 2 lines): 64 px
-     effectively — keep, but via `<TableRow>` with
+     effectively - keep, but via `<TableRow>` with
      `<TableCell className="py-3">` and a `min-h-[64px]` on the row.
    - `BackupsView.jsx:71-86` row (name + size/date, 2 lines): 52 px
      via `py-2.5`. The new `<TableRow>` defaults to 40 px; add
@@ -385,16 +385,16 @@ and token-consistent.
    - `FileManagerView.jsx:120-162` row: 40 px default; folders get
      a slight tint `bg-secondary/20` (already used).
 
-4. **Sticky header** — opt-in. The ServersView table benefits most.
+4. **Sticky header** - opt-in. The ServersView table benefits most.
    Implementation: pass `sticky` to `<TableHeader>` (or just
    `className="[&_tr]:sticky [&_tr]:top-0 [&_tr]:bg-card/95
    [&_tr]:backdrop-blur-sm [&_tr]:z-10"`). When the table lives
    inside a `Card`, the sticky `top-0` resolves to the card's scroll
-   container, not the page — which is what we want (the header sticks
+   container, not the page - which is what we want (the header sticks
    to the card top during internal scroll, the page scrolls behind
    it).
 
-5. **Monospace for paths / IDs / dates** — add a `font-mono
+5. **Monospace for paths / IDs / dates** - add a `font-mono
    text-[12.5px] tabular-nums text-muted-foreground` helper class
    for cells that display file paths, server IDs, byte counts, or
    timestamps. Concretely:
@@ -410,19 +410,19 @@ and token-consistent.
    - The `<code>` chip at `BackupsView.jsx:63` already follows this
      pattern; replicate.
 
-6. **Sort indicator** — out of scope (no view currently sorts).
+6. **Sort indicator** - out of scope (no view currently sorts).
    Stub the `<TableHead>` for it: add a `sortable` prop that renders
    a `ChevronUp` / `ChevronDown` (lucide) at 12 px, `text-muted-
    foreground/40` when inactive, `text-foreground` when active. No
    call sites in this iteration; the prop is reserved for the future
    metrics / players sort work.
 
-7. **Empty state integration** — when `data.length === 0` the
+7. **Empty state integration** - when `data.length === 0` the
    primitive's `<TableBody>` is empty. Add a sibling below the
    table: a single `<TableRow><TableCell colSpan={n}
    className="h-24 text-center text-sm text-muted-foreground/70
    italic">No items yet.</TableCell></TableRow>`. (Or just keep
-   using `<EmptyState>` outside the table — the per-view call sites
+   using `<EmptyState>` outside the table - the per-view call sites
    already do this. No primitive change needed.)
 
 8. **Specific file targets** (each view is a mechanical
@@ -436,7 +436,7 @@ and token-consistent.
    | `TasksView.jsx:160-186` | flat `div` rows | `<Table>` family |
    | `UsersView.jsx:111-136` | flat `div` rows | `<Table>` family |
    | `PluginsView.jsx:62-74` | flat `div` rows | `<Table>` family |
-   | `ModrinthView.jsx:111-141` | flat `div` cards | keep as cards (not a tabular layout) OR `<Table>` with a wide `Title` cell — defer the call to the implementer |
+   | `ModrinthView.jsx:111-141` | flat `div` cards | keep as cards (not a tabular layout) OR `<Table>` with a wide `Title` cell - defer the call to the implementer |
 
    The Plugins/Users/Tasks/Backups rows are 1-line each and benefit
    the most from a real table (vertical alignment of actions, even
@@ -446,7 +446,7 @@ and token-consistent.
    the new table rows with the destructive button variant. The
    current 7 sites (Backups, Plugins, Servers, Users, Tasks,
    FileManager, Players) all use
-   `text-red-400 hover:text-red-300 hover:bg-red-400/10` — replace
+   `text-red-400 hover:text-red-300 hover:bg-red-400/10` - replace
    with the existing `<Button variant="destructive" size="icon-xs">`
    in `button.jsx:13-14` (which is `bg-destructive/15
    text-status-error border border-destructive/40 ...`).
@@ -467,7 +467,7 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **shadcn/ui Form (proposed) + Field** — https://ui.shadcn.com/docs/components/field
+- **shadcn/ui Form (proposed) + Field** - https://ui.shadcn.com/docs/components/field
   The "Field" primitive is exactly what the codebase needs: a
   `<Field>` that wraps `<Label> + <Control> + <Description> +
   <ErrorMessage>` with consistent spacing. The shadcn docs are clear
@@ -476,15 +476,15 @@ and token-consistent.
   `text-xs text-status-error`. The shadcn form layout is the
   reference; we adopt the *pattern* (label, control, optional
   helper, optional error) without the React Hook Form dependency.
-- **Refactoring UI — Forms chapter** — https://refactoringui.com
+- **Refactoring UI - Forms chapter** - https://refactoringui.com
   The "form" rules: every input has a label (no placeholder-only
-  fields), labels live above the control (not beside — beside
+  fields), labels live above the control (not beside - beside
   breaks vertical scan), required fields have a visible `*` in
   `text-status-error`, error text lives *below* the control in
   `text-xs` (current code at
   `ServersView.jsx:180, 294`, `TasksView.jsx:101`,
-  `UsersView.jsx:59` does this — keep, just tokenize the colour).
-- **Tremor — Standard Forms block** — https://www.tremor.so/blocks/form-layouts
+  `UsersView.jsx:59` does this - keep, just tokenize the colour).
+- **Tremor - Standard Forms block** - https://www.tremor.so/blocks/form-layouts
   Tremor's form layout is the closest public template: 4-px label
   gap, `h-9` input height, `h-7` for the dense cron preset chips
   in `TasksView.jsx:88-93`. Confirms the existing `h-9` input
@@ -526,7 +526,7 @@ and token-consistent.
      wrapper just stacks label / control / message with consistent
      6-px (`space-y-1.5`) gap.
    - Required `*` in `text-status-error` (not the destructive
-     `bg-destructive/15 text-status-error` button background) — a
+     `bg-destructive/15 text-status-error` button background) - a
      single character colour is enough.
    - 14 form fields across 4 modals (ServersView `ServerModal`,
      `CreateServerModal`; UsersView `UserModal`; TasksView
@@ -601,7 +601,7 @@ and token-consistent.
      special case at `ServersView.jsx:64-66` (mixed display) can
      keep its inline `<select>`.
    - The 2 Cron preset chips at `TasksView.jsx:88-95` are not
-     `<select>` — they're toggle buttons. The shape
+     `<select>` - they're toggle buttons. The shape
      (`rounded px-2 py-0.5 text-xs border border-border
      bg-secondary/50 ...`) is shared with the severity filter
      pills from Section 1. **Extract to `src/components/ui/chip.jsx`**
@@ -614,11 +614,11 @@ and token-consistent.
 4. **Input height consistency.** All `<Input>` use `h-9` (36 px). All
    `<NativeSelect>` use `h-9` (36 px). The dense `<Input
    className="h-8 text-xs">` at `PlayersView.jsx:73` and
-   `ConfigsView.jsx:42` is the one exception — keep it (a
+   `ConfigsView.jsx:42` is the one exception - keep it (a
    consistent 28-px dense size is fine, but we don't need a
    primitive for it; the inline override works).
 
-5. **Label placement** — always above the control, never to the
+5. **Label placement** - always above the control, never to the
    left. Current code is consistent on this; the
    `PlayersView.jsx:181-184` checkbox-row is the only horizontal
    label (which is correct for inline checkbox UX). Add a
@@ -634,15 +634,15 @@ and token-consistent.
    `Autoscroll` checkbox at `:84` already does this; copy the
    pattern).
 
-6. **Required indicator** — the LoginView `<Input required>` at
+6. **Required indicator** - the LoginView `<Input required>` at
    `:62, 69` is implicit (browser default). The browser-rendered
    tooltip is a poor substitute for a visible `*`. Add the
    `required` prop to `<Field>` (item 1) and use it on the
    password / cron fields in TasksView (`cron` is required for a
    schedule to be useful; `enabled` is always on by default).
-   Email/Name on UserModal are optional — keep blank.
+   Email/Name on UserModal are optional - keep blank.
 
-7. **Error text style** — replace
+7. **Error text style** - replace
    `text-red-400` at `ServersView.jsx:180, 294`,
    `TasksView.jsx:101`, `UsersView.jsx:59`, `LoginView.jsx:72`
    with `text-status-error` (the tokenized colour). Add a
@@ -651,7 +651,7 @@ and token-consistent.
    `<div className="rounded-md border border-status-error/30
    bg-status-error/5 px-3 py-2 text-xs text-status-error">`.
 
-8. **Helper text** — add to the File editor dialog at
+8. **Helper text** - add to the File editor dialog at
    `FileManagerView.jsx:172-187` ("Edits are saved with a .bak
    backup. Revert manually if needed.") and the Login card
    (subtle "Forgot your password? Ask the admin who set up
@@ -663,7 +663,7 @@ and token-consistent.
    - **Refactor**: `ServersView.jsx` (3 modals), `TasksView.jsx`
      (TaskModal + cron chips), `UsersView.jsx` (UserModal),
      `LoginView.jsx`, `PluginsView.jsx` (no modal but uses
-     `<Input>` for plugin file size — keep), `ConfigsView.jsx`
+     `<Input>` for plugin file size - keep), `ConfigsView.jsx`
      (the file select).
 
 ---
@@ -672,19 +672,19 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **shadcn/ui Dialog** — https://ui.shadcn.com/docs/components/dialog
+- **shadcn/ui Dialog** - https://ui.shadcn.com/docs/components/dialog
   The current `dialog.jsx` is already a shadcn port. The shadcn docs
   add two refinements the current primitive lacks: (a) `showCloseButton`
   prop to hide the X, and (b) "Scrollable Content" pattern where
   the header sticks while the body scrolls. Both apply to Lodestone.
-- **Tremor — Dialogs block** — https://www.tremor.so/blocks/dialogs
+- **Tremor - Dialogs block** - https://www.tremor.so/blocks/dialogs
   Tremor's modal scale: 384 / 448 / 512 / 576 / 672 / 768 px max
   widths (`sm / md / lg / xl / 2xl / 3xl`). Maps cleanly to shadcn's
   `max-w-sm / -md / -lg / -xl / -2xl / -3xl`. Today the codebase
   uses only `max-w-sm / -md / -lg` and `max-w-3xl`
-  (FileManagerView editor) — extend to `-xl` and `-2xl` for the
+  (FileManagerView editor) - extend to `-xl` and `-2xl` for the
   larger flows.
-- **Linear — Modal/dialog patterns** — https://linear.app
+- **Linear - Modal/dialog patterns** - https://linear.app
   Linear's modals have 8-px inner padding on the close button, a
   1-px top border on the footer (instead of the shadcn default
   `border-t`), and a `text-sm font-medium` title (we already do
@@ -703,11 +703,11 @@ and token-consistent.
      `ConfirmDialog.jsx:11`) → `px-6 py-5` for the same reason.
    - Footer: `px-5 py-4 border-t` → `px-6 py-4 border-t
      border-border/60`.
-   - Replace the body content wrapper — currently every call site
+   - Replace the body content wrapper - currently every call site
      does `<div className="px-5 py-3 ...">` or `<div className="px-5
      py-4 space-y-4">` (`ServersView.jsx:42, 140, 250`,
      `TasksView.jsx:55`, `UsersView.jsx:46`,
-     `FileManagerView.jsx:174`) — with a `DialogBody` primitive:
+     `FileManagerView.jsx:174`) - with a `DialogBody` primitive:
 
      ```jsx
      function DialogBody({ className, ...props }) {
@@ -719,45 +719,45 @@ and token-consistent.
      the duplicated `px-5 py-3` / `px-5 py-4` / `px-5 py-3`
      strings across 6 call sites.
 
-2. **Shadow** — `DialogContent` uses `shadow-2xl` (`dialog.jsx:32`).
+2. **Shadow** - `DialogContent` uses `shadow-2xl` (`dialog.jsx:32`).
    The iter-1 token set defines `--shadow-xl` (12-line token
    definition at `src/index.css:72`). Replace `shadow-2xl` with
    `shadow-xl` to consume the new token. `2xl` was shadcn's
    default; the tokenized scale ends at `xl` (20/25 shadow with
    40% black on this palette). Visually almost identical.
 
-3. **Max-width scale** — add four size variants to
+3. **Max-width scale** - add four size variants to
    `DialogContent` (cva or simple `max-w-*` override at call
    site). Currently callers use `max-w-sm / -md / -lg / -3xl`
    (`ConfirmDialog.jsx:7` `max-w-sm`, `ServersView.jsx:40, 136,
    248` `max-w-md / -lg`, `FileManagerView.jsx:172` `max-w-3xl`).
    Standardize to:
-   - **ConfirmDialog** (yes/no destructive): `max-w-sm` (384 px) — keep.
+   - **ConfirmDialog** (yes/no destructive): `max-w-sm` (384 px) - keep.
    - **ServerModal / CreateServerModal / TaskModal** (forms with 4-6
-     fields): `max-w-md` (448 px) — keep.
-   - **UserModal** (3-field simple form): `max-w-sm` (384 px) — keep.
+     fields): `max-w-md` (448 px) - keep.
+   - **UserModal** (3-field simple form): `max-w-sm` (384 px) - keep.
    - **FileManagerView editor** (textarea, needs space): `max-w-3xl`
-     (768 px) — keep.
+     (768 px) - keep.
    - **Modrinth install / large flows** (out of scope this iter, but
      reserve): `max-w-xl / -2xl` for future.
 
    No code change; the call sites are already right.
 
-4. **Close-on-escape and focus trap** — already handled by Radix
+4. **Close-on-escape and focus trap** - already handled by Radix
    (`DialogPrimitive.Content` does focus trap; `DialogPrimitive`
    does escape). No change.
 
-5. **Animation** — `data-[state=open]:animate-in
+5. **Animation** - `data-[state=open]:animate-in
    data-[state=closed]:animate-out` plus the `fade-in-0 /
    zoom-in-95` etc. animations from `tailwindcss-animate`. The
    current `slide-in-from-left-1/2` / `slide-in-from-top-[48%]`
    (`dialog.jsx:36-37`) does a 200-ms slide from the center,
    which feels slow. Drop the slide and keep only the fade +
-   zoom — `data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0
+   zoom - `data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0
    data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95`.
    Matches shadcn's docs example.
 
-6. **Destructive variant** — `ConfirmDialog.jsx:4` already takes
+6. **Destructive variant** - `ConfirmDialog.jsx:4` already takes
    a `destructive` prop that swaps the confirm button to the
    destructive variant. The visual difference between the
    "destructive" confirm and a regular confirm is currently
@@ -767,34 +767,34 @@ and token-consistent.
    text-status-error"` and a small `<AlertTriangle
    className="h-4 w-4" />` before it. Used by ServersView
    (remove-server at `:430`), TasksView (delete-task via
-   `window.confirm` — would become `ConfirmDialog` if migrated),
+   `window.confirm` - would become `ConfirmDialog` if migrated),
    UsersView (delete-user), FileManagerView (delete-file via
-   `window.confirm` — same), BackupsView (delete-backup via
-   `window.confirm` — same), PluginsView (delete-plugin — no
-   confirm at all currently, just deletes — bug).
+   `window.confirm` - same), BackupsView (delete-backup via
+   `window.confirm` - same), PluginsView (delete-plugin - no
+   confirm at all currently, just deletes - bug).
    - **Open question**: 4 view files use `window.confirm(...)` for
      destructive actions (`TasksView.jsx:136`, `UsersView.jsx:87`,
      `FileManagerView.jsx:55`, `BackupsView.jsx:44`). Migrating
      them to `<ConfirmDialog>` is a behaviour-equivalent change
-     that lands in iter 2 — it removes the native browser dialog
+     that lands in iter 2 - it removes the native browser dialog
      and gets us the styled destructive variant. PluginsView
-     `:23-29` has no confirm at all — that's a real bug (deletes
+     `:23-29` has no confirm at all - that's a real bug (deletes
      a plugin without confirmation); this iteration adds the
      confirm.
 
 7. **Specific file targets**:
-   - `src/components/ui/dialog.jsx:25-50` — shadow, padding,
+   - `src/components/ui/dialog.jsx:25-50` - shadow, padding,
      animation refresh; add `DialogBody` primitive.
-   - `src/components/shared/ConfirmDialog.jsx:11` — use
+   - `src/components/shared/ConfirmDialog.jsx:11` - use
      `DialogBody`; add `AlertTriangle` icon when destructive.
-   - `src/views/ServersView.jsx:427-438` (confirmDelete dialog) —
+   - `src/views/ServersView.jsx:427-438` (confirmDelete dialog) -
      add `destructive` prop.
-   - `src/views/TasksView.jsx:135-142` — replace `window.confirm`
+   - `src/views/TasksView.jsx:135-142` - replace `window.confirm`
      with `ConfirmDialog`.
-   - `src/views/UsersView.jsx:86-93` — same.
-   - `src/views/FileManagerView.jsx:54-60` — same.
-   - `src/views/BackupsView.jsx:43-50` — same.
-   - `src/views/PluginsView.jsx:23-29` — add `ConfirmDialog` (this
+   - `src/views/UsersView.jsx:86-93` - same.
+   - `src/views/FileManagerView.jsx:54-60` - same.
+   - `src/views/BackupsView.jsx:43-50` - same.
+   - `src/views/PluginsView.jsx:23-29` - add `ConfirmDialog` (this
      is a behaviour fix, not just a token swap; mention in the
      plan).
 
@@ -804,13 +804,13 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **shadcn/ui Skeleton** — https://ui.shadcn.com/docs/components/skeleton
+- **shadcn/ui Skeleton** - https://ui.shadcn.com/docs/components/skeleton
   + https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/new-york-v4/ui/skeleton.tsx
   The shadcn skeleton is 10 lines:
   `function Skeleton({ className, ...props }) { return <div data-slot="skeleton" className={cn('animate-pulse rounded-md bg-accent', className)} {...props} />; }`
   No complexity. The `bg-accent` is `--accent` in our token set
   (`199 60% 22%`, line 26 of `src/index.css`).
-- **shadcn/ui Empty** — https://ui.shadcn.com/docs/components/empty
+- **shadcn/ui Empty** - https://ui.shadcn.com/docs/components/empty
   The new shadcn Empty primitive is a 6-component composition
   (Empty / EmptyHeader / EmptyMedia / EmptyTitle / EmptyDescription
   / EmptyContent). It's overkill for us: our `<EmptyState>` at
@@ -819,18 +819,18 @@ and token-consistent.
   options: (a) keep `<EmptyState>` and add an icon prop; (b)
   import the shadcn Empty family. (a) is lighter and matches
   Lodestone's terse style.
-- **Linear — empty list states** — https://linear.app
+- **Linear - empty list states** - https://linear.app
   Linear's empty list states are: a centered icon (24-28 px), a
   one-line title (`text-sm font-medium text-foreground`), and a
   one-line description (`text-xs text-muted-foreground`). The
-  current `<EmptyState>` is one line — promote it to a 3-row
+  current `<EmptyState>` is one line - promote it to a 3-row
   variant and use it everywhere the data is empty.
 
 ### Concrete ideas
 
 1. **New primitive: `src/components/ui/skeleton.jsx`** (10 lines,
    verbatim from shadcn, with `bg-accent` → `bg-muted` to read on
-   the card surface — the `--accent` (`199 60% 22%`) is a teal and
+   the card surface - the `--accent` (`199 60% 22%`) is a teal and
    the shimmer would tint slightly blue. `bg-muted` is the neutral
    choice):
 
@@ -865,19 +865,19 @@ and token-consistent.
 2. **Per-view loading patterns** (where the current code does
    `if (loading) return <p>Loading…</p>`):
 
-   - `ModrinthView.jsx:106` — replace with a centered
+   - `ModrinthView.jsx:106` - replace with a centered
      `<Skeleton className="h-12 w-full" />` × 4 (matching the
      card-shaped search results). Plus a small
      `text-xs text-muted-foreground/60` "Searching Modrinth…"
      below.
-   - `MetricsView.jsx:115-116` — wrap each card's
+   - `MetricsView.jsx:115-116` - wrap each card's
      `<CardContent>` in a `<Skeleton className="h-48 w-full" />`
      during the initial load (when `points.length === 0`).
-   - `DashboardView.jsx` — the sparklines already handle
+   - `DashboardView.jsx` - the sparklines already handle
      "no data" gracefully (the canvas clears to
      `text-muted-foreground`). Leave as is.
    - `ServersView / UsersView / TasksView / BackupsView /
-     PluginsView` — render 3 rows of
+     PluginsView` - render 3 rows of
      `<Skeleton className="h-10 w-full mb-1.5" />` (or
      `<Skeleton className="h-12 w-full" />` for the 2-line rows
      in BackupsView / TasksView) during the initial fetch.
@@ -936,10 +936,10 @@ and token-consistent.
        desc "Upload files or create a new folder." (currently
        `FileManagerView.jsx:114` uses an inline `<p className="italic">`).
      - `ModrinthView`: `Package` icon when no results.
-     - `MetricsView`: no data path — already shows "No data yet"
+     - `MetricsView`: no data path - already shows "No data yet"
        in the chart canvas.
 
-4. **Inline error banner** — new tiny primitive
+4. **Inline error banner** - new tiny primitive
    `src/components/ui/alert.jsx` (~30 lines, mirrors shadcn Alert):
 
    ```jsx
@@ -966,7 +966,7 @@ and token-consistent.
      className="h-3.5 w-3.5 mt-0.5" />{error}</Alert>`.
    - Also useful in card-level error states (currently the
      `BackupsView.jsx:65` `<p className="text-xs text-primary">`
-     is a "success" / status line, not an error — could be
+     is a "success" / status line, not an error - could be
      `<Alert variant="info">`).
 
 5. **Specific file targets**:
@@ -987,7 +987,7 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **shadcn/ui Sidebar** — https://ui.shadcn.com/docs/components/sidebar
+- **shadcn/ui Sidebar** - https://ui.shadcn.com/docs/components/sidebar
   The full shadcn sidebar primitive is ~600 lines (the collapsible
   + icon-rail state machine, the `SidebarProvider`, the
   `useSidebar()` hook). We don't need all of it. We need:
@@ -995,19 +995,19 @@ and token-consistent.
   - the **CSS variable** (`--sidebar-width: 220px | 48px`),
   - the **persisted cookie/localStorage**,
   - the **Radix Tooltip on each item when collapsed**.
-- **Dribbble — Sidebar Collapse** — https://dribbble.com/search/sidebar-collapse
+- **Dribbble - Sidebar Collapse** - https://dribbble.com/search/sidebar-collapse
   Pattern: collapse-toggle button at the bottom of the sidebar
   (the existing `Log out` button at `Sidebar.jsx:118-123` is the
   natural neighbor; move it down and put the toggle at top of the
   footer). Group labels and item labels animate out (`opacity-0 →
   opacity-100`, 200 ms) when collapsed; icons stay.
-- **Envato — Sidebar Collapse Navigation (Dark Mode)** —
+- **Envato - Sidebar Collapse Navigation (Dark Mode)** -
   https://elements.envato.com/sidebar-collapse-navigation-dark-mode-9VG9434
   This is the closest product pattern: when collapsed, the sidebar
   is 56-64 px wide, icons are 20 px, the active item shows a
   vertical bar (we already have `border-l-2 border-l-primary` from
-  iter 1 — keep).
-- **Radix Tooltip shadcn port** — https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/new-york-v4/ui/tooltip.tsx
+  iter 1 - keep).
+- **Radix Tooltip shadcn port** - https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/new-york-v4/ui/tooltip.tsx
   (the v4 version uses `import { Tooltip as TooltipPrimitive } from
   "radix-ui"`; our installed dep is `@radix-ui/react-tooltip` which
   exposes the same primitives via `TooltipPrimitive.Root` /
@@ -1060,7 +1060,7 @@ and token-consistent.
 
 2. **Wrap the app in `<TooltipProvider>`** at `App.jsx:137` (the
    `<Sidebar>` mount). One line change. The provider only needs to
-   wrap one tree — the `AppShell` is enough.
+   wrap one tree - the `AppShell` is enough.
 
 3. **Sidebar state machine** in `src/components/layout/Sidebar.jsx`:
 
@@ -1068,7 +1068,7 @@ and token-consistent.
      from `localStorage.getItem('ls-sidebar-mode')` and
      `setMode(...)` writes back. Default: 'expanded'.
    - The `<aside>` width: `w-sidebar` (220 px) or
-     `w-sidebar-collapsed` (48 px) — the iter-1 Tailwind
+     `w-sidebar-collapsed` (48 px) - the iter-1 Tailwind
      config has both at `tailwind.config.js:86-89`. Use
      `cn('flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200',
         mode === 'collapsed' ? 'w-sidebar-collapsed' : 'w-sidebar')`.
@@ -1082,7 +1082,7 @@ and token-consistent.
      transition-opacity duration-200",
      style={{ opacity: mode === 'collapsed' ? 0 : 1 }}`. Width of
      the text is preserved during the transition (`width: 0` would
-     cause a layout pop — `opacity` only is smoother).
+     cause a layout pop - `opacity` only is smoother).
    - The group-label buttons at `Sidebar.jsx:87-96`:
      - When expanded: show "Overview / Operate / Content /
        Maintenance / Settings" labels (today).
@@ -1141,16 +1141,16 @@ and token-consistent.
    - `localStorage.setItem('ls-sidebar-mode', mode)` on toggle.
    - `localStorage.getItem('ls-sidebar-mode')` on mount; default
      to `'expanded'` if missing or invalid.
-   - Don't break the existing `ls-collapsed-navs` key — it
+   - Don't break the existing `ls-collapsed-navs` key - it
      controls the per-group collapse inside the expanded mode. The
      two states are independent (the icon-rail hides group labels
      entirely; the per-group collapse hides the items within a
      group when the sidebar is expanded).
 
-6. **Transition timing** — `transition-[width,opacity] duration-200
+6. **Transition timing** - `transition-[width,opacity] duration-200
    ease-out` (uses `var(--ease-out)` from iter 1, and 200 ms is
    the middle of `--duration-base` (180 ms) and `--duration-slow`
-   (280 ms) — pick 200 as a named CSS var:
+   (280 ms) - pick 200 as a named CSS var:
 
    ```css
    --duration-collapse: 200ms;
@@ -1163,12 +1163,12 @@ and token-consistent.
 
 7. **Specific file targets**:
    - **New**: `src/components/ui/tooltip.jsx` (40 lines).
-   - **Edit**: `src/components/layout/Sidebar.jsx:61-126` — add
+   - **Edit**: `src/components/layout/Sidebar.jsx:61-126` - add
      `mode` state, conditional rendering, tooltip wrapping, and
      the toggle button.
-   - **Edit**: `src/App.jsx:136-153` — wrap the inner tree in
+   - **Edit**: `src/App.jsx:136-153` - wrap the inner tree in
      `<TooltipProvider delayDuration={300}>`.
-   - **Edit**: `src/index.css:79-81` (motion tokens) — optional,
+   - **Edit**: `src/index.css:79-81` (motion tokens) - optional,
      add `--duration-collapse: 200ms;`.
 
 ---
@@ -1177,9 +1177,9 @@ and token-consistent.
 
 ### Inspiration sources
 
-- **Tailwind v3 fontSize docs** — https://v3.tailwindcss.com/docs/font-size
-  Confirms that `theme.fontSize` is a record of `{ [size]: [lineHeight, { letterSpacing, fontWeight }] }` — Tailwind reads the array and produces utilities like `text-sm`, `leading-5`, `tracking-tight`. We can map our 7-step scale to existing size names so call sites don't change.
-- **Vercel Geist type system** — https://vercel.com/geist
+- **Tailwind v3 fontSize docs** - https://v3.tailwindcss.com/docs/font-size
+  Confirms that `theme.fontSize` is a record of `{ [size]: [lineHeight, { letterSpacing, fontWeight }] }` - Tailwind reads the array and produces utilities like `text-sm`, `leading-5`, `tracking-tight`. We can map our 7-step scale to existing size names so call sites don't change.
+- **Vercel Geist type system** - https://vercel.com/geist
   Geist ships at 14-px body with `text-sm = 13px`, `text-xs =
   12px`, and `text-2xl = 24px`. The ratios are similar to
   Lodestone's iter-1 scale; we adopt Vercel's specific values for
@@ -1193,12 +1193,12 @@ Override `theme.fontSize` in `tailwind.config.js:8-135` so the
 existing utilities (`text-xs / -sm / -base / -md / -lg / -xl /
 -2xl`) map to the iter-1 token values. The current defaults
 (Tailwind 3.4) give us `text-xs = 12px`, `text-sm = 14px`,
-`text-base = 16px` — the iter-1 scale is denser. This is the
+`text-base = 16px` - the iter-1 scale is denser. This is the
 single change that lets the views adopt the new scale without
 having to rewrite every `text-sm` literal.
 
 ```js
-// tailwind.config.js — replace the default fontSize in theme.extend
+// tailwind.config.js - replace the default fontSize in theme.extend
 fontSize: {
   xs:   ['11px',   { lineHeight: '1.45' }],
   sm:   ['12.5px', { lineHeight: '1.5'  }],
@@ -1207,7 +1207,7 @@ fontSize: {
   lg:   ['16px',   { lineHeight: '1.4'  }],
   xl:   ['20px',   { lineHeight: '1.3'  }],
   '2xl':['28px',   { lineHeight: '1.2'  }],
-  '3xl':['34px',   { lineHeight: '1.15' }],   // new — login hero
+  '3xl':['34px',   { lineHeight: '1.15' }],   // new - login hero
   // Preserve the standard Tailwind names for utilities we haven't
   // adopted yet, but map them to the closest iter-1 value:
   '4xl':['40px',   { lineHeight: '1.1'  }],
@@ -1241,7 +1241,7 @@ letterSpacing: {
 },
 ```
 
-Wait — `tracking-tight`, `tracking-wide`, `tracking-wider`, and
+Wait - `tracking-tight`, `tracking-wide`, `tracking-wider`, and
 `tracking-widest` are already in Tailwind's default
 `letterSpacing` (at `-0.025em / 0.025em / 0.05em / 0.1em`).
 Adding them again with different values would conflict. The
@@ -1265,29 +1265,29 @@ the iter-1 values.
 
 ### Specific file target
 
-`tailwind.config.js:8-135` — add `fontSize` and override
+`tailwind.config.js:8-135` - add `fontSize` and override
 `letterSpacing` in `theme.extend`. The `keyframes` and
 `animation` blocks remain unchanged.
 
-### Sweep needed (not in this report — call out in the plan)
+### Sweep needed (not in this report - call out in the plan)
 
 The iter-1 report explicitly defers the per-view sweep. With
 the type scale wired, the following 12+ literal `text-[*]`
 sites become redundant and should be cleaned up in iter 2:
 
 - `text-[10.5px]` (header columns in `ServersView.jsx:354`,
-  `MetricsView.jsx:138`, `badge.jsx:6`) — becomes `text-xs` (11
+  `MetricsView.jsx:138`, `badge.jsx:6`) - becomes `text-xs` (11
   px, close enough) or the primitive `fontSize.xs` exactly
   matches.
 - `text-[11px]` (`KpiTile.jsx:33`, `MetricsView.jsx:57, 70, 86`,
-  `ConsoleView.jsx:132`, `CardTitle` in `card.jsx:28`) —
+  `ConsoleView.jsx:132`, `CardTitle` in `card.jsx:28`) -
   becomes `text-xs`.
-- `text-[12.5px]` (`ConsoleView.jsx:132` mono) — handled by
+- `text-[12.5px]` (`ConsoleView.jsx:132` mono) - handled by
   the new mono-default size.
 - `text-[10px]` (`Sidebar.jsx:90`, `KpiTile.jsx:33` already
-  covered) — becomes `text-xs` with `font-semibold uppercase
+  covered) - becomes `text-xs` with `font-semibold uppercase
   tracking-widest text-muted-foreground/70`. Or keep the
-  `text-[10px]` literals — the type scale override doesn't
+  `text-[10px]` literals - the type scale override doesn't
   affect arbitrary values.
 
 The implementer should treat this as a separate sub-step in
@@ -1299,35 +1299,35 @@ the plan ("Type-scale sweep") after the primitive change.
 
 ### Inspiration sources
 
-- **shadcn/ui login blocks (via v0)** — https://ui.shadcn.com/blocks/authentication
+- **shadcn/ui login blocks (via v0)** - https://ui.shadcn.com/blocks/authentication
   The "Authentication" block category has 14 login layouts. The
   common pattern: a single 384-px card on a `bg-background`
   surface with a subtle gradient or grid; brand mark + title at
   top; email + password inputs in a vertical stack; primary
   "Sign in" button; error / loading states inline.
-- **Dribbble — Login card** — https://dribbble.com/search/login-card
+- **Dribbble - Login card** - https://dribbble.com/search/login-card
   Density and layout: 384-px card, 32-40 px padding, the brand
   mark is 24-28 px (not 16 px), the title is `text-xl` (20 px)
   not `text-lg` (16 px), the description is `text-xs` (11-12.5
   px) `text-muted-foreground/70`. The form inputs are 40-px
   tall (`h-10`, not `h-9`).
-- **Linear — Sign in** — https://linear.app/signin
+- **Linear - Sign in** - https://linear.app/signin
   Linear's login is the gold standard: a single column, the
   brand mark + name at the top, then a single input + submit,
   no helper text. A 12-px gap between inputs, an 8-px gap
   between input and button. No "remember me" / "forgot
-  password" — keep the surface tight.
+  password" - keep the surface tight.
 
 ### Concrete ideas
 
-1. **Card width** — `max-w-sm` (384 px) is correct (current
+1. **Card width** - `max-w-sm` (384 px) is correct (current
    `LoginView.jsx:45`). Keep.
 
-2. **Card padding** — `px-8 pt-8 pb-6` (line `:47`) → `px-8
+2. **Card padding** - `px-8 pt-8 pb-6` (line `:47`) → `px-8
    pt-10 pb-8`. More generous top, more generous bottom. The
    current `pb-6` makes the button feel cramped.
 
-3. **Brand mark** — `◆` at 24 px (`:49`) → 28 px
+3. **Brand mark** - `◆` at 24 px (`:49`) → 28 px
    (`text-2xl`). Centered. Add a subtle 1-px ring around it for
    definition: `<div className="mx-auto flex h-12 w-12
    items-center justify-center rounded-full border
@@ -1335,33 +1335,33 @@ the plan ("Type-scale sweep") after the primitive change.
    type scale's `--text-2xl` and reads as a brand badge, not a
    decorative glyph.
 
-4. **Title** — `Lodestone` at `text-lg font-semibold` (`:51`)
+4. **Title** - `Lodestone` at `text-lg font-semibold` (`:51`)
    → `text-xl font-semibold tracking-tight`. The new type scale
    `text-xl` = 20 px. `tracking-tight` (-0.011em) matches the
    Header title.
 
-5. **Subtitle** — `Minecraft server panel` at `text-xs
+5. **Subtitle** - `Minecraft server panel` at `text-xs
    text-muted-foreground` (`:52`) → `text-xs
    text-muted-foreground/70`. Drop the `mb-6` to `mb-8` to
    add a touch more breathing room before the form.
 
-6. **Inputs** — keep the two `<Input>`s as-is (`:55-70`).
+6. **Inputs** - keep the two `<Input>`s as-is (`:55-70`).
    Replace `text-red-400` (`:72`) with `text-status-error` and
    the alert variant from Section 5: `<Alert variant="error"
    className="mt-1"><AlertCircle className="h-3.5 w-3.5
    mt-0.5" />{error}</Alert>`. Move the error *between* the
    password input and the button (today it's *after* the button
-   at `:71-73`, which is wrong — errors should precede the
+   at `:71-73`, which is wrong - errors should precede the
    submit).
 
-7. **Button** — `Log in` / `Logging in…` (`:74-82`). Add a
+7. **Button** - `Log in` / `Logging in…` (`:74-82`). Add a
    loading state with the `<Skeleton>` shimmer (the shadcn
    pattern): when `loading`, the button's text is replaced by
    `<><Loader2 className="h-3.5 w-3.5 animate-spin" /> Signing
    in…</>`. The existing text already says "Logging in…";
    upgrade to a spinning icon.
 
-8. **Subtle gradient background** — the current grid pattern
+8. **Subtle gradient background** - the current grid pattern
    at `LoginView.jsx:35-41` (`linear-gradient` at 0.03 opacity)
    is almost invisible. Replace with a radial gradient that
    reads at 0.04 alpha: `radial-gradient(ellipse at top, hsl(156
@@ -1370,17 +1370,17 @@ the plan ("Type-scale sweep") after the primitive change.
    the login to the rest of the panel without becoming a
    marketing page.
 
-9. **"Forgot password" link** — out of scope (no password
+9. **"Forgot password" link** - out of scope (no password
    recovery flow in the backend). Don't add.
 
-10. **Footer line** — add `text-[11px] text-muted-foreground/50
+10. **Footer line** - add `text-[11px] text-muted-foreground/50
     text-center mt-6`: a small "Self-hosted panel · no telemetry"
     line that signals to the user that this is a self-hosted
-    tool. Out of scope for the design but useful — flag for
+    tool. Out of scope for the design but useful - flag for
     implementer.
 
 11. **Specific file target**:
-    `src/views/LoginView.jsx:32-86` — card padding, brand mark
+    `src/views/LoginView.jsx:32-86` - card padding, brand mark
     size + ring, title tracking, subtitle opacity, input error
     (move + tokenize + Alert), button loading state, gradient
     background.
@@ -1389,7 +1389,7 @@ the plan ("Type-scale sweep") after the primitive change.
 
 ## Risks / open questions
 
-1. **Console virtualization — do we have a budget for hand-rolled
+1. **Console virtualization - do we have a budget for hand-rolled
    windowing, or is rendering 1200 plain `<div>`s acceptable for
    now?** The investigation recommends *not* adding a windowing
    solution. With `MAX_LINES = 1200` and a 62 vh container
@@ -1399,7 +1399,7 @@ the plan ("Type-scale sweep") after the primitive change.
    update is still cheap but the DOM mutation is the bottleneck.
    Defer windowing to iter 3 unless real-world testing shows
    jank.
-2. **Table primitive — new `components/ui/table.jsx` vs shared
+2. **Table primitive - new `components/ui/table.jsx` vs shared
    classes.** The investigation recommends the new primitive
    (shadcn-style, 70 lines). The alternative is shared
    `className` constants (`ROW_CN = 'flex items-center gap-3
@@ -1415,13 +1415,13 @@ the plan ("Type-scale sweep") after the primitive change.
    and the call sites; the changes are additive. The 4 views
    that currently use `window.confirm` (TasksView, UsersView,
    FileManagerView, BackupsView) need to be migrated to
-   `ConfirmDialog` as part of iter 2 — this is a behaviour
+   `ConfirmDialog` as part of iter 2 - this is a behaviour
    change for the user, not a refactor, and should be called
    out in the iter-2 plan.
 4. **PluginsView deletes with no confirm** (`PluginsView.jsx:23-29`).
    The investigation adds a `ConfirmDialog` here, which is a
    real bug fix (deletes a plugin with no user confirmation).
-   Confirm with the user before iter 2 ships — is the missing
+   Confirm with the user before iter 2 ships - is the missing
    confirm an intentional "no friction" decision, or an
    oversight?
 5. **Type-scale global override** is the single biggest visual
@@ -1432,21 +1432,21 @@ the plan ("Type-scale sweep") after the primitive change.
    (not 13 px), (b) ship the override with a 1-week soft
    release, (c) make `text-base` the new default but allow
    `text-sm` (12.5 px) to be the opt-in for compact views.
-6. **`NativeSelect` vs Radix `Select`** — the investigation
+6. **`NativeSelect` vs Radix `Select`** - the investigation
    recommends `NativeSelect` (a wrapper over the native
    `<select>`). The trade-off: native is simpler, mobile-
    friendly, and zero JS; Radix is more accessible and
    styleable but adds complexity. If a future Modrinth-version
    dropdown needs search/typeahead, the call site converts to
    Radix `Select` then. For iter 2, native is the right call.
-7. **TooltipProvider at the app root** — wrapping `AppShell`
+7. **TooltipProvider at the app root** - wrapping `AppShell`
    in `<TooltipProvider delayDuration={300}>` adds a context
    that every Radix Tooltip needs. The cost is a single
    subscription; the benefit is consistent tooltip timing
    across the app. Confirm the team is OK with always-on
    `delayDuration={300}` (some prefer `0` for instant
    feedback).
-8. **Field primitive + RHF** — the investigation proposes a
+8. **Field primitive + RHF** - the investigation proposes a
    dependency-free `Field` wrapper (not React Hook Form).
    shadcn's `Form` primitive requires RHF. Confirm: do we
    want the simpler `Field`-only wrapper (recommended), or
@@ -1457,36 +1457,36 @@ the plan ("Type-scale sweep") after the primitive change.
 ## Out of scope (deferred to iter 3)
 
 The user is tempted to add these. They are explicitly **out** of
-scope for iter 2 — flagged here so the implementer doesn't get
+scope for iter 2 - flagged here so the implementer doesn't get
 distracted:
 
 - **Hover micro-interactions and transition polish** (Sidebar
   item hover lift, button press feel, table row hover-translate,
-  etc.) — iter 3 "polish & motion" pass.
+  etc.) - iter 3 "polish & motion" pass.
 - **Light mode** (the `.light` class override block). Tokens
   are theme-agnostic; the override is a 30-line addition in
   iter 3 when there's a concrete reason.
-- **OKLCH migration** — HSL is fine, shadcn v1 is HSL, no
+- **OKLCH migration** - HSL is fine, shadcn v1 is HSL, no
   urgency. v2.
-- **Brand/logo work** — the `◆` glyph is a placeholder. Logo
+- **Brand/logo work** - the `◆` glyph is a placeholder. Logo
   design is its own project, not a design-system pass.
-- **Animation timing polish** — the 200 ms sidebar collapse is
+- **Animation timing polish** - the 200 ms sidebar collapse is
   a concrete number; refining every transition to a coherent
   system (e.g. 120 / 200 / 320 everywhere) is iter 3.
 - **"Squish" on the sidebar animation** (the bouncy spring
-  ease-in-out that some admin panels have) — defer; the
+  ease-in-out that some admin panels have) - defer; the
   iter-1 motion tokens are functional, not yet beautiful.
-- **Map view** (`src/views/MapView.jsx`) — Leaflet dark-tile
+- **Map view** (`src/views/MapView.jsx`) - Leaflet dark-tile
   theming is not a design-system concern. Out of scope.
-- **`toast.error` color refresh** — `main.jsx:20` has
+- **`toast.error` color refresh** - `main.jsx:20` has
   `border-red-500/40` on the Sonner `<Toaster>` (the
   implementation report's "still off" note). Sweep to
   `border-status-error/40` in iter 2 as a one-liner; not
   worth a section.
-- **`disabled` button opacity** — current `disabled:opacity-40`
+- **`disabled` button opacity** - current `disabled:opacity-40`
   in `button.jsx:7`. iter 2 leaves it as-is (works fine);
   iter 3 considers a per-tone `disabled` style.
-- **Pagination / sort** on the tables — no view needs it now
+- **Pagination / sort** on the tables - no view needs it now
   (max ~10 rows). Reserve the `sortable` prop stub; do not
   implement.
 - **Tooltip on every Button** (the spec wants tooltips on
@@ -1496,7 +1496,7 @@ distracted:
   consistent tooltip UI; iter 2 only converts the sidebar.
 - **The 7 "no border + raw input" textareas** (`ConsoleView.jsx:107`,
   `FileManagerView.jsx:179`, `ConfigsView.jsx:57` use
-  `bg-[#0e1012]` hardcoded) — these become `bg-console-bg`
+  `bg-[#0e1012]` hardcoded) - these become `bg-console-bg`
   per the new token. 3-line sweep, included in iter 2's
   Section 1. Other inline `bg-[#0e1012]` are not present;
   grep verified.
@@ -1504,11 +1504,11 @@ distracted:
   is *in* scope per Section 4 (and Section 6's open question).
   PluginsView's missing-confirm is the only behaviour change;
   flag for user approval before iter 2 ships.
-- **Login email vs username** — the backend `auth.login`
+- **Login email vs username** - the backend `auth.login`
   takes an `email` field (`LoginView.jsx:18-20`) but the
   CLAUDE.md and iter-1 reports describe users by `email`.
   No change in iter 2.
 - **PlayerList hover-revealed X button** (`PlayersView.jsx:52`)
-  uses `text-muted-foreground hover:text-red-400` — sweep to
+  uses `text-muted-foreground hover:text-red-400` - sweep to
   `text-muted-foreground hover:text-status-error` in iter 2's
   table sweep.
