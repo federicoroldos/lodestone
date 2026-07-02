@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* shadcn/ui dark theme — refreshed for Lodestone */
+    /* shadcn/ui dark theme - refreshed for Lodestone */
     --background: 200 6% 8.5%;
     --foreground: 210 4% 78%;
 
@@ -187,7 +187,7 @@
   animation: shimmer 2.5s var(--duration-slow) linear infinite;
 }
 
-/* Brand wordmark — "Press Start 2P" pixel-craft font for the Lodestone logotype */
+/* Brand wordmark - "Press Start 2P" pixel-craft font for the Lodestone logotype */
 .brand-wordmark {
   font-family: 'Press Start 2P', 'Pixelify Sans', ui-monospace, monospace;
   font-size: 10.5px;
@@ -201,7 +201,7 @@
   font-smooth: never;
 }
 
-/* Brand icon — the Lodestone block face as a static pixel-art tile.
+/* Brand icon - the Lodestone block face as a static pixel-art tile.
    `pixelated` keeps the original 16x16 texture sharp at any rendered size. */
 .brand-icon {
   display: block;
@@ -237,7 +237,7 @@
 .ls-cube__face {
   position: absolute;
   /* Faces are 1px larger than the cube on every edge so neighbours overlap
-     slightly — this closes the sub-pixel hairline seams at the corners. */
+     slightly - this closes the sub-pixel hairline seams at the corners. */
   inset: -1px;
   background-image: url(/resources/lodestone_face.png);
   background-size: cover;

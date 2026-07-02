@@ -72,7 +72,7 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr "0.0.0.0:2121 " 2^>nul') do (
 
 echo.
 echo Starting Lodestone panel...
-echo Open http://localhost:2121 in your browser (default port^).
+echo Open http://localhost:2121 in your browser ^(default port^).
 echo Press Ctrl+C in this window to stop the panel.
 echo.
 

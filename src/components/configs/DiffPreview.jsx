@@ -89,7 +89,7 @@ export function DiffPreview({ open, onOpenChange, before, after, filename, warni
               );
             })}
             {noChanges && (
-              <div className="text-muted-foreground text-center py-4">—</div>
+              <div className="text-muted-foreground text-center py-4">-</div>
             )}
           </pre>
         </DialogBody>

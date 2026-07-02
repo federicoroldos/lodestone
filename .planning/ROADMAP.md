@@ -9,20 +9,20 @@ Make Lodestone approachable for users who can run a Minecraft server but
 wouldn't know what `server.properties` looks like. The first concrete slice is
 the Configs tab; the milestone will grow as we learn from it.
 
-### Phase 1 — Friendly Configs tab
+### Phase 1 - Friendly Configs tab
 
 **Goal:** A non-tech server owner can change `max-players`, `gamemode`, `pvp`,
 `difficulty`, `motd`, `white-list`, and a curated set of other `server.properties`
 options through labeled, typed inputs with plain-English descriptions, see
 exactly what will change before saving, and roll back to any previous version
-if they regret it — without ever touching raw text or risking a typo that
+if they regret it - without ever touching raw text or risking a typo that
 breaks the server.
 
 **Depends on:** nothing.
 
 **Plans:**
 
-- 01-PLAN.md — Friendly forms + validation + diff + restart banner + grouped
+- 01-PLAN.md - Friendly forms + validation + diff + restart banner + grouped
   nav + .bak history (see `.planning/phases/01-friendly-configs/`)
 
 **Status:** Planned. Ready for `/gsd-execute-phase 1`.

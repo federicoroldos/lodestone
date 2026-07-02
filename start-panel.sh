@@ -74,7 +74,7 @@ echo "Checking dependencies..."
 detect_pm
 [ -n "$PM" ] && echo "  Package manager: $PM" || echo "  No known package manager detected."
 
-# --- Node.js (>=18) — required to run the panel itself ---
+# --- Node.js (>=18) - required to run the panel itself ---
 if ! command -v node >/dev/null 2>&1; then
   echo "[MISSING] Node.js is not installed (need version 18 or newer)."
   if confirm_install "Node.js"; then install_dep node || true; fi
@@ -88,7 +88,7 @@ if [ "$(node_major)" -lt 18 ] 2>/dev/null; then
   echo "       If it fails to start, install a newer Node (nvm or https://nodejs.org/)."
 fi
 
-# --- npm — required to install deps and build ---
+# --- npm - required to install deps and build ---
 if ! command -v npm >/dev/null 2>&1; then
   echo "[MISSING] npm is not installed."
   if confirm_install "npm"; then install_dep npm || true; fi
