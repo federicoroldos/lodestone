@@ -6,6 +6,7 @@ import { useT } from '@/context/I18nContext';
 import { fmtUptime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { KpiTile } from '@/components/shared/KpiTile';
+import { KpiTileSkeleton, ChartCardSkeleton, InfoRowSkeleton } from '@/components/shared/Skeletons';
 import { Server, Users, Activity, Clock, Terminal, FolderOpen, Database } from 'lucide-react';
 
 // Sparkline canvas helper
@@ -65,12 +66,19 @@ export function DashboardView({ active, onNavigate }) {
   const status = activeServerId ? (statuses[activeServerId] || { status: 'offline' }) : { status: 'offline' };
   const server = servers.find(s => s.id === activeServerId);
 
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Sparkline data
   const sparkRef = useRef({ procmem: [], proccpu: [], syscpu: [], sysmem: [] });
   const [stats, setStats] = useState(null);
 
   const onStats = useCallback((s) => {
     setStats(s);
+    setReady(true);
     const sp = sparkRef.current;
     const push = (key, val) => {
       sp[key] = [...sp[key], val].slice(-MAX_SPARK);
@@ -104,6 +112,28 @@ export function DashboardView({ active, onNavigate }) {
     { view: 'files', icon: FolderOpen, label: t('dashboard.quickFiles') },
     { view: 'backups', icon: Database, label: t('dashboard.quickBackups') },
   ];
+
+  if (!ready && activeServerId) {
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <KpiTileSkeleton />
+          <KpiTileSkeleton />
+          <KpiTileSkeleton />
+          <KpiTileSkeleton />
+        </div>
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
+          <ChartCardSkeleton />
+          <div className="xl:col-span-2 rounded-lg border border-border bg-card p-5 space-y-3">
+            <InfoRowSkeleton />
+            <InfoRowSkeleton />
+            <InfoRowSkeleton />
+            <InfoRowSkeleton />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

@@ -30,7 +30,13 @@
         "unitDays": "d",
         "unitHours": "h",
         "unitMinutes": "m",
-        "maxWord": "max"
+        "maxWord": "max",
+        "reconnecting": "Reconnecting…",
+        "reconnectingDesc": "Attempting to restore connection to the panel.",
+        "connectionLost": "Connection lost",
+        "retry": "Retry",
+        "failed": "Failed",
+        "loadFailed": "Failed to load data"
       },
       "brand": {
         "name": "Lodestone",
@@ -74,6 +80,7 @@
         "noJarConfigured": "This server has no jar configured.",
         "alreadyRunning": "The server is already running.",
         "notRunning": "The server is not running.",
+        "consoleDetached": "This server is running but its console is detached (it was left alive by a previous panel session). Restart it to regain command access.",
         "noActiveServer": "No active server.",
         "stopBeforeEdit": "Stop the server before editing it.",
         "stopBeforeRemove": "Stop the server before removing it.",
@@ -114,6 +121,8 @@
         "incompatible": "Not compatible with {label} {version}",
         "noVersionFiles": "This version has no files.",
         "vanillaNoPlugins": "Vanilla servers cannot install plugins or mods.",
+        "modpackUnsupportedLoader": "Modpacks can only be installed on Fabric, Forge, or NeoForge servers (got {loader}). {reason}",
+        "modpackIncompatible": "This modpack targets {label} {version}, which does not match this server. Create a new matching server instead.",
         "noCompatibleResults": "No compatible loader",
         "javaLaunchFailed": "Could not launch java: {error}",
         "invalidMapUrl": "That is not a valid http(s) URL for the map."
@@ -211,6 +220,9 @@
       },
       "servers": {
         "createNew": "Create new",
+        "createFromModpack": "Create from modpack",
+        "createModpackIntro": "Search Modrinth for a modpack and Lodestone will download the matching server, mods, and configs into a new folder. Fabric, Forge, and NeoForge modpacks are supported.",
+        "backToModpacks": "← Back to search",
         "registerExisting": "+ Register existing",
         "registeredTitle": "Registered servers",
         "activeExplainer": "The {active} server is the one Console, Players, Plugins, Configs and Backups act on.",
@@ -403,7 +415,21 @@
         "installedToast": "Installed: {name}. Restart to apply.",
         "compatPlugin": "plugins",
         "compatMod": "mods",
-        "compatNone": "No compatible loader"
+        "compatNone": "No compatible loader",
+        "tabModpacks": "Modpacks",
+        "tabModpacksDisabled": "Modpacks (not available for this server)",
+        "modpacksTitle": "Browse modpacks",
+        "modpackTarget": "Targets {label} {version}",
+        "modpackExisting": "Install into this server",
+        "modpackCreate": "Create new server",
+        "modpackNotEligible": "This server is not compatible with this modpack.",
+        "modpackReady": "Modpack ready: {name}",
+        "modpackProgress": "Installing modpack…",
+        "modpackCreated": "Created server {name} from modpack",
+        "modpackUnsupportedToast": "This modpack targets an unsupported loader ({loader}). Only Fabric, Forge, and NeoForge modpacks can be installed.",
+        "modpackIncompatibleToast": "This modpack doesn't match this server. Create a new server to match.",
+        "modpackCreateName": "New server name",
+        "modpackCreateFolder": "Parent folder"
       },
       "files": {
         "title": "File manager",
@@ -638,7 +664,13 @@
         "unitDays": "d",
         "unitHours": "h",
         "unitMinutes": "m",
-        "maxWord": "máx."
+        "maxWord": "máx.",
+        "reconnecting": "Reconectando…",
+        "reconnectingDesc": "Intentando restaurar la conexión con el panel.",
+        "connectionLost": "Conexión perdida",
+        "retry": "Reintentar",
+        "failed": "Falló",
+        "loadFailed": "No se pudieron cargar los datos"
       },
       "brand": {
         "name": "Lodestone",
@@ -682,6 +714,7 @@
         "noJarConfigured": "Este servidor no tiene un jar configurado.",
         "alreadyRunning": "El servidor ya está en ejecución.",
         "notRunning": "El servidor no está en ejecución.",
+        "consoleDetached": "Este servidor está en ejecución pero su consola está desconectada (quedó activo de una sesión anterior del panel). Reinícialo para recuperar el acceso a los comandos.",
         "noActiveServer": "No hay servidor activo.",
         "stopBeforeEdit": "Detén el servidor antes de editarlo.",
         "stopBeforeRemove": "Detén el servidor antes de eliminarlo.",
@@ -722,6 +755,8 @@
         "incompatible": "No compatible con {label} {version}",
         "noVersionFiles": "Esta versión no tiene archivos.",
         "vanillaNoPlugins": "Los servidores Vanilla no admiten plugins ni mods.",
+        "modpackUnsupportedLoader": "Los modpacks solo pueden instalarse en servidores Fabric, Forge o NeoForge (recibido: {loader}). {reason}",
+        "modpackIncompatible": "Este modpack requiere {label} {version}, lo cual no coincide con este servidor. Crea un servidor nuevo que coincida.",
         "noCompatibleResults": "No hay loader compatible",
         "javaLaunchFailed": "No se pudo iniciar java: {error}",
         "invalidMapUrl": "Esa no es una URL http(s) válida para el mapa."
@@ -819,6 +854,9 @@
       },
       "servers": {
         "createNew": "Crear nuevo",
+        "createFromModpack": "Crear desde modpack",
+        "createModpackIntro": "Busca un modpack en Modrinth y Lodestone descargará el servidor, los mods y las configuraciones correspondientes en una carpeta nueva. Se admiten modpacks de Fabric, Forge y NeoForge.",
+        "backToModpacks": "← Volver a la búsqueda",
         "registerExisting": "+ Registrar existente",
         "registeredTitle": "Servidores registrados",
         "activeExplainer": "El servidor {active} es sobre el que actúan Consola, Jugadores, Plugins, Configs y Copias.",
@@ -1011,7 +1049,21 @@
         "installedToast": "Instalado: {name}. Reinicia para aplicar.",
         "compatPlugin": "plugins",
         "compatMod": "mods",
-        "compatNone": "Sin loader compatible"
+        "compatNone": "Sin loader compatible",
+        "tabModpacks": "Modpacks",
+        "tabModpacksDisabled": "Modpacks (no disponible para este servidor)",
+        "modpacksTitle": "Explorar modpacks",
+        "modpackTarget": "Requiere {label} {version}",
+        "modpackExisting": "Instalar en este servidor",
+        "modpackCreate": "Crear servidor nuevo",
+        "modpackNotEligible": "Este servidor no es compatible con este modpack.",
+        "modpackReady": "Modpack listo: {name}",
+        "modpackProgress": "Instalando modpack…",
+        "modpackCreated": "Servidor {name} creado desde modpack",
+        "modpackUnsupportedToast": "Este modpack usa un loader no soportado ({loader}). Solo se pueden instalar modpacks de Fabric, Forge y NeoForge.",
+        "modpackIncompatibleToast": "Este modpack no coincide con este servidor. Crea uno nuevo para este modpack.",
+        "modpackCreateName": "Nombre del nuevo servidor",
+        "modpackCreateFolder": "Carpeta contenedora"
       },
       "files": {
         "title": "Administrador de archivos",

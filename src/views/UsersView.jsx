@@ -6,7 +6,9 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ListSkeleton } from '@/components/shared/Skeletons';
 import { PasswordStrength } from '@/components/shared/PasswordStrength';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
@@ -122,15 +124,20 @@ export function UsersView() {
   const t = useT();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
+    setLoading(true);
+    setError('');
     try {
       const { users: list } = await api('/api/users');
       setUsers(list);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -155,7 +162,11 @@ export function UsersView() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-4">{t('users.hint')}</p>
-          {users.length === 0 ? (
+          {loading ? (
+            <ListSkeleton rows={3} />
+          ) : error ? (
+            <ErrorState error={error} onRetry={load} />
+          ) : users.length === 0 ? (
             <EmptyState message={t('users.empty')} />
           ) : (
             <div className="space-y-1.5">
