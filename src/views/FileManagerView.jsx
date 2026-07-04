@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { PromptDialog } from '@/components/shared/PromptDialog';
+import { FileEntrySkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { fmtBytesRaw, joinRel } from '@/lib/utils';
-import { Folder, FileText, ChevronUp, Upload, FolderPlus, RefreshCw, Pencil, PencilLine, Trash2, Download } from 'lucide-react';
+import { Folder, FileText, ChevronUp, Upload, FolderPlus, RefreshCw, Pencil, PencilLine, Trash2, Download, Search, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
@@ -19,19 +21,27 @@ export function FileManagerView() {
   const { token } = useAuth();
   const [path, setPath] = useState('');
   const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
   const [editFile, setEditFile] = useState(null);
   const [editContent, setEditContent] = useState('');
+  const [editOriginal, setEditOriginal] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingEditorClose, setPendingEditorClose] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
   const [showMkdir, setShowMkdir] = useState(false);
 
   async function load(rel) {
     const p = rel ?? path;
+    setLoading(true);
+    setError('');
     try {
       const data = await api(`/api/files?path=${encodeURIComponent(p)}`);
       setPath(data.path || '');
       setEntries(data.entries || []);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   }
 
   useEffect(() => { load(''); }, []);
@@ -48,6 +58,7 @@ export function FileManagerView() {
         const { content } = await api(`/api/files/read?path=${encodeURIComponent(rel)}`);
         setEditFile({ rel, name: e.name });
         setEditContent(content);
+        setEditOriginal(content);
       } catch (err) { toast.error(err.message); }
       return;
     }
@@ -88,9 +99,24 @@ export function FileManagerView() {
     try {
       await api('/api/files/write', { method: 'PUT', body: { path: editFile.rel, content: editContent } });
       setEditFile(null);
+      setEditOriginal('');
       toast.success(t('files.savedToast'));
     } catch (e) { toast.error(e.message); }
   }
+
+  function closeEditor() {
+    if (editContent !== editOriginal) {
+      setPendingEditorClose(true);
+      return;
+    }
+    setEditFile(null);
+    setEditOriginal('');
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleEntries = normalizedQuery
+    ? entries.filter(e => e.name.toLowerCase().includes(normalizedQuery))
+    : entries;
 
   return (
     <>
@@ -109,22 +135,51 @@ export function FileManagerView() {
         </CardHeader>
         <CardContent>
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 mb-4">
-            <Button variant="glass" size="xs" onClick={goUp} disabled={!path}>
-              <ChevronUp className="h-3 w-3" /> {t('files.up')}
-            </Button>
-            <span className="font-mono text-xs text-primary">/{path}</span>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button variant="glass" size="xs" onClick={goUp} disabled={!path}>
+                <ChevronUp className="h-3 w-3" /> {t('files.up')}
+              </Button>
+              <span className="truncate font-mono text-xs text-primary">/{path}</span>
+            </div>
+            <div className="relative min-w-[200px] sm:w-[260px]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={t('files.searchPlaceholder')}
+                className="h-8 rounded-full bg-secondary/40 pl-8 pr-8 text-xs"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  aria-label={t('files.clearSearch')}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">{t('files.empty')}</p>
+          {loading ? (
+            <div className="space-y-1">
+              {Array.from({ length: 8 }, (_, i) => <FileEntrySkeleton key={i} />)}
+            </div>
+          ) : error ? (
+            <ErrorState error={error} onRetry={() => load()} />
+          ) : visibleEntries.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
+              {normalizedQuery ? t('files.emptySearch') : t('files.empty')}
+            </p>
           ) : (
             <div className="space-y-1">
-              {entries.map(e => {
+              {visibleEntries.map(e => {
                 const rel = joinRel(path, e.name);
                 return (
                   <div key={e.name} className={cn(
-                    'flex items-center gap-3 rounded-md border border-border/60 bg-secondary/20 px-3 py-2 hover:bg-secondary/40 transition-colors group',
+                    'flex items-center gap-3 rounded-md border border-border/60 bg-secondary/20 px-3 py-2 hover:bg-secondary/40 transition-colors group focus-within:bg-secondary/40',
                     e.dir && 'cursor-pointer'
                   )}
                     onClick={e.dir ? () => load(rel) : undefined}
@@ -144,24 +199,24 @@ export function FileManagerView() {
                         {fmtBytesRaw(e.size)} · {new Date(e.mtime).toLocaleDateString()}
                       </span>
                     )}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
                       {e.editable && !e.dir && (
-                        <Button variant="ghost" size="icon-xs" onClick={ev => { ev.stopPropagation(); fileAction('edit', e); }} title={t('files.edit')}>
+                        <Button variant="ghost" size="icon-xs" onClick={ev => { ev.stopPropagation(); fileAction('edit', e); }} title={t('files.edit')} aria-label={t('files.edit')}>
                           <Pencil className="h-3 w-3" />
                         </Button>
                       )}
                       {!e.dir && (
                         <Button variant="ghost" size="icon-xs" asChild onClick={ev => ev.stopPropagation()}>
-                          <a href={`/api/files/download?path=${encodeURIComponent(rel)}&token=${encodeURIComponent(token)}`} download title={t('files.download')}>
+                          <a href={`/api/files/download?path=${encodeURIComponent(rel)}&token=${encodeURIComponent(token)}`} download title={t('files.download')} aria-label={t('files.download')}>
                             <Download className="h-3 w-3" />
                           </a>
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon-xs" onClick={ev => { ev.stopPropagation(); fileAction('rename', e); }} title={t('files.rename')}>
+                      <Button variant="ghost" size="icon-xs" onClick={ev => { ev.stopPropagation(); fileAction('rename', e); }} title={t('files.rename')} aria-label={t('files.rename')}>
                         <PencilLine className="h-3 w-3" />
                       </Button>
                       <Button variant="ghost" size="icon-xs"
-                        onClick={ev => { ev.stopPropagation(); fileAction('delete', e); }} title={t('common.delete')}>
+                        onClick={ev => { ev.stopPropagation(); fileAction('delete', e); }} title={t('common.delete')} aria-label={t('common.delete')}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -174,7 +229,7 @@ export function FileManagerView() {
       </Card>
 
       {/* File editor dialog */}
-      <Dialog open={!!editFile} onOpenChange={open => { if (!open) setEditFile(null); }}>
+      <Dialog open={!!editFile} onOpenChange={open => { if (!open) closeEditor(); }}>
         <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>{editFile?.name}</DialogTitle></DialogHeader>
           <div className="px-5 py-4">
@@ -186,11 +241,28 @@ export function FileManagerView() {
             />
           </div>
           <DialogFooter>
-            <Button variant="glass" onClick={() => setEditFile(null)}>{t('common.cancel')}</Button>
-            <Button variant="default" onClick={saveEdit}>{t('common.save')}</Button>
+            {editContent !== editOriginal && (
+              <span className="mr-auto self-center text-xs text-status-warn">{t('configs.unsavedChanges')}</span>
+            )}
+            <Button variant="glass" onClick={closeEditor}>{t('common.cancel')}</Button>
+            <Button variant="default" onClick={saveEdit} disabled={editContent === editOriginal}>{t('common.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={pendingEditorClose}
+        onOpenChange={setPendingEditorClose}
+        title={t('files.unsavedTitle')}
+        description={editFile ? t('files.unsavedBody', { name: editFile.name }) : ''}
+        confirmLabel={t('files.discard')}
+        destructive
+        onConfirm={() => {
+          setPendingEditorClose(false);
+          setEditFile(null);
+          setEditOriginal('');
+        }}
+      />
 
       <ConfirmDialog
         open={!!pendingDelete}

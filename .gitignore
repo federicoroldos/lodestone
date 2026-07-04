@@ -7,6 +7,9 @@ config.json
 # runtime data
 metrics.json
 
+# tracked child PIDs, so a restarted panel can re-attach to still-running servers
+running.json
+
 # managed Java runtimes (downloaded Temurin JREs per Java major)
 runtimes/
 

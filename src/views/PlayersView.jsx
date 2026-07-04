@@ -7,6 +7,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { PlayerGridSkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
@@ -263,18 +265,22 @@ export function PlayersView() {
   const livePlayers = status.players || [];
 
   const [lists, setLists] = useState({ online: [], recent: [], whitelist: [], ops: [], banned: [], whitelistEnabled: false });
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState('');
   const [selected, setSelected] = useState(null);
 
-  async function loadLists() {
+  async function loadLists(silent) {
+    if (!silent) { setListLoading(true); setListError(''); }
     try {
       const d = await api('/api/playerlists');
       setLists(d);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { if (!silent) setListError(e.message); }
+    if (!silent) setListLoading(false);
   }
 
   useEffect(() => { loadLists(); }, [activeServerId]);
-  // Refresh lists when the live online set changes (join/leave).
-  useEffect(() => { loadLists(); }, [livePlayers.join(',')]);
+  // Refresh lists when the live online set changes (join/leave) — silent, no skeleton.
+  useEffect(() => { loadLists(true); }, [livePlayers.join(',')]);
 
   // Cross-reference sets for badges + state-aware actions.
   const sets = useMemo(() => {
@@ -369,34 +375,49 @@ export function PlayersView() {
         </Card>
       </div>
 
-      <PlayerSection
-        title={t('players.onlineTitle')} count={onlineNames.length} players={onlineNames}
-        getFlags={getFlags} onSelect={setSelected} emptyMessage={t('players.onlineEmpty')}
-      />
+      {listLoading ? (
+        <>
+          <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+            <PlayerGridSkeleton cards={3} />
+          </div>
+          <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+            <PlayerGridSkeleton cards={3} />
+          </div>
+        </>
+      ) : listError ? (
+        <ErrorState error={listError} onRetry={loadLists} />
+      ) : (
+        <>
+          <PlayerSection
+            title={t('players.onlineTitle')} count={onlineNames.length} players={onlineNames}
+            getFlags={getFlags} onSelect={setSelected} emptyMessage={t('players.onlineEmpty')}
+          />
 
-      <PlayerSection
-        title={t('players.recentTitle')} count={(lists.recent || []).length}
-        players={(lists.recent || []).map((p) => p.name)}
-        getFlags={getFlags} onSelect={setSelected} emptyMessage={t('players.recentEmpty')}
-      />
+          <PlayerSection
+            title={t('players.recentTitle')} count={(lists.recent || []).length}
+            players={(lists.recent || []).map((p) => p.name)}
+            getFlags={getFlags} onSelect={setSelected} emptyMessage={t('players.recentEmpty')}
+          />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <PlayerSection
-          title={t('players.whitelistTitle')} icon={Check} count={(lists.whitelist || []).length}
-          players={lists.whitelist || []} getFlags={getFlags} onSelect={setSelected}
-          emptyMessage={t('players.whitelistEmpty')}
-        />
-        <PlayerSection
-          title={t('players.opsTitle')} icon={Crown} count={(lists.ops || []).length}
-          players={lists.ops || []} getFlags={getFlags} onSelect={setSelected}
-          emptyMessage={t('players.opsEmpty')}
-        />
-        <PlayerSection
-          title={t('players.bannedTitle')} icon={Ban} count={(lists.banned || []).length}
-          players={(lists.banned || []).map((b) => b.name)} getFlags={getFlags} onSelect={setSelected}
-          emptyMessage={t('players.bannedEmpty')}
-        />
-      </div>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <PlayerSection
+              title={t('players.whitelistTitle')} icon={Check} count={(lists.whitelist || []).length}
+              players={lists.whitelist || []} getFlags={getFlags} onSelect={setSelected}
+              emptyMessage={t('players.whitelistEmpty')}
+            />
+            <PlayerSection
+              title={t('players.opsTitle')} icon={Crown} count={(lists.ops || []).length}
+              players={lists.ops || []} getFlags={getFlags} onSelect={setSelected}
+              emptyMessage={t('players.opsEmpty')}
+            />
+            <PlayerSection
+              title={t('players.bannedTitle')} icon={Ban} count={(lists.banned || []).length}
+              players={(lists.banned || []).map((b) => b.name)} getFlags={getFlags} onSelect={setSelected}
+              emptyMessage={t('players.bannedEmpty')}
+            />
+          </div>
+        </>
+      )}
 
       {selected && (
         <PlayerDetail

@@ -6,6 +6,8 @@ import { useI18n, useT } from '@/context/I18nContext';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoginView } from '@/views/LoginView';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
@@ -26,6 +28,8 @@ import { BackupsView } from '@/views/BackupsView';
 import { TasksView } from '@/views/TasksView';
 import { UsersView } from '@/views/UsersView';
 import { viewToPath, pathToView } from '@/lib/routes';
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Views that touch the server's on-disk content (plugins, mods, configs, files).
 // Navigating into any of them while the active server has never been started
@@ -283,7 +287,7 @@ function AppShell({ onLoggedIn }) {
   }
 
   const views = {
-    dashboard: <DashboardView active={currentView === 'dashboard'} />,
+    dashboard: <DashboardView active={currentView === 'dashboard'} onNavigate={navigate} />,
     servers:   <ServersView onSetActive={handleSetActive} onRefresh={loadServers} />,
     metrics:   <MetricsView />,
     console:   <ConsoleView lines={consoleLines} onCommand={handleCommand} />,
@@ -298,9 +302,37 @@ function AppShell({ onLoggedIn }) {
     users:     <UsersView />,
   };
 
+  const connBanner = connState === 'connecting' ? {
+    icon: RefreshCw,
+    text: t('common.reconnecting'),
+    desc: t('common.reconnectingDesc'),
+    classes: 'bg-primary/10 text-primary border-primary/20',
+  } : connState === 'bad' ? {
+    icon: WifiOff,
+    text: t('common.connectionLost'),
+    desc: t('common.loadFailed'),
+    classes: 'bg-status-error/10 text-status-error border-status-error/20',
+  } : null;
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="app-shell-enter relative flex min-h-screen bg-background">
+        {/* Connection banner */}
+        {connBanner && (
+          <div className={cn('fixed top-0 left-0 right-0 z-50 flex items-center gap-3 border-b px-4 py-2 text-xs', connBanner.classes)}>
+            <connBanner.icon className="h-3.5 w-3.5 animate-pulse shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="font-medium">{connBanner.text}</span>
+              {connBanner.desc && <span className="opacity-70 ml-1">{connBanner.desc}</span>}
+            </div>
+            {connState === 'bad' && (
+              <Button variant="glass" size="xs" onClick={() => window.location.reload()}>
+                <RefreshCw className="h-3 w-3" /> {t('common.retry')}
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Stone-tile texture behind every section */}
         <div
           className="pointer-events-none fixed inset-0 z-0 opacity-[0.05]"
@@ -311,11 +343,27 @@ function AppShell({ onLoggedIn }) {
           }}
         />
         <Sidebar currentView={currentView} onNavigate={navigate} />
-        <div className="relative z-10 flex min-h-screen flex-1 min-w-0 flex-col pl-[var(--ls-sidebar-w,220px)] transition-[padding] duration-200">
+        <div className={cn(
+          'relative z-10 flex min-h-screen flex-1 min-w-0 flex-col pl-[var(--ls-sidebar-w,220px)] transition-[padding] duration-200',
+          connBanner && 'pt-9',
+        )}>
           <Header currentView={currentView} onServerSwitch={handleSetActive} />
           <main className="flex-1 p-5 pb-28">
             <div className="view-enter" key={`${currentView}:${viewNonce}`}>
-              {views[currentView] || null}
+              {!serversLoaded ? (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+                    <Skeleton className="h-28 rounded-lg" />
+                    <Skeleton className="h-28 rounded-lg" />
+                    <Skeleton className="h-28 rounded-lg" />
+                    <Skeleton className="h-28 rounded-lg" />
+                  </div>
+                  <Skeleton className="h-48 rounded-lg" />
+                  <Skeleton className="h-32 rounded-lg" />
+                </div>
+              ) : (
+                views[currentView] || null
+              )}
             </div>
           </main>
         </div>
