@@ -233,6 +233,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState('');
   const [progress, setProgress] = useState(null); // { received, total }
+  const [fsOpen, setFsOpen] = useState(false);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -310,6 +311,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
   const indeterminate = loading && (!progress || !progress.total);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!loading) onOpenChange(v); }}>
       <DialogContent className="max-w-lg" onPointerDownOutside={(e) => { if (loading) e.preventDefault(); }} onEscapeKeyDown={(e) => { if (loading) e.preventDefault(); }}>
         <DialogHeader><DialogTitle>{t('servers.createTitle')}</DialogTitle></DialogHeader>
@@ -344,8 +346,12 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
             <div className="flex gap-2">
               <Input value={form.parentDir} onChange={f('parentDir')} disabled={loading} placeholder={t('servers.parentPlaceholder', { path: osExamplePath('parent') })} className="flex-1" />
               <Button variant="glass" size="sm" type="button" disabled={loading} onClick={async () => {
-                const data = await api(`/api/pick-folder?defaultPath=${encodeURIComponent(form.parentDir)}`);
-                if (data?.path) setForm(f => ({ ...f, parentDir: data.path }));
+                try {
+                  const data = await api(`/api/pick-folder?defaultPath=${encodeURIComponent(form.parentDir)}`);
+                  if (data?.path) setForm(f => ({ ...f, parentDir: data.path }));
+                } catch {
+                  setFsOpen(true);
+                }
               }}>
                 <FolderOpen className="h-3.5 w-3.5" />{t('servers.browse')}
               </Button>
@@ -398,6 +404,13 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <FolderBrowserModal
+      open={fsOpen}
+      onOpenChange={setFsOpen}
+      initial={form.parentDir}
+      onSelect={(dir) => setForm(f => ({ ...f, parentDir: dir }))}
+    />
+    </>
   );
 }
 
