@@ -13,8 +13,9 @@ Vite app that gets built into `public/`; the backend stays a single `server.js`.
 - Node.js 18 or newer (the panel uses the global `fetch`).
 - Java is optional to install yourself. The panel downloads and manages the right Temurin
   (Adoptium) JRE per Minecraft version the first time a server needs it, storing it under
-  `runtimes/`. If a matching Java is already on your `PATH`, it uses that instead. Extraction
-  uses the system `tar` (built into Linux, macOS, and Windows 10+).
+  `runtimes/`. If a matching Java is already on your `PATH`, it uses that instead. Linux and
+  macOS runtime archives use the system `tar`; Windows runtime ZIP archives are extracted by
+  Lodestone itself.
 
 Check Node with `node -v` before you start.
 
@@ -252,7 +253,7 @@ On Linux, open the port with your firewall tool (e.g. `sudo ufw allow 2121/tcp`)
 | --- | --- |
 | `Node.js was not found` | Install Node 18+ and re-run the launcher (`start-panel.bat` on Windows, `./start-panel.sh` on Linux/macOS). |
 | Server won't start, "Jar not found" | Check the folder and jar on the Servers tab (Edit). On Windows, paths in `config.json` use double backslashes. |
-| Java runtime download fails | The panel fetches the Temurin JRE from `api.adoptium.net` and extracts it with `tar`; check internet access and that `tar` is available. You can also install a matching Java on your `PATH`. |
+| Java runtime download fails | The panel fetches the Temurin JRE from `api.adoptium.net`; check internet access. On Linux/macOS, also confirm `tar` is available. You can also install a matching Java on your `PATH`. |
 | TPS stays blank | TPS needs EssentialsX or Paper's `/tps`. The rest works without it. |
 | Can't reach the panel from another device | Use the LAN or Radmin VPN IP (not `localhost`), confirm `panelHost` is `0.0.0.0`, and allow port 2121 in your firewall. |
 | Map tab is blank | BlueMap has to be installed, rendered, and `map.url` set. Big worlds take time to render. |

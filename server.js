@@ -1,7 +1,8 @@
 'use strict';
 
 /*
- * Lodestone - lightweight web panel to manage Minecraft (Spigot/Paper) servers on Windows.
+ * Lodestone - lightweight web panel to manage Minecraft servers on Windows,
+ * Linux, and macOS.
  *
  * A single Node process:
  *   - Express serves the REST API and the static files in public/
@@ -31,6 +32,12 @@ const { WebSocketServer } = require('ws');
 const multer = require('multer');
 const pidusage = require('pidusage');
 const archiver = require('archiver');
+const {
+  findForgeLaunchTarget,
+  installerFailureMessage,
+  runForgeInstaller: runForgeInstallerProcess,
+} = require('./lib/serverInstaller.cjs');
+const { extractRuntimeArchive } = require('./lib/runtimeArchive.cjs');
 
 // pidusage on Windows shells out to wmic.exe, which Microsoft removed from
 // Windows 11, so every pidusage() call throws `spawn wmic ENOENT` and process
@@ -442,21 +449,35 @@ class ServerManager {
       return { ok: false, error: eKey('errors.alreadyRunning') };
     }
     const d = this.desc();
+    const hasLaunchArgs = Array.isArray(d.launchArgs) && d.launchArgs.length > 0;
     if (!d.dir) return { ok: false, error: eKey('errors.noFolderConfigured') };
-    if (!d.jar) return { ok: false, error: eKey('errors.noJarConfigured') };
+    if (!hasLaunchArgs && !d.jar) return { ok: false, error: eKey('errors.noJarConfigured') };
     if (!fs.existsSync(d.dir)) return { ok: false, error: eKey('errors.folderNotFound', { path: d.dir }) };
-    const jarPath = path.join(d.dir, d.jar);
-    if (!fs.existsSync(jarPath)) {
-      return { ok: false, error: eKey('errors.jarMissing', { path: jarPath }) };
+    let jarPath = null;
+    if (hasLaunchArgs) {
+      for (const arg of d.launchArgs) {
+        if (typeof arg !== 'string' || !arg.startsWith('@')) continue;
+        const argPath = path.resolve(d.dir, arg.slice(1));
+        if (!argPath.startsWith(path.resolve(d.dir) + path.sep) || !fs.existsSync(argPath)) {
+          return { ok: false, error: eKey('errors.jarMissing', { path: argPath }) };
+        }
+      }
+    } else {
+      jarPath = path.join(d.dir, d.jar);
+      if (!fs.existsSync(jarPath)) {
+        return { ok: false, error: eKey('errors.jarMissing', { path: jarPath }) };
+      }
     }
 
-    const args = [...(d.javaArgs || []), '-jar', d.jar, 'nogui'];
+    const args = hasLaunchArgs
+      ? [...(d.javaArgs || []), ...d.launchArgs]
+      : [...(d.javaArgs || []), '-jar', d.jar, 'nogui'];
 
     // Resolve the Java binary for this server's Minecraft version. The panel
     // manages its own Temurin runtimes per Java major (see runtimes/), so the
     // user never has to install Java by hand. If the right runtime isn't on
     // disk yet we download it first (progress in this console), then launch.
-    const major = Math.max(jarJavaMajor(jarPath) || 0, requiredJavaMajor(d.mcVersion));
+    const major = hasLaunchArgs ? requiredJavaMajor(d.mcVersion) : Math.max(jarJavaMajor(jarPath) || 0, requiredJavaMajor(d.mcVersion));
     const javaBin = resolveJavaForServer(d, major);
     if (javaBin) return this._launch(javaBin, args);
 
@@ -1579,6 +1600,8 @@ function serverWithStatus(s) {
     name: s.name,
     dir: s.dir,
     jar: s.jar,
+    loader: s.loader || '',
+    launchArgs: Array.isArray(s.launchArgs) ? s.launchArgs : [],
     javaArgs: s.javaArgs,
     mcVersion: s.mcVersion,
     worlds: s.worlds,
@@ -2430,20 +2453,21 @@ const MODRINTH_CATEGORIES = [
 // (paper/spigot/bukkit).
 function detectCompat(m) {
   const jar = ((m && m.desc().jar) || '').toLowerCase();
+  const loaderName = ((m && m.desc().loader) || '').toLowerCase();
   const mcVersion = (m && m.desc().mcVersion) || '';
   let projectType = 'plugin';
   let loaders = ['paper', 'spigot', 'bukkit'];
   let folder = 'plugins';
   let label = 'Paper/Spigot';
   let canMods = false;
-  if (jar.includes('fabric')) { projectType = 'mod'; loaders = ['fabric']; folder = 'mods'; label = 'Fabric'; canMods = true; }
-  else if (jar.includes('quilt')) { projectType = 'mod'; loaders = ['quilt', 'fabric']; folder = 'mods'; label = 'Quilt'; canMods = true; }
-  else if (jar.includes('neoforge')) { projectType = 'mod'; loaders = ['neoforge']; folder = 'mods'; label = 'NeoForge'; canMods = true; }
-  else if (jar.includes('forge')) { projectType = 'mod'; loaders = ['forge']; folder = 'mods'; label = 'Forge'; canMods = true; }
-  else if (jar.includes('paper')) { loaders = ['paper', 'spigot', 'bukkit']; label = 'Paper'; }
-  else if (jar.includes('spigot')) { loaders = ['spigot', 'bukkit']; label = 'Spigot'; }
-  else if (jar.includes('bukkit')) { loaders = ['bukkit']; label = 'Bukkit'; }
-  else if (jar.includes('vanilla') || jar.includes('minecraft_server')) { projectType = null; label = 'Vanilla'; }
+  if (loaderName === 'fabric' || jar.includes('fabric')) { projectType = 'mod'; loaders = ['fabric']; folder = 'mods'; label = 'Fabric'; canMods = true; }
+  else if (loaderName === 'quilt' || jar.includes('quilt')) { projectType = 'mod'; loaders = ['quilt', 'fabric']; folder = 'mods'; label = 'Quilt'; canMods = true; }
+  else if (loaderName === 'neoforge' || jar.includes('neoforge')) { projectType = 'mod'; loaders = ['neoforge']; folder = 'mods'; label = 'NeoForge'; canMods = true; }
+  else if (loaderName === 'forge' || jar.includes('forge')) { projectType = 'mod'; loaders = ['forge']; folder = 'mods'; label = 'Forge'; canMods = true; }
+  else if (loaderName === 'paper' || jar.includes('paper')) { loaders = ['paper', 'spigot', 'bukkit']; label = 'Paper'; }
+  else if (loaderName === 'spigot' || jar.includes('spigot')) { loaders = ['spigot', 'bukkit']; label = 'Spigot'; }
+  else if (loaderName === 'bukkit' || jar.includes('bukkit')) { loaders = ['bukkit']; label = 'Bukkit'; }
+  else if (loaderName === 'vanilla' || jar.includes('vanilla') || jar.includes('minecraft_server')) { projectType = null; label = 'Vanilla'; }
   return { projectType, loaders, folder, label, mcVersion, canMods };
 }
 
@@ -2953,38 +2977,8 @@ async function resolveServerJar(type, mcVersion) {
 
 // Runs the Forge / NeoForge installer non-interactively to extract libraries
 // + the runnable server jar into `dir`. Removes the installer jar afterwards.
-function runForgeInstaller(dir, installerFilename, label = 'Forge') {
-  return new Promise((resolve, reject) => {
-    const installerPath = path.join(dir, installerFilename);
-    log(`Running ${label} installer: java -jar ${installerFilename} --installServer in ${dir}`);
-    const proc = execFile('java', ['-jar', installerFilename, '--installServer'], {
-      cwd: dir,
-      windowsHide: true,
-    }, (err, _stdout, stderr) => {
-      try { fs.unlinkSync(installerPath); } catch (_) { /* ignore */ }
-      if (err) return reject(new Error(`${label} installer failed: ${(stderr || '').toString().trim() || err.message}`));
-      resolve();
-    });
-    proc.stdout && proc.stdout.on('data', () => {});
-    proc.stderr && proc.stderr.on('data', () => {});
-  });
-}
-
-// Picks the runnable server jar the Forge / NeoForge installer produced.
-// Modern Forge writes "<mc>-<forge>.jar" alongside the installer; NeoForge
-// writes just "<neoforge-version>.jar" - "21.1.66.jar" (old scheme) or
-// "26.1.2.76.jar" (new four-part scheme); older Forge releases used
-// "minecraftforge-universal-<coord>.jar".
-function findForgeServerJar(dir) {
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jar'));
-  const modern = files.find((f) => /^\d+\.\d+(?:\.\d+)?-\d+\.\d+\.\d+(\.\d+)?\.jar$/.test(f));
-  if (modern) return modern;
-  const neo = files.find((f) => /^\d+(\.\d+){1,3}\.jar$/.test(f));
-  if (neo) return neo;
-  const universal = files.find((f) => f.includes('minecraftforge-universal'));
-  if (universal) return universal;
-  if (files.length === 1) return files[0];
-  return null;
+function runForgeInstaller(dir, installerFilename, label = 'Forge', javaBin = 'java') {
+  return runForgeInstallerProcess(dir, installerFilename, label, javaBin, log);
 }
 
 app.get('/api/create/versions', async (req, res) => {
@@ -3222,15 +3216,12 @@ function ensureRuntime(major, onProgress) {
     });
     log(`JRE ${major}: extracting...`);
 
-    // Extract with the system tar: present on Linux/macOS and Windows 10+,
-    // where bsdtar also opens .zip archives. Extract into a clean target.
+    // Extract into a clean target. Unix/macOS Temurin archives are .tar.gz
+    // and use the system tar; Windows Temurin archives are .zip and are
+    // unpacked with Node so Lodestone does not depend on bsdtar zip support.
     try { fs.rmSync(dest, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     fs.mkdirSync(dest, { recursive: true });
-    const tarArgs = ext === 'zip' ? ['-xf', archive, '-C', dest] : ['-xzf', archive, '-C', dest];
-    const ex = spawnSync('tar', tarArgs, { encoding: 'utf8' });
-    if (ex.error || ex.status !== 0) {
-      throw new Error(`Could not extract Java runtime (tar): ${ex.error ? ex.error.message : (ex.stderr || ('exit ' + ex.status))}`);
-    }
+    extractRuntimeArchive(archive, dest, ext);
     try { fs.unlinkSync(archive); } catch (_) { /* ignore */ }
 
     const bin = resolveManagedJava(major);
@@ -3323,14 +3314,24 @@ app.post('/api/create', requireAdmin, async (req, res) => {
     log(`Create: downloaded "${filename}" (${(received / 1048576).toFixed(1)} MB)`);
 
     let jarFilename = filename;
+    let launchArgs = null;
     if (type === 'forge' || type === 'neoforge') {
       const label = type === 'neoforge' ? 'NeoForge' : 'Forge';
       send({ type: 'phase', phase: type === 'neoforge' ? 'installing-neoforge' : 'installing-forge' });
-      await runForgeInstaller(dir, filename, label);
+      const major = requiredJavaMajor(mcVersion);
+      let javaBin = resolveJavaForServer({ mcVersion }, major);
+      if (!javaBin) {
+        log(`Create: ${label} installer needs Java ${major}; preparing managed runtime...`);
+        javaBin = await ensureRuntime(major, (rec, total) => {
+          if (total) send({ type: 'progress', received: rec, total });
+        });
+      }
+      await runForgeInstaller(dir, filename, label, javaBin);
       if (clientGone) { cleanup(filename); return; }
-      const produced = findForgeServerJar(dir);
-      if (!produced) throw new Error(`${label} installer finished but no server jar was found in the folder`);
-      jarFilename = produced;
+      const produced = findForgeLaunchTarget(dir, type);
+      if (!produced) throw new Error(`${label} installer finished but no server jar or launch args file was found in the folder`);
+      jarFilename = produced.jar;
+      launchArgs = produced.launchArgs;
     }
 
     send({ type: 'phase', phase: 'finalizing' });
@@ -3346,6 +3347,8 @@ app.post('/api/create', requireAdmin, async (req, res) => {
       name,
       dir,
       jar: jarFilename,
+      loader: type,
+      launchArgs,
       javaArgs,
       mcVersion,
       stopTimeoutSeconds: 30,
@@ -3680,8 +3683,6 @@ function doScheduledRestart(m) {
 // Startup
 // ---------------------------------------------------------------------------
 
-setupSchedulers();
-
 // Print the default sign-in once at startup, but only while the default admin
 // still has the default password. As soon as the password is changed the stored
 // hash stops matching, so real credentials are never echoed to the console.
@@ -3712,12 +3713,6 @@ function logDefaultCredentials() {
   } catch (_) { /* never block startup on the banner */ }
 }
 
-server.listen(config.panelPort, config.panelHost, () => {
-  log(`${config.appName} listening on http://${config.panelHost}:${config.panelPort}`);
-  log(`Registered servers: ${config.servers.length}`);
-  logDefaultCredentials();
-});
-
 // Clean shutdown
 function shutdown() {
   log('Shutting down panel...');
@@ -3727,5 +3722,24 @@ function shutdown() {
   }
   process.exit(0);
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+
+if (require.main === module) {
+  setupSchedulers();
+  server.listen(config.panelPort, config.panelHost, () => {
+    log(`${config.appName} listening on http://${config.panelHost}:${config.panelPort}`);
+    log(`Registered servers: ${config.servers.length}`);
+    logDefaultCredentials();
+  });
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+module.exports = {
+  requiredJavaMajor,
+  resolveManagedJava,
+  resolveJavaForServer,
+  ensureRuntime,
+  runForgeInstaller,
+  installerFailureMessage,
+};

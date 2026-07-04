@@ -187,7 +187,20 @@ export function ConfigsView() {
 
             <ValidationPanel issues={issues} />
 
-            <div className="mt-4 flex items-center justify-end gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              {!noChanges && (
+                <span className="mr-auto text-xs font-medium text-status-warn">
+                  {t('configs.unsavedChanges')}
+                </span>
+              )}
+              <Button
+                variant="glass"
+                size="sm"
+                onClick={() => { setCurrent(original); setIssues([]); }}
+                disabled={noChanges || saving}
+              >
+                {t('configs.resetChanges')}
+              </Button>
               <Button variant="default" size="sm" onClick={() => setDiffOpen(true)} disabled={saveDisabled}>
                 {saving ? t('common.loading') : t('common.save')}
               </Button>

@@ -283,7 +283,7 @@ function AppShell({ onLoggedIn }) {
   }
 
   const views = {
-    dashboard: <DashboardView active={currentView === 'dashboard'} />,
+    dashboard: <DashboardView active={currentView === 'dashboard'} onNavigate={navigate} />,
     servers:   <ServersView onSetActive={handleSetActive} onRefresh={loadServers} />,
     metrics:   <MetricsView />,
     console:   <ConsoleView lines={consoleLines} onCommand={handleCommand} />,
