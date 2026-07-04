@@ -1,12 +1,13 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useServer } from '@/context/ServerContext';
-import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
-import { fmtUptime, fmtBytes } from '@/lib/utils';
+import { fmtUptime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { KpiTile } from '@/components/shared/KpiTile';
-import { Server, Users, Activity, Clock, Cpu, HardDrive } from 'lucide-react';
+import { KpiTileSkeleton, ChartCardSkeleton, InfoRowSkeleton } from '@/components/shared/Skeletons';
+import { Server, Users, Activity, Clock, Terminal, FolderOpen, Database } from 'lucide-react';
 
 // Sparkline canvas helper
 function drawSpark(canvas, data) {
@@ -58,13 +59,18 @@ function MetricRow({ label, value, unit, data }) {
 
 const MAX_SPARK = 150;
 
-export function DashboardView({ active }) {
+export function DashboardView({ active, onNavigate }) {
   const { activeServerId, statuses, servers } = useServer();
-  const api = useApi();
   const t = useT();
   const dash = t('common.dashPlaceholder');
   const status = activeServerId ? (statuses[activeServerId] || { status: 'offline' }) : { status: 'offline' };
   const server = servers.find(s => s.id === activeServerId);
+
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Sparkline data
   const sparkRef = useRef({ procmem: [], proccpu: [], syscpu: [], sysmem: [] });
@@ -72,6 +78,7 @@ export function DashboardView({ active }) {
 
   const onStats = useCallback((s) => {
     setStats(s);
+    setReady(true);
     const sp = sparkRef.current;
     const push = (key, val) => {
       sp[key] = [...sp[key], val].slice(-MAX_SPARK);
@@ -98,6 +105,35 @@ export function DashboardView({ active }) {
   const tpsTone = status.tps >= 19 ? 'online' :
                   status.tps >= 15 ? 'warn' :
                   status.tps ? 'error' : 'neutral';
+
+  const quickLinks = [
+    { view: 'console', icon: Terminal, label: t('dashboard.quickConsole') },
+    { view: 'players', icon: Users, label: t('dashboard.quickPlayers') },
+    { view: 'files', icon: FolderOpen, label: t('dashboard.quickFiles') },
+    { view: 'backups', icon: Database, label: t('dashboard.quickBackups') },
+  ];
+
+  if (!ready && activeServerId) {
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <KpiTileSkeleton />
+          <KpiTileSkeleton />
+          <KpiTileSkeleton />
+          <KpiTileSkeleton />
+        </div>
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
+          <ChartCardSkeleton />
+          <div className="xl:col-span-2 rounded-lg border border-border bg-card p-5 space-y-3">
+            <InfoRowSkeleton />
+            <InfoRowSkeleton />
+            <InfoRowSkeleton />
+            <InfoRowSkeleton />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -206,6 +242,29 @@ export function DashboardView({ active }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('dashboard.quickActions')}</CardTitle>
+          <span className="text-xs text-muted-foreground">{t('dashboard.quickActionsHint')}</span>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {quickLinks.map(({ view, icon: Icon, label }) => (
+              <Button
+                key={view}
+                variant="glass"
+                className="h-12 justify-start px-3"
+                onClick={() => onNavigate?.(view)}
+                disabled={!activeServerId}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="truncate">{label}</span>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

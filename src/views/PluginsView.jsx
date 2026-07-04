@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ListSkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useT, useI18n } from '@/context/I18nContext';
 import { fmtBytes } from '@/lib/utils';
@@ -19,13 +21,18 @@ export function PluginsView() {
   const t = useT();
   const { lang } = useI18n();
   const [plugins, setPlugins] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
+    setLoading(true);
+    setError('');
     try {
       const { plugins: p } = await api('/api/plugins');
       setPlugins(p);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -72,7 +79,11 @@ export function PluginsView() {
           if (i < 0) return h;
           return <>{h.slice(0, i)}<strong className="text-foreground">{h.slice(i, i + tag.length)}</strong>{h.slice(i + tag.length)}</>;
         })()}</p>
-        {plugins.length === 0 ? (
+        {loading ? (
+          <ListSkeleton rows={4} />
+        ) : error ? (
+          <ErrorState error={error} onRetry={load} />
+        ) : plugins.length === 0 ? (
           <EmptyState message={t('plugins.empty')} />
         ) : (
           <div className="space-y-1.5">

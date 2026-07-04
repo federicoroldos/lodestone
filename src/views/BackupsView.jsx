@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ListSkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { fmtBytes } from '@/lib/utils';
@@ -84,13 +86,18 @@ export function BackupsView() {
   const [backups, setBackups] = useState([]);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
+    setListLoading(true);
+    setListError('');
     try {
       const { backups: b } = await api('/api/backups');
       setBackups(b);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setListError(e.message); }
+    setListLoading(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -138,7 +145,11 @@ export function BackupsView() {
             return <>{h.slice(0, i)}<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{tag}</code>{h.slice(i + tag.length)}</>;
           })()}</p>
           {status && <p className="text-xs text-primary mb-3">{status}</p>}
-          {backups.length === 0 ? (
+          {listLoading ? (
+            <ListSkeleton rows={3} />
+          ) : listError ? (
+            <ErrorState error={listError} onRetry={load} />
+          ) : backups.length === 0 ? (
             <EmptyState message={t('backups.empty')} />
           ) : (
             <div className="space-y-1.5">

@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useT } from '@/context/I18nContext';
-import { Send, ArrowDown } from 'lucide-react';
+import { Send, ArrowDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConsoleSkeleton } from '@/components/shared/Skeletons';
 
 function detectLevel(text) {
   if (!text) return '';
@@ -28,6 +29,8 @@ const LEVEL_BAR = {
 };
 
 const MAX_LINES = 1200;
+const HISTORY_KEY = 'lodestone.console.history';
+const HISTORY_LIMIT = 50;
 
 // Strip the leading Minecraft log timestamp ([HH:MM:SS INFO]: or [HH:MM:SS] [thread/LEVEL]: )
 // so our custom timestamp column is the only one shown.
@@ -46,8 +49,19 @@ function fmtTs(ts) {
 export function ConsoleView({ lines, onCommand }) {
   const t = useT();
   const [cmd, setCmd] = useState('');
+  const [filter, setFilter] = useState('');
   const [autoscroll, setAutoscroll] = useState(true);
-  const [history, setHistory] = useState([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  useEffect(() => { if (lines.length > 0) setHistoryLoaded(true); }, [lines]);
+  useEffect(() => { const t = setTimeout(() => setHistoryLoaded(true), 3000); return () => clearTimeout(t); }, []);
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      return Array.isArray(saved) ? saved.filter(Boolean).slice(-HISTORY_LIMIT) : [];
+    } catch {
+      return [];
+    }
+  });
   const [histIdx, setHistIdx] = useState(-1);
   const [showJump, setShowJump] = useState(false);
   const consoleRef = useRef(null);
@@ -102,7 +116,9 @@ export function ConsoleView({ lines, onCommand }) {
     onCommand(trimmed);
     setHistory(prev => {
       if (prev[prev.length - 1] === trimmed) return prev;
-      return [...prev, trimmed];
+      const next = [...prev.filter(item => item !== trimmed), trimmed].slice(-HISTORY_LIMIT);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+      return next;
     });
     setHistIdx(-1);
     setCmd('');
@@ -129,22 +145,52 @@ export function ConsoleView({ lines, onCommand }) {
     }
   };
 
-  const displayLines = lines.slice(-MAX_LINES);
+  const normalizedFilter = filter.trim().toLowerCase();
+  const displayLines = lines
+    .slice(-MAX_LINES)
+    .filter(line => !normalizedFilter || String(line.text || '').toLowerCase().includes(normalizedFilter));
 
   return (
     <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle>{t('console.title')}</CardTitle>
-        <div className="flex items-center gap-2">
-          <Checkbox id="autoscroll" checked={autoscroll} onCheckedChange={setAutoscroll} />
-          <Label htmlFor="autoscroll" className="normal-case text-xs tracking-normal font-normal text-muted-foreground cursor-pointer">
-            {t('console.autoscroll')}
-          </Label>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="relative min-w-[180px] max-w-[260px] flex-1 sm:flex-none">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder={t('console.filterPlaceholder')}
+              className="h-7 rounded-full bg-secondary/40 pl-8 pr-8 text-xs"
+            />
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                aria-label={t('console.clearFilter')}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox id="autoscroll" checked={autoscroll} onCheckedChange={setAutoscroll} />
+            <Label htmlFor="autoscroll" className="normal-case text-xs tracking-normal font-normal text-muted-foreground cursor-pointer">
+              {t('console.autoscroll')}
+            </Label>
+          </div>
         </div>
       </CardHeader>
 
       <div ref={consoleRef} onScroll={handleScroll} className="console-area relative">
-        {displayLines.map((line, i) => {
+        {!historyLoaded && displayLines.length === 0 && !normalizedFilter ? (
+          <ConsoleSkeleton rows={6} />
+        ) : displayLines.length === 0 && normalizedFilter ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground/70">
+            {t('console.filterEmpty')}
+          </div>
+        ) : displayLines.map((line, i) => {
           const level = line.level || detectLevel(line.text) || '';
           return (
             <div key={i} className="grid grid-cols-[6px_80px_1fr] gap-x-5 items-start">
@@ -157,7 +203,7 @@ export function ConsoleView({ lines, onCommand }) {
         {showJump && (
           <button
             type="button"
-            onClick={() => { consoleRef.current.scrollTop = consoleRef.current.scrollHeight; setShowJump(false); }}
+            onClick={() => { consoleRef.current.scrollTop = consoleRef.current.scrollHeight; atBottomRef.current = true; setShowJump(false); }}
             className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
             title={t('console.jumpToLive')}
           >
