@@ -1490,16 +1490,26 @@ function pickFolderWindowsLegacy(defaultPath) {
 }
 
 function pickFolderLinux(defaultPath) {
-  // Use the desktop's own native file chooser: zenity on GTK (what Nautilus,
-  // gedit, GNOME Settings, Firefox etc. shell out to - gives the actual GTK
-  // file dialog), kdialog on Qt (what KDE apps use). If neither is installed
-  // the caller surfaces a "Folder picker not available" error and the user
-  // can type the path by hand.
+  // Try the desktop's own native file chooser in order:
+  //   zenity  – GTK dialog (GNOME / Nautilus desktops)
+  //   kdialog – Qt dialog  (KDE / Dolphin desktops)
+  //   python3 – tkinter fallback (any desktop, incl. Dolphin without kdialog)
   const start = defaultPath ? defaultPath.replace(/'/g, "'\\''") + '/' : '';
   const zenityArgs = ['--file-selection', '--directory', '--title=Select the parent folder for the new server', `--filename=${start}`];
   let r = spawnSync('zenity', zenityArgs, { encoding: 'utf8' });
   if (r.error && r.error.code === 'ENOENT') {
     r = spawnSync('kdialog', ['--getexistingdirectory', defaultPath || os.homedir()], { encoding: 'utf8' });
+  }
+  if (r.error && r.error.code === 'ENOENT') {
+    const py = [
+      'import sys, tkinter, tkinter.filedialog',
+      'root = tkinter.Tk()',
+      'root.withdraw()',
+      'root.attributes("-topmost", True)',
+      'd = tkinter.filedialog.askdirectory(title="Select the parent folder for the new server", initialdir=sys.argv[1])',
+      'print(d, end="")',
+    ].join('\n');
+    r = spawnSync('python3', ['-c', py, defaultPath || os.homedir()], { encoding: 'utf8' });
   }
   return r;
 }
