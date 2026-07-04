@@ -16,6 +16,9 @@ import { hasFriendlyForm, parseProperties } from '@/lib/configFile';
 import { SERVER_PROPERTIES_SCHEMA } from '@/configs/schema';
 import { toast } from 'sonner';
 import { Repeat } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { RowSkeleton } from '@/components/shared/Skeletons';
 
 const MODE_KEY = (base) => `lodestone.configs.mode.${base}`;
 
@@ -52,17 +55,23 @@ export function ConfigsView() {
   const [issues, setIssues] = useState([]);
   const [diffOpen, setDiffOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState('');
+  const [fileLoading, setFileLoading] = useState(false);
   const [pendingRestart, setPendingRestart] = useState({});
   const [historyKey, setHistoryKey] = useState(0);
   const modesRef = useRef({});
 
   const loadList = useCallback(async () => {
+    setListLoading(true);
+    setListError('');
     try {
       const { files: list } = await api('/api/configs');
       setFiles(list);
       const next = pickInitial(list);
       setSelected((cur) => (cur && list.includes(cur)) ? cur : next);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setListError(e.message); }
+    setListLoading(false);
   }, [api]);
 
   useEffect(() => { loadList(); }, [loadList]);
@@ -70,12 +79,14 @@ export function ConfigsView() {
 
   const loadFile = useCallback(async (name) => {
     if (!name) return;
+    setFileLoading(true);
     try {
       const { content: c } = await api(`/api/configs/${encodeURIComponent(name)}`);
       setOriginal(c);
       setCurrent(c);
       setIssues([]);
     } catch (e) { toast.error(e.message); }
+    setFileLoading(false);
   }, [api]);
 
   useEffect(() => { loadFile(selected); }, [selected, loadFile]);
@@ -172,41 +183,62 @@ export function ConfigsView() {
           />
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
-          <FileNav
-            files={files}
-            selected={selected}
-            onSelect={(f) => { setSelected(f); setCurrent(''); setIssues([]); }}
-          />
-          <div className="min-w-0">
-            {isFriendly ? (
-              <ConfigForm file={base} original={original} current={current} onChange={onChange} onValidation={onValidation} />
+        {listError ? (
+          <ErrorState error={listError} onRetry={loadList} />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+            {listLoading ? (
+              <div className="space-y-1">
+                <RowSkeleton />
+                <RowSkeleton />
+                <RowSkeleton />
+                <RowSkeleton />
+                <RowSkeleton />
+              </div>
             ) : (
-              <ConfigRaw value={current} onChange={onChange} filename={base} onValidation={onValidation} />
+              <FileNav
+                files={files}
+                selected={selected}
+                onSelect={(f) => { setSelected(f); setCurrent(''); setIssues([]); }}
+              />
             )}
-
-            <ValidationPanel issues={issues} />
-
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-              {!noChanges && (
-                <span className="mr-auto text-xs font-medium text-status-warn">
-                  {t('configs.unsavedChanges')}
-                </span>
+            <div className="min-w-0">
+              {fileLoading && !current ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-48 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-48 w-full" />
+                </div>
+              ) : isFriendly ? (
+                <ConfigForm file={base} original={original} current={current} onChange={onChange} onValidation={onValidation} />
+              ) : (
+                <ConfigRaw value={current} onChange={onChange} filename={base} onValidation={onValidation} />
               )}
-              <Button
-                variant="glass"
-                size="sm"
-                onClick={() => { setCurrent(original); setIssues([]); }}
-                disabled={noChanges || saving}
-              >
-                {t('configs.resetChanges')}
-              </Button>
-              <Button variant="default" size="sm" onClick={() => setDiffOpen(true)} disabled={saveDisabled}>
-                {saving ? t('common.loading') : t('common.save')}
-              </Button>
+
+              <ValidationPanel issues={issues} />
+
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                {!noChanges && (
+                  <span className="mr-auto text-xs font-medium text-status-warn">
+                    {t('configs.unsavedChanges')}
+                  </span>
+                )}
+                <Button
+                  variant="glass"
+                  size="sm"
+                  onClick={() => { setCurrent(original); setIssues([]); }}
+                  disabled={noChanges || saving}
+                >
+                  {t('configs.resetChanges')}
+                </Button>
+                <Button variant="default" size="sm" onClick={() => setDiffOpen(true)} disabled={saveDisabled}>
+                  {saving ? t('common.loading') : t('common.save')}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </CardContent>
 
       <DiffPreview

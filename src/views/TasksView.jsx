@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ListSkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
@@ -117,15 +119,20 @@ export function TasksView() {
   const t = useT();
   const { servers, activeServerId } = useServer();
   const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
+    setLoading(true);
+    setError('');
     try {
       const { tasks: list } = await api('/api/tasks');
       setTasks(list);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -157,7 +164,11 @@ export function TasksView() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-4">{t('tasks.hint')}</p>
-          {tasks.length === 0 ? (
+          {loading ? (
+            <ListSkeleton rows={3} />
+          ) : error ? (
+            <ErrorState error={error} onRetry={load} />
+          ) : tasks.length === 0 ? (
             <EmptyState message={t('tasks.empty')} />
           ) : (
             <div className="space-y-1.5">

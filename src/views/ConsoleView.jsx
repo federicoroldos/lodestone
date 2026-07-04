@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useT } from '@/context/I18nContext';
 import { Send, ArrowDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConsoleSkeleton } from '@/components/shared/Skeletons';
 
 function detectLevel(text) {
   if (!text) return '';
@@ -50,6 +51,9 @@ export function ConsoleView({ lines, onCommand }) {
   const [cmd, setCmd] = useState('');
   const [filter, setFilter] = useState('');
   const [autoscroll, setAutoscroll] = useState(true);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  useEffect(() => { if (lines.length > 0) setHistoryLoaded(true); }, [lines]);
+  useEffect(() => { const t = setTimeout(() => setHistoryLoaded(true), 3000); return () => clearTimeout(t); }, []);
   const [history, setHistory] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
@@ -180,7 +184,9 @@ export function ConsoleView({ lines, onCommand }) {
       </CardHeader>
 
       <div ref={consoleRef} onScroll={handleScroll} className="console-area relative">
-        {displayLines.length === 0 && normalizedFilter ? (
+        {!historyLoaded && displayLines.length === 0 && !normalizedFilter ? (
+          <ConsoleSkeleton rows={6} />
+        ) : displayLines.length === 0 && normalizedFilter ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground/70">
             {t('console.filterEmpty')}
           </div>
@@ -197,7 +203,7 @@ export function ConsoleView({ lines, onCommand }) {
         {showJump && (
           <button
             type="button"
-            onClick={() => { consoleRef.current.scrollTop = consoleRef.current.scrollHeight; setShowJump(false); }}
+            onClick={() => { consoleRef.current.scrollTop = consoleRef.current.scrollHeight; atBottomRef.current = true; setShowJump(false); }}
             className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
             title={t('console.jumpToLive')}
           >

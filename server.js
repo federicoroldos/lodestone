@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const http = require('http');
+const net = require('net');
 const crypto = require('crypto');
 const { spawn, spawnSync, execFile } = require('child_process');
 const zlib = require('zlib');
@@ -38,6 +39,15 @@ const {
   runForgeInstaller: runForgeInstallerProcess,
 } = require('./lib/serverInstaller.cjs');
 const { extractRuntimeArchive } = require('./lib/runtimeArchive.cjs');
+const {
+  readMrpackIndex,
+  manifestToSpec,
+  serverSideFiles,
+  fileCountByEnv,
+  extractOverrides,
+  downloadAndVerify,
+  safeResolve: mrpackSafeResolve,
+} = require('./lib/mrpack.cjs');
 
 // pidusage on Windows shells out to wmic.exe, which Microsoft removed from
 // Windows 11, so every pidusage() call throws `spawn wmic ENOENT` and process
@@ -122,6 +132,23 @@ let config = loadConfig();
 function saveConfig(next) {
   config = next;
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+}
+
+// --- running-server state (git-ignored) ------------------------------------
+// We persist each spawned server's { pid, startedAt } so that after a panel
+// restart we can re-attach to children we intentionally left alive (see
+// shutdown()). This turns "panel restart orphans your servers" into "panel
+// restart re-adopts them".
+const RUNSTATE_PATH = path.join(__dirname, 'running.json');
+function loadRunState() {
+  try { return JSON.parse(fs.readFileSync(RUNSTATE_PATH, 'utf8')) || {}; }
+  catch (_) { return {}; }
+}
+function setRunRecord(id, rec) {
+  const s = loadRunState();
+  if (rec) s[id] = rec; else delete s[id];
+  try { fs.writeFileSync(RUNSTATE_PATH, JSON.stringify(s, null, 2), 'utf8'); }
+  catch (e) { log('run-state save failed:', e.message); }
 }
 
 function genId() {
@@ -373,6 +400,18 @@ class ServerManager {
     this.broadcast = () => {};
     this.tpsSupported = null; // null = unknown, true/false once detected
     this.lastTps = null;
+    // Adoption: set when we re-attach to a child left alive by a previous panel
+    // session. Such a process has no stdin/stdout pipes we can reach, so its
+    // console is detached; we can still monitor liveness and stop it by signal.
+    this.adopted = false;
+    this.adoptedPid = null;
+    this.adoptedWatch = null;
+  }
+
+  // The OS pid of the running server, whether we spawned it this session
+  // (this.proc) or re-adopted it after a panel restart (this.adoptedPid).
+  pid() {
+    return this.proc ? this.proc.pid : (this.adoptedPid || null);
   }
 
   desc() {
@@ -405,7 +444,7 @@ class ServerManager {
       serverId: this.id,
       name: this.name(),
       status: this.status,
-      pid: this.proc ? this.proc.pid : null,
+      pid: this.pid(),
       startedAt: this.startedAt,
       uptimeMs: this.uptimeMs(),
       players: [...this.players].sort(),
@@ -518,6 +557,28 @@ class ServerManager {
     this.setStatus(STATUS.STARTING);
     this.pushLine(`[Lodestone] Starting "${this.name()}": ${javaBin} ${args.join(' ')}`, 'info');
 
+    // Refuse to launch if the server's port is already bound. Otherwise the new
+    // java crashes with an opaque "address already in use" (and on some modpacks
+    // a shutdown NPE). This catches an orphaned child left alive by a previous
+    // panel session, or a crashed-but-lingering server still holding the port.
+    const { host, port } = readServerBind(d.dir);
+    probePortInUse(port, host).then((inUse) => {
+      if (inUse) {
+        this.setStatus(STATUS.OFFLINE);
+        this.pushLine(`[Lodestone] Port ${port} is already in use — another server (possibly an orphaned process from a previous session) is still holding it. Stop that process first, or change server-port in server.properties.`, 'error');
+        return;
+      }
+      this._spawn(javaBin, args);
+    }).catch(() => {
+      // If the probe itself failed, don't block the launch — just try.
+      this._spawn(javaBin, args);
+    });
+
+    return { ok: true };
+  }
+
+  _spawn(javaBin, args) {
+    const d = this.desc();
     let proc;
     try {
       proc = spawn(javaBin, args, {
@@ -533,6 +594,10 @@ class ServerManager {
 
     this.proc = proc;
     this.startedAt = Date.now();
+    this.adopted = false;
+    this.adoptedPid = null;
+    // Persist the pid so a future panel restart can re-adopt this child.
+    setRunRecord(this.id, { pid: proc.pid, startedAt: this.startedAt });
 
     proc.stdout.on('data', (b) => this._onData(b, 'stdout'));
     proc.stderr.on('data', (b) => this._onData(b, 'stderr'));
@@ -653,6 +718,9 @@ class ServerManager {
   }
 
   sendCommand(cmd, silent = false) {
+    if (this.adopted) {
+      return { ok: false, error: eKey('errors.consoleDetached') };
+    }
     if (!this.proc || !this.proc.stdin.writable) {
       return { ok: false, error: eKey('errors.notRunning') };
     }
@@ -676,9 +744,16 @@ class ServerManager {
       this._kill();
       return { ok: true };
     }
-    this.pushLine('[Lodestone] Stopping (graceful)...', 'info');
     this.setStatus(STATUS.STOPPING);
-    this.sendCommand('stop', true);
+    if (this.adopted) {
+      // A detached child has no stdin to receive "stop"; SIGTERM triggers
+      // Minecraft's shutdown hook so the world still saves.
+      this.pushLine(`[Lodestone] Stopping detached "${this.name()}" (pid ${this.adoptedPid}) with SIGTERM...`, 'info');
+      try { process.kill(this.adoptedPid, 'SIGTERM'); } catch (_) { /* already gone */ }
+    } else {
+      this.pushLine('[Lodestone] Stopping (graceful)...', 'info');
+      this.sendCommand('stop', true);
+    }
 
     const timeoutSec = this.desc().stopTimeoutSeconds || config.stopTimeoutSeconds || 30;
     this.killTimer = setTimeout(() => {
@@ -694,6 +769,10 @@ class ServerManager {
     if (this.proc) {
       try {
         this.proc.kill('SIGKILL');
+      } catch (_) { /* noop */ }
+    } else if (this.adopted && this.adoptedPid) {
+      try {
+        process.kill(this.adoptedPid, 'SIGKILL');
       } catch (_) { /* noop */ }
     }
   }
@@ -713,8 +792,20 @@ class ServerManager {
 
   _waitForExit() {
     return new Promise((resolve) => {
-      if (!this.proc) return resolve();
-      this.proc.once('exit', () => resolve());
+      if (this.proc) return void this.proc.once('exit', () => resolve());
+      if (this.adopted && this.adoptedPid) {
+        // No 'exit' event for a process we didn't spawn; poll liveness. Run the
+        // exit handler ourselves the moment we see it die so callers (restart)
+        // observe OFFLINE before we resolve, rather than racing the 3s watcher.
+        const iv = setInterval(() => {
+          if (!this.adopted) { clearInterval(iv); return resolve(); }
+          let alive = true;
+          try { process.kill(this.adoptedPid, 0); } catch (_) { alive = false; }
+          if (!alive) { clearInterval(iv); this._onAdoptedExit(); resolve(); }
+        }, 500);
+        return;
+      }
+      resolve();
     });
   }
 
@@ -730,11 +821,68 @@ class ServerManager {
     this.startedAt = null;
     this.players.clear();
     this.lastTps = null;
+    setRunRecord(this.id, null);
     this.setStatus(STATUS.OFFLINE);
 
     if (!wasManual) {
       // Unexpected crash
       notifyDiscord(`:red_circle: "${this.name()}" **crashed** unexpectedly (code=${code}).`);
+      this._maybeWatchdogRestart();
+    }
+  }
+
+  // -- adoption (re-attach to a child left alive across a panel restart) ---
+
+  // Called on boot after pidMatches() confirms the recorded pid is still our
+  // server. We can't recover the console (no pipes), but we can show it online,
+  // monitor liveness, and stop it by signal.
+  _adopt(pid, startedAt) {
+    this.adopted = true;
+    this.adoptedPid = pid;
+    this.proc = null;
+    this.manualStop = false;
+    this.startedAt = startedAt || Date.now();
+    this.setStatus(STATUS.ONLINE);
+    this.pushLine(`[Lodestone] Re-attached to "${this.name()}" (pid ${pid}) left running by a previous panel session. Console is detached — commands are unavailable until you restart the server, but Stop still works.`, 'warn');
+    this._startAdoptedWatch();
+  }
+
+  _startAdoptedWatch() {
+    this._stopAdoptedWatch();
+    this.adoptedWatch = setInterval(() => {
+      if (!this.adopted) return this._stopAdoptedWatch();
+      let alive = true;
+      try { process.kill(this.adoptedPid, 0); } catch (_) { alive = false; }
+      if (!alive) this._onAdoptedExit();
+    }, 3000);
+  }
+
+  _stopAdoptedWatch() {
+    if (this.adoptedWatch) {
+      clearInterval(this.adoptedWatch);
+      this.adoptedWatch = null;
+    }
+  }
+
+  _onAdoptedExit() {
+    if (this.adoptedPid == null) return; // already handled (watcher vs. _waitForExit race)
+    const wasManual = this.manualStop;
+    this._stopAdoptedWatch();
+    if (this.killTimer) {
+      clearTimeout(this.killTimer);
+      this.killTimer = null;
+    }
+    this.pushLine(`[Lodestone] Detached "${this.name()}" (pid ${this.adoptedPid}) has exited.`, wasManual ? 'info' : 'warn');
+    this.adopted = false;
+    this.adoptedPid = null;
+    this.startedAt = null;
+    this.players.clear();
+    this.lastTps = null;
+    setRunRecord(this.id, null);
+    this.setStatus(STATUS.OFFLINE);
+
+    if (!wasManual) {
+      notifyDiscord(`:red_circle: "${this.name()}" **crashed** unexpectedly (was running detached).`);
       this._maybeWatchdogRestart();
     }
   }
@@ -796,6 +944,40 @@ function ensureManagers() {
   for (const s of config.servers) getManager(s.id);
 }
 ensureManagers();
+
+// Confirm a recorded pid is still alive AND is the same process we spawned
+// (guarding against the OS recycling the pid onto something unrelated). We
+// verify identity by matching the process's start time to the one we recorded,
+// derived from pidusage's `elapsed`. If we can't verify (pidusage unavailable,
+// e.g. wmic-less Windows), we conservatively decline to adopt.
+async function pidMatches(pid, startedAt) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); } catch (_) { return false; } // ESRCH => dead
+  try {
+    const u = await pidusage(pid);
+    if (!u || typeof u.elapsed !== 'number' || !startedAt) return false;
+    const apparentStart = Date.now() - u.elapsed;
+    return Math.abs(apparentStart - startedAt) < 5 * 60 * 1000; // 5-min tolerance
+  } catch (_) {
+    return false;
+  }
+}
+
+// On boot, re-attach to any server child we intentionally left alive when the
+// previous panel process exited (see shutdown()). Stale/mismatched records are
+// dropped so we never signal an unrelated pid.
+async function adoptOrphans() {
+  const state = loadRunState();
+  for (const [id, rec] of Object.entries(state)) {
+    if (!findServer(id) || !rec || !rec.pid) { setRunRecord(id, null); continue; }
+    if (await pidMatches(rec.pid, rec.startedAt)) {
+      getManager(id)._adopt(rec.pid, rec.startedAt);
+      log(`Adopted still-running server "${findServer(id).name}" (pid ${rec.pid}).`);
+    } else {
+      setRunRecord(id, null);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Express + HTTP + WebSocket
@@ -1843,6 +2025,43 @@ function whitelistEnabled(dir) {
     return /^white-list\s*=\s*true/m.test(props);
   } catch (_) { return false; }
 }
+// Read the bind host + port a Minecraft server will listen on, from
+// server.properties. An empty server-ip means "all interfaces". Falls back to
+// :25565 (Minecraft's default) when the file or keys are missing.
+function readServerBind(dir) {
+  let host = '';
+  let port = 25565;
+  try {
+    const props = fs.readFileSync(path.join(dir, 'server.properties'), 'utf8');
+    const ip = props.match(/^server-ip\s*=\s*(.*)$/m);
+    if (ip && ip[1].trim()) host = ip[1].trim();
+    const p = props.match(/^server-port\s*=\s*(\d+)/m);
+    if (p) port = parseInt(p[1], 10) || 25565;
+  } catch (_) { /* keep defaults */ }
+  return { host, port };
+}
+// Best-effort, cross-platform check for whether a TCP port is already bound
+// (no external tools): try to listen on it ourselves — EADDRINUSE means
+// something else already holds it. Any other outcome is treated as "free" so a
+// probe failure never blocks a legitimate start.
+function probePortInUse(port, host) {
+  // An empty server-ip means Minecraft binds the IPv4 wildcard, so probe that
+  // explicitly. Omitting the host lets Node pick the IPv6 unspecified address,
+  // which on hosts with net.ipv6.bindv6only=1 would NOT collide with an
+  // IPv4-only server and give a false "free".
+  const bindHost = host || '0.0.0.0';
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once('error', (err) => {
+      const inUse = !!err && err.code === 'EADDRINUSE';
+      tester.close(() => resolve(inUse));
+    });
+    tester.once('listening', () => {
+      tester.close(() => resolve(false));
+    });
+    tester.listen(port, bindHost);
+  });
+}
 // Look up a player's Mojang UUID (needed to add to files while offline, online-mode servers).
 async function mojangUuid(name) {
   try {
@@ -2039,9 +2258,10 @@ async function sampleMetrics() {
   for (const s of config.servers) {
     const m = getManager(s.id);
     let cpu = 0, memMB = 0, players = 0;
-    if (m && m.isRunning() && m.proc && m.proc.pid) {
+    const pid = m && m.isRunning() ? m.pid() : null;
+    if (pid) {
       try {
-        const u = await procUsage(m.proc.pid);
+        const u = await procUsage(pid);
         const cores = os.cpus().length || 1;
         cpu = Math.round(Math.min(100, (u ? u.cpu : 0) / cores));
         memMB = Math.round((u ? u.memory : 0) / 1048576);
@@ -2474,19 +2694,20 @@ function detectCompat(m) {
 app.get('/api/modrinth/search', async (req, res) => {
   const m = targetManager(req);
   const compat = detectCompat(m);
-  // `projectType` (optional) lets the caller force 'mod' or 'plugin' so both
-  // tabs of the content view can reuse this endpoint regardless of the
-  // active server's loader. Without an override we keep the historical
-  // behaviour of matching the server's own project type.
+  // `projectType` (optional) lets the caller force 'mod', 'plugin', or
+  // 'modpack' so all tabs of the content view can reuse this endpoint
+  // regardless of the active server's loader. Without an override we keep
+  // the historical behaviour of matching the server's own project type.
   const overrideType = String(req.query.projectType || '');
-  const projectType = overrideType === 'mod' || overrideType === 'plugin' ? overrideType : compat.projectType;
+  const projectType = overrideType === 'mod' || overrideType === 'plugin' || overrideType === 'modpack' ? overrideType : compat.projectType;
   if (!projectType) {
     return res.json({ hits: [], compat, note: tErr(req.user, 'errors.vanillaNoPlugins') });
   }
   // Pick the loader facet for the requested project type: when the user is
   // looking at the Mods tab on a Paper server (e.g. browsing a Fabric mod
   // pack reference) we fall back to the full mod-loader union so they still
-  // see fabric/forge/neoforge results.
+  // see fabric/forge/neoforge results. The Modpacks tab omits the loader
+  // facet entirely so modpacks for any loader surface.
   let loadersForQuery = compat.loaders;
   if (projectType === 'mod') {
     loadersForQuery = compat.canMods ? compat.loaders : ['fabric', 'forge', 'neoforge', 'quilt'];
@@ -2497,9 +2718,11 @@ app.get('/api/modrinth/search', async (req, res) => {
   const sort = MODRINTH_SORTS.includes(req.query.sort) ? req.query.sort : 'downloads';
   const facets = [
     [`project_type:${projectType}`],
-    loadersForQuery.map((l) => `categories:${l}`),
   ];
-  if (compat.mcVersion) facets.push([`versions:${compat.mcVersion}`]);
+  if (projectType !== 'modpack') {
+    facets.push(loadersForQuery.map((l) => `categories:${l}`));
+    if (compat.mcVersion) facets.push([`versions:${compat.mcVersion}`]);
+  }
   if (req.query.category && MODRINTH_CATEGORIES.includes(req.query.category)) {
     facets.push([`categories:${req.query.category}`]);
   }
@@ -2560,6 +2783,206 @@ app.post('/api/modrinth/install', async (req, res) => {
     res.json({ ok: true, name: file.filename, note: 'Restart the server to apply.' });
   } catch (err) {
     log(`Modrinth install failed: ${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// --- Modrinth modpack --------------------------------------------------------
+
+app.get('/api/modrinth/modpack/versions/:projectId', async (req, res) => {
+  const m = targetManager(req);
+  const compat = detectCompat(m);
+  const projectId = req.params.projectId;
+  const url = `${MODRINTH}/project/${encodeURIComponent(projectId)}/version`;
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA } });
+    const matched = await r.json();
+    res.json({ matched: Array.isArray(matched) ? matched : [], compat });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/modrinth/modpack/preview/:versionId', async (req, res) => {
+  const versionId = req.params.versionId;
+  if (!versionId) return res.status(400).json({ error: tErr(req.user, 'errors.missingVersionId') });
+  const m = targetManager(req);
+  const compat = detectCompat(m);
+  try {
+    log(`Modpack preview: resolving version ${versionId}...`);
+    const r = await fetch(`${MODRINTH}/version/${encodeURIComponent(versionId)}`, { headers: { 'User-Agent': UA } });
+    const version = await r.json();
+    const file = (version.files || []).find((f) => f.primary) || (version.files || [])[0];
+    if (!file) return res.status(404).json({ error: tErr(req.user, 'errors.noVersionFiles') });
+    const dl = await fetch(file.url, { headers: { 'User-Agent': UA } });
+    if (!dl.ok) return res.status(502).json({ error: `Download failed: HTTP ${dl.status}` });
+    const mrpack = Buffer.from(await dl.arrayBuffer());
+    const index = await readMrpackIndex(mrpack);
+    const spec = manifestToSpec(index);
+    const counts = fileCountByEnv(index);
+    const eligibleExisting = !spec.unsupported && compat.loaders.some((l) => l === spec.loaderType) &&
+      (!compat.mcVersion || compat.mcVersion === spec.mcVersion);
+    res.json({
+      name: spec.name || version.name || '',
+      versionId,
+      mcVersion: spec.mcVersion || '',
+      loaderType: spec.loaderType || '',
+      loaderVersion: spec.loaderVersion || '',
+      unsupported: spec.unsupported,
+      unsupportedReason: spec.reason || '',
+      fileCount: counts.total,
+      serverFileCount: counts.server,
+      indexName: index.name || '',
+      eligibleExisting,
+      compat,
+    });
+  } catch (err) {
+    log(`Modpack preview failed: ${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/modrinth/modpack/install', async (req, res) => {
+  const body = req.body || {};
+  const versionId = String(body.versionId || '');
+  const mode = String(body.mode || 'existing').toLowerCase();
+  if (!versionId) return res.status(400).json({ error: tErr(req.user, 'errors.missingVersionId') });
+  try {
+    log(`Modpack install: resolving version ${versionId}...`);
+    const r = await fetch(`${MODRINTH}/version/${encodeURIComponent(versionId)}`, { headers: { 'User-Agent': UA } });
+    const version = await r.json();
+    const file = (version.files || []).find((f) => f.primary) || (version.files || [])[0];
+    if (!file) return res.status(404).json({ error: tErr(req.user, 'errors.noVersionFiles') });
+    const dl = await fetch(file.url, { headers: { 'User-Agent': UA } });
+    if (!dl.ok) return res.status(502).json({ error: `Download failed: HTTP ${dl.status}` });
+    const mrpack = Buffer.from(await dl.arrayBuffer());
+    const index = await readMrpackIndex(mrpack);
+    const spec = manifestToSpec(index);
+    if (spec.unsupported) {
+      return res.status(400).json({ error: tErr(req.user, 'errors.modpackUnsupportedLoader', { loader: spec.loaderType || 'unknown', reason: spec.reason || '' }) });
+    }
+
+    const sFiles = serverSideFiles(index);
+    let targetDir;
+    let serverName;
+
+    if (mode === 'create') {
+      const createName = String(body.name || spec.name || index.name || 'Modpack Server').trim();
+      const parentDir = String(body.parentDir || '').trim();
+      if (!createName) return res.status(400).json({ error: tErr(req.user, 'errors.nameRequired') });
+      if (!parentDir || !fs.existsSync(parentDir)) return res.status(400).json({ error: tErr(req.user, 'errors.pickParentFolder') });
+
+      const dir = path.join(parentDir, slugify(createName));
+      if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
+        return res.status(400).json({ error: tErr(req.user, 'errors.folderNotEmpty', { path: dir }) });
+      }
+
+      const type = spec.loaderType;
+      const mcVersion = spec.mcVersion;
+
+      log(`Modpack create: ${type} server "${createName}" (MC ${mcVersion}) -> ${dir}`);
+
+      fs.mkdirSync(dir, { recursive: true });
+
+      const { url, filename } = await resolveServerJar(type, mcVersion);
+      log(`Modpack create: resolved -> ${url}`);
+      const jarPath = path.join(dir, filename);
+
+      log(`Modpack create: downloading ${filename}...`);
+      await downloadToFile(url, jarPath, () => {}, undefined);
+
+      let jarFilename = filename;
+      let launchArgs = null;
+      if (type === 'forge' || type === 'neoforge') {
+        const label = type === 'neoforge' ? 'NeoForge' : 'Forge';
+        const major = requiredJavaMajor(mcVersion);
+        let javaBin = resolveJavaForServer({ mcVersion }, major);
+        if (!javaBin) {
+          log(`Modpack create: ${label} installer needs Java ${major}; preparing managed runtime...`);
+          javaBin = await ensureRuntime(major, () => {});
+        }
+        await runForgeInstaller(dir, filename, label, javaBin);
+        const produced = findForgeLaunchTarget(dir, type);
+        if (!produced) throw new Error(`${label} installer finished but no server jar or launch args file was found in the folder`);
+        jarFilename = produced.jar;
+        launchArgs = produced.launchArgs;
+      }
+
+      fs.writeFileSync(path.join(dir, 'eula.txt'), `# Accepted via Lodestone modpack install on ${new Date().toISOString()}\neula=true\n`, 'utf8');
+
+      targetDir = dir;
+      serverName = createName;
+
+      const entry = {
+        id: genId(),
+        name: createName,
+        dir,
+        jar: jarFilename,
+        loader: type,
+        launchArgs,
+        javaArgs: ['-Xmx4G', '-Xms4G'],
+        mcVersion,
+        stopTimeoutSeconds: 30,
+        worlds: ['world', 'world_nether', 'world_the_end'],
+        watchdog: { enabled: false, maxRestarts: 3, windowMinutes: 10 },
+      };
+      config.servers.push(entry);
+      if (!config.activeServerId) config.activeServerId = entry.id;
+      saveConfig(config);
+      getManager(entry.id);
+      log(`Created ${type} server "${createName}" (${mcVersion}) from modpack at ${dir}`);
+    } else {
+      const m = targetManager(req);
+      if (!m || !m.dir()) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
+      const compat = detectCompat(m);
+      const loaderOk = compat.loaders.some((l) => l === spec.loaderType);
+      const versionOk = !compat.mcVersion || compat.mcVersion === spec.mcVersion;
+      if (!loaderOk || !versionOk) {
+        return res.status(409).json({ error: tErr(req.user, 'errors.modpackIncompatible', { label: spec.loaderType || '?', version: spec.mcVersion || '' }) });
+      }
+      targetDir = m.dir();
+      serverName = m.name();
+    }
+
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    let installed = 0;
+    for (const f of sFiles) {
+      const url = f.downloads && f.downloads[0];
+      if (!url) continue;
+      log(`Modpack: downloading ${f.path}...`);
+      const buf = await downloadAndVerify(url, f.hashes, UA);
+      if (!f.path || typeof f.path !== 'string') continue;
+      const dest = mrpackSafeResolve(targetDir, f.path);
+      if (!dest) {
+        log(`Modpack: skipping "${f.path}" — escapes server directory`);
+        continue;
+      }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf);
+      installed++;
+    }
+
+    const overridesExtracted = await extractOverrides(mrpack, targetDir);
+
+    log(`Modpack: installed ${installed} files + ${overridesExtracted} overrides into "${serverName}"`);
+    if (mode === 'existing') {
+      const m = targetManager(req);
+      if (m) {
+        m.pushLine(`[Lodestone] Installed modpack from Modrinth: ${spec.name || version.name || ''} (${installed} files, ${overridesExtracted} overrides)`, 'info');
+      }
+    }
+
+    res.json({
+      ok: true,
+      name: spec.name || version.name || '',
+      fileCount: installed,
+      overrides: overridesExtracted,
+      mode,
+      note: 'Restart the server to apply.',
+    });
+  } catch (err) {
+    log(`Modpack install failed: ${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });
@@ -3515,9 +3938,10 @@ async function systemStats(m) {
   const sysTotal = os.totalmem();
   const sysFree = os.freemem();
   let proc = { cpu: 0, memory: 0 };
-  if (m && m.proc && m.proc.pid) {
+  const pid = m ? m.pid() : null;
+  if (pid) {
     try {
-      const u = await procUsage(m.proc.pid);
+      const u = await procUsage(pid);
       // procUsage sums CPU across all cores (can exceed 100%); normalize to 0-100
       const cores = os.cpus().length || 1;
       proc = { cpu: Math.min(100, (u ? u.cpu : 0) / cores), memory: u ? u.memory : 0 };
@@ -3725,6 +4149,7 @@ function shutdown() {
 
 if (require.main === module) {
   setupSchedulers();
+  adoptOrphans().catch((e) => log('orphan adoption failed:', e.message));
   server.listen(config.panelPort, config.panelHost, () => {
     log(`${config.appName} listening on http://${config.panelHost}:${config.panelPort}`);
     log(`Registered servers: ${config.servers.length}`);

@@ -5,6 +5,8 @@ import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ChartCardSkeleton } from '@/components/shared/Skeletons';
+import { ErrorState } from '@/components/shared/ErrorState';
 
 function niceMax(v) {
   if (v <= 0) return 1;
@@ -105,13 +107,18 @@ export function MetricsView() {
   const t = useT();
   const [range, setRange] = useState('6h');
   const [points, setPoints] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   async function load(r) {
+    setLoading(true);
+    setError('');
     try {
       const q = activeServerId ? `&serverId=${encodeURIComponent(activeServerId)}` : '';
       const d = await api(`/api/metrics?range=${encodeURIComponent(r)}${q}`);
       setPoints(d.points || []);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   }
 
   useEffect(() => { load(range); }, [range, activeServerId]);
@@ -124,6 +131,10 @@ export function MetricsView() {
     { key: 'players', label: t('metrics.chartPlayers'), lastVal: last ? String(last.players) : t('common.dashPlaceholder'), color: '#f0a23b', fmt: v => Math.round(v), minMax: 4 },
     { key: 'world', label: t('metrics.chartWorldSize'), lastVal: last ? fmtMB(last.world) : t('common.dashPlaceholder'), color: '#6f9fff', fmt: fmtMB },
   ];
+
+  if (error && !loading && points.length === 0) {
+    return <ErrorState error={error} onRetry={() => load(range)} />;
+  }
 
   return (
     <div className="space-y-5">
@@ -148,19 +159,28 @@ export function MetricsView() {
         <span className="text-xs text-muted-foreground">{t('metrics.sampledEveryMinute')}</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {charts.map(c => (
-          <Card key={c.key}>
-            <CardHeader>
-              <CardTitle>{c.label}</CardTitle>
-              <span className="text-xs text-muted-foreground">{c.lastVal}</span>
-            </CardHeader>
-            <CardContent>
-              <ChartCanvas points={points} metricKey={c.key} color={c.color} fmt={c.fmt} minMax={c.minMax} range={range} noDataText={t('metrics.noData')} />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <ChartCardSkeleton />
+          <ChartCardSkeleton />
+          <ChartCardSkeleton />
+          <ChartCardSkeleton />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {charts.map(c => (
+            <Card key={c.key}>
+              <CardHeader>
+                <CardTitle>{c.label}</CardTitle>
+                <span className="text-xs text-muted-foreground">{c.lastVal}</span>
+              </CardHeader>
+              <CardContent>
+                <ChartCanvas points={points} metricKey={c.key} color={c.color} fmt={c.fmt} minMax={c.minMax} range={range} noDataText={t('metrics.noData')} />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { PromptDialog } from '@/components/shared/PromptDialog';
+import { FileEntrySkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
@@ -19,6 +21,8 @@ export function FileManagerView() {
   const { token } = useAuth();
   const [path, setPath] = useState('');
   const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [editFile, setEditFile] = useState(null);
   const [editContent, setEditContent] = useState('');
@@ -30,11 +34,14 @@ export function FileManagerView() {
 
   async function load(rel) {
     const p = rel ?? path;
+    setLoading(true);
+    setError('');
     try {
       const data = await api(`/api/files?path=${encodeURIComponent(p)}`);
       setPath(data.path || '');
       setEntries(data.entries || []);
-    } catch (e) { toast.error(e.message); }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   }
 
   useEffect(() => { load(''); }, []);
@@ -156,7 +163,13 @@ export function FileManagerView() {
             </div>
           </div>
 
-          {visibleEntries.length === 0 ? (
+          {loading ? (
+            <div className="space-y-1">
+              {Array.from({ length: 8 }, (_, i) => <FileEntrySkeleton key={i} />)}
+            </div>
+          ) : error ? (
+            <ErrorState error={error} onRetry={() => load()} />
+          ) : visibleEntries.length === 0 ? (
             <p className="rounded-md border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
               {normalizedQuery ? t('files.emptySearch') : t('files.empty')}
             </p>
