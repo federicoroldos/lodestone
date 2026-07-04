@@ -11,7 +11,9 @@ import { Search, Download, Check } from 'lucide-react';
 
 // Detect whether a given jar name targets a mod loader. Mirrors the server's
 // `detectCompat` so we can decide tab visibility before the first API call.
-function jarIsModLoader(jar) {
+function jarIsModLoader(jar, loader) {
+  const l = String(loader || '').toLowerCase();
+  if (['fabric', 'quilt', 'neoforge', 'forge'].includes(l)) return true;
   const j = String(jar || '').toLowerCase();
   return /fabric|quilt|neoforge|forge/.test(j) && !/paper|spigot|bukkit|vanilla|minecraft_server/.test(j);
 }
@@ -168,13 +170,14 @@ export function ModrinthView() {
   const compat = useMemo(() => {
     if (!activeServer) return null;
     const jar = activeServer.jar || '';
-    const canMods = jarIsModLoader(jar);
+    const loader = (activeServer.loader || '').toLowerCase();
+    const canMods = jarIsModLoader(jar, loader);
     const projectType = canMods ? 'mod' : 'plugin';
     const folder = canMods ? 'mods' : 'plugins';
     const label = canMods
-      ? (jar.toLowerCase().includes('fabric') ? 'Fabric'
-        : jar.toLowerCase().includes('quilt') ? 'Quilt'
-        : jar.toLowerCase().includes('neoforge') ? 'NeoForge'
+      ? (loader === 'fabric' || jar.toLowerCase().includes('fabric') ? 'Fabric'
+        : loader === 'quilt' || jar.toLowerCase().includes('quilt') ? 'Quilt'
+        : loader === 'neoforge' || jar.toLowerCase().includes('neoforge') ? 'NeoForge'
         : 'Forge')
       : (jar.toLowerCase().includes('paper') ? 'Paper'
         : jar.toLowerCase().includes('spigot') ? 'Spigot'
@@ -184,10 +187,10 @@ export function ModrinthView() {
     let loaders = ['paper', 'spigot', 'bukkit'];
     if (canMods) {
       const j = jar.toLowerCase();
-      if (j.includes('fabric')) loaders = ['fabric'];
-      else if (j.includes('quilt')) loaders = ['quilt', 'fabric'];
-      else if (j.includes('neoforge')) loaders = ['neoforge'];
-      else if (j.includes('forge')) loaders = ['forge'];
+      if (loader === 'fabric' || j.includes('fabric')) loaders = ['fabric'];
+      else if (loader === 'quilt' || j.includes('quilt')) loaders = ['quilt', 'fabric'];
+      else if (loader === 'neoforge' || j.includes('neoforge')) loaders = ['neoforge'];
+      else if (loader === 'forge' || j.includes('forge')) loaders = ['forge'];
     }
     return { projectType, loaders, folder, label, mcVersion: activeServer.mcVersion || '', canMods };
   }, [activeServer]);
