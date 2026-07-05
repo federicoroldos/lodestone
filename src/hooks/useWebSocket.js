@@ -2,16 +2,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useServer } from '@/context/ServerContext';
 
-export function useWebSocket({ onLine, onHistory, onStatus, onStats, onServer, onConnChange } = {}) {
+export function useWebSocket({ onLine, onHistory, onStatus, onStats, onServer, onNotification, onConnChange } = {}) {
   const { token } = useAuth();
-  const { updateStatus, setActiveServerId, setServers, wsRef } = useServer();
+  const { updateStatus, setActiveServerId, setServers, setNotifications, pushNotification, wsRef } = useServer();
   const reconnectTimer = useRef(null);
   const mountedRef = useRef(true);
 
   // Keep latest callbacks in refs so the WS handler always calls current version
-  const callbacksRef = useRef({ onLine, onHistory, onStatus, onStats, onServer, onConnChange });
+  const callbacksRef = useRef({ onLine, onHistory, onStatus, onStats, onServer, onNotification, onConnChange });
   useEffect(() => {
-    callbacksRef.current = { onLine, onHistory, onStatus, onStats, onServer, onConnChange };
+    callbacksRef.current = { onLine, onHistory, onStatus, onStats, onServer, onNotification, onConnChange };
   });
 
   const sendMessage = useCallback((msg) => {
@@ -58,6 +58,13 @@ export function useWebSocket({ onLine, onHistory, onStatus, onStats, onServer, o
           // derived state (active server, mapUrl) updates without a refetch.
           setServers((prev) => prev.map((s) => s.id === msg.server.id ? { ...s, ...msg.server } : s));
           callbacksRef.current.onServer?.(msg.server);
+        } else if (msg.type === 'notifications') {
+          // Full list sent once on connect.
+          setNotifications(Array.isArray(msg.notifications) ? msg.notifications : []);
+        } else if (msg.type === 'notification' && msg.notification) {
+          // A single new notification pushed live.
+          pushNotification(msg.notification);
+          callbacksRef.current.onNotification?.(msg.notification);
         }
       };
 

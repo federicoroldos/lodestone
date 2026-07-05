@@ -12,6 +12,7 @@ import { useApi } from '@/hooks/useApi';
 import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Play, Pencil, Trash2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -177,7 +178,7 @@ export function TasksView() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">{task.name}</span>
-                      {!task.enabled && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase bg-muted text-muted-foreground border border-border">{t('tasks.paused')}</span>}
+                      {!task.enabled && <Badge variant="offline" className="text-[9px] px-1 py-0.5">{t('tasks.paused')}</Badge>}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {task.serverName} · {task.type === 'command' ? `${t('tasks.commandPrefix')}${task.command}` : task.type} ·{' '}

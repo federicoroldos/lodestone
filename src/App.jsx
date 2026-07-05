@@ -14,6 +14,8 @@ import { Header } from '@/components/layout/Header';
 import { ControlBar } from '@/components/layout/ControlBar';
 import { FirstStartDialog } from '@/components/shared/FirstStartDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { SettingsDialog } from '@/components/shared/SettingsDialog';
+import { OnboardingTour } from '@/components/shared/OnboardingTour';
 import { DashboardView } from '@/views/DashboardView';
 import { ServersView } from '@/views/ServersView';
 import { MetricsView } from '@/views/MetricsView';
@@ -57,6 +59,22 @@ function dismissedKey(serverId) {
   return `ls-fs-dismissed:${serverId || ''}`;
 }
 
+// Onboarding tour: we remember per-user (by id) that the tour has been seen,
+// so logging in to a fresh account re-triggers it while revisits don't.
+function tourSeenKey(userId) {
+  return `lodestone_tour_seen:${userId || ''}`;
+}
+
+function hasSeenTour(userId) {
+  if (!userId) return false;
+  try { return localStorage.getItem(tourSeenKey(userId)) === '1'; } catch (_) { return false; }
+}
+
+function markTourSeen(userId) {
+  if (!userId) return;
+  try { localStorage.setItem(tourSeenKey(userId), '1'); } catch (_) {}
+}
+
 function isDismissed(serverId) {
   if (!serverId) return false;
   try { return sessionStorage.getItem(dismissedKey(serverId)) === '1'; }
@@ -96,7 +114,31 @@ function AppShell({ onLoggedIn }) {
   const [viewNonce, setViewNonce] = useState(0);
   const [firstStart, setFirstStart] = useState({ open: false, pendingView: null, starting: false });
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const awaitingFirstStart = useRef(false);
+
+  // The first time a logged-in user lands in the shell (a brand-new account
+  // on this browser), walk them through the panel. Repeating it later from
+  // Settings clears the "seen" flag so the same effect re-fires.
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!hasSeenTour(user.id)) setTourOpen(true);
+    // Only react to user identity, not every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  function startTour() {
+    setSettingsOpen(false);
+    // Defer so the settings dialog's closing transition doesn't overlap the
+    // spotlight measurement of the profile button underneath it.
+    requestAnimationFrame(() => setTourOpen(true));
+  }
+
+  function closeTour() {
+    if (user?.id) markTourSeen(user.id);
+    setTourOpen(false);
+  }
 
   // Central navigation entry point. Applies the no-server, admin, and
   // first-start guards, then shows the view and updates the URL.
@@ -222,6 +264,14 @@ function AppShell({ onLoggedIn }) {
       // Pass to dashboard if it's the active listener
       if (window.__dashOnStats) window.__dashOnStats(stats);
     }, []),
+    onNotification: useCallback((n) => {
+      // Live-pushed events surface as a toast; the bell keeps the full history.
+      const title = n.titleKey ? t(n.titleKey, n.titleVars) : n.title;
+      const message = n.messageKey ? t(n.messageKey, n.messageVars) : n.message;
+      const opts = message ? { description: message } : undefined;
+      if (n.type === 'server_crashed' || n.type === 'watchdog_limit') toast.error(title, opts);
+      else toast(title, opts);
+    }, [t]),
     onConnChange: setConnState,
   });
 
@@ -254,6 +304,12 @@ function AppShell({ onLoggedIn }) {
   }
 
   function handleCommand(cmd) {
+    const live = activeServerId ? getServerStatus(activeServerId) : null;
+    const online = !!(live && live.status && live.status !== 'offline');
+    if (!online) {
+      toast.warning(t('console.serverOffline'));
+      return;
+    }
     sendMessage({ type: 'command', cmd });
   }
 
@@ -306,12 +362,14 @@ function AppShell({ onLoggedIn }) {
     icon: RefreshCw,
     text: t('common.reconnecting'),
     desc: t('common.reconnectingDesc'),
-    classes: 'bg-primary/10 text-primary border-primary/20',
+    tint: 'bg-primary/10',
+    classes: 'text-primary border-primary/20',
   } : connState === 'bad' ? {
     icon: WifiOff,
     text: t('common.connectionLost'),
     desc: t('common.loadFailed'),
-    classes: 'bg-status-error/10 text-status-error border-status-error/20',
+    tint: 'bg-status-error/10',
+    classes: 'text-status-error border-status-error/20',
   } : null;
 
   return (
@@ -319,7 +377,8 @@ function AppShell({ onLoggedIn }) {
       <div className="app-shell-enter relative flex min-h-screen bg-background">
         {/* Connection banner */}
         {connBanner && (
-          <div className={cn('fixed top-0 left-0 right-0 z-50 flex items-center gap-3 border-b px-4 py-2 text-xs', connBanner.classes)}>
+          <div className={cn('fixed top-0 left-0 right-0 z-50 flex items-center gap-3 border-b bg-background px-4 py-2 text-xs', connBanner.classes)}>
+            <div className={cn('absolute inset-0 -z-10 pointer-events-none', connBanner.tint)} />
             <connBanner.icon className="h-3.5 w-3.5 animate-pulse shrink-0" />
             <div className="flex-1 min-w-0">
               <span className="font-medium">{connBanner.text}</span>
@@ -347,7 +406,7 @@ function AppShell({ onLoggedIn }) {
           'relative z-10 flex min-h-screen flex-1 min-w-0 flex-col pl-[var(--ls-sidebar-w,220px)] transition-[padding] duration-200',
           connBanner && 'pt-9',
         )}>
-          <Header currentView={currentView} onServerSwitch={handleSetActive} />
+          <Header currentView={currentView} onServerSwitch={handleSetActive} onOpenSettings={() => setSettingsOpen(true)} />
           <main className="flex-1 p-5 pb-28">
             <div className="view-enter" key={`${currentView}:${viewNonce}`}>
               {!serversLoaded ? (
@@ -376,6 +435,7 @@ function AppShell({ onLoggedIn }) {
         onStartNow={startFromFirstStart}
         onContinueAnyway={continueFromFirstStart}
       />
+      <OnboardingTour open={tourOpen} onClose={closeTour} />
       <ConfirmDialog
         open={confirmRestart}
         onOpenChange={setConfirmRestart}
@@ -384,6 +444,7 @@ function AppShell({ onLoggedIn }) {
         confirmLabel={t('header.restart')}
         onConfirm={() => runServerAction('restart')}
       />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onStartTour={startTour} />
       <ControlBar
         onServerSwitch={handleSetActive}
         onStart={() => serverAction('start')}
