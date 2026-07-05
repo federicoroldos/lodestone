@@ -6,7 +6,18 @@ export function ServerProvider({ children }) {
   const [servers, setServers] = useState([]);
   const [activeServerId, setActiveServerIdState] = useState(null);
   const [statuses, setStatuses] = useState({});
+  const [notifications, setNotifications] = useState([]);
   const wsRef = useRef(null);
+
+  // Live notifications arrive over the WebSocket (a full list on connect, then
+  // one frame per new event). Prepend live frames, dedupe by id, and cap the
+  // client-side buffer to match the server's retention.
+  const pushNotification = useCallback((n) => {
+    if (!n || !n.id) return;
+    setNotifications((prev) => (
+      prev.some((x) => x.id === n.id) ? prev : [n, ...prev].slice(0, 200)
+    ));
+  }, []);
 
   const updateStatus = useCallback((status) => {
     setStatuses(prev => ({ ...prev, [status.serverId]: status }));
@@ -37,6 +48,7 @@ export function ServerProvider({ children }) {
       activeServerId, setActiveServerId,
       activeServer,
       statuses, updateStatus, getServerStatus,
+      notifications, setNotifications, pushNotification,
       mapUrl,
       wsRef,
     }}>

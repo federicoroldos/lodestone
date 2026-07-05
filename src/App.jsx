@@ -14,6 +14,7 @@ import { Header } from '@/components/layout/Header';
 import { ControlBar } from '@/components/layout/ControlBar';
 import { FirstStartDialog } from '@/components/shared/FirstStartDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { SettingsDialog } from '@/components/shared/SettingsDialog';
 import { DashboardView } from '@/views/DashboardView';
 import { ServersView } from '@/views/ServersView';
 import { MetricsView } from '@/views/MetricsView';
@@ -96,6 +97,7 @@ function AppShell({ onLoggedIn }) {
   const [viewNonce, setViewNonce] = useState(0);
   const [firstStart, setFirstStart] = useState({ open: false, pendingView: null, starting: false });
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const awaitingFirstStart = useRef(false);
 
   // Central navigation entry point. Applies the no-server, admin, and
@@ -222,6 +224,12 @@ function AppShell({ onLoggedIn }) {
       // Pass to dashboard if it's the active listener
       if (window.__dashOnStats) window.__dashOnStats(stats);
     }, []),
+    onNotification: useCallback((n) => {
+      // Live-pushed events surface as a toast; the bell keeps the full history.
+      const opts = n.message ? { description: n.message } : undefined;
+      if (n.type === 'server_crashed' || n.type === 'watchdog_limit') toast.error(n.title, opts);
+      else toast(n.title, opts);
+    }, []),
     onConnChange: setConnState,
   });
 
@@ -306,12 +314,14 @@ function AppShell({ onLoggedIn }) {
     icon: RefreshCw,
     text: t('common.reconnecting'),
     desc: t('common.reconnectingDesc'),
-    classes: 'bg-primary/10 text-primary border-primary/20',
+    tint: 'bg-primary/10',
+    classes: 'text-primary border-primary/20',
   } : connState === 'bad' ? {
     icon: WifiOff,
     text: t('common.connectionLost'),
     desc: t('common.loadFailed'),
-    classes: 'bg-status-error/10 text-status-error border-status-error/20',
+    tint: 'bg-status-error/10',
+    classes: 'text-status-error border-status-error/20',
   } : null;
 
   return (
@@ -319,7 +329,8 @@ function AppShell({ onLoggedIn }) {
       <div className="app-shell-enter relative flex min-h-screen bg-background">
         {/* Connection banner */}
         {connBanner && (
-          <div className={cn('fixed top-0 left-0 right-0 z-50 flex items-center gap-3 border-b px-4 py-2 text-xs', connBanner.classes)}>
+          <div className={cn('fixed top-0 left-0 right-0 z-50 flex items-center gap-3 border-b bg-background px-4 py-2 text-xs', connBanner.classes)}>
+            <div className={cn('absolute inset-0 -z-10 pointer-events-none', connBanner.tint)} />
             <connBanner.icon className="h-3.5 w-3.5 animate-pulse shrink-0" />
             <div className="flex-1 min-w-0">
               <span className="font-medium">{connBanner.text}</span>
@@ -342,12 +353,12 @@ function AppShell({ onLoggedIn }) {
             backgroundSize: '120px',
           }}
         />
-        <Sidebar currentView={currentView} onNavigate={navigate} />
+        <Sidebar currentView={currentView} onNavigate={navigate} onOpenSettings={() => setSettingsOpen(true)} />
         <div className={cn(
           'relative z-10 flex min-h-screen flex-1 min-w-0 flex-col pl-[var(--ls-sidebar-w,220px)] transition-[padding] duration-200',
           connBanner && 'pt-9',
         )}>
-          <Header currentView={currentView} onServerSwitch={handleSetActive} />
+          <Header currentView={currentView} onServerSwitch={handleSetActive} onOpenSettings={() => setSettingsOpen(true)} />
           <main className="flex-1 p-5 pb-28">
             <div className="view-enter" key={`${currentView}:${viewNonce}`}>
               {!serversLoaded ? (
@@ -384,6 +395,7 @@ function AppShell({ onLoggedIn }) {
         confirmLabel={t('header.restart')}
         onConfirm={() => runServerAction('restart')}
       />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ControlBar
         onServerSwitch={handleSetActive}
         onStart={() => serverAction('start')}

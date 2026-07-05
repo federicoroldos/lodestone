@@ -13,6 +13,7 @@ import { useApiStream } from '@/hooks/useApiStream';
 import { useT } from '@/context/I18nContext';
 import { fmtUptime, fmtBytes, fmtBytesRaw, osExamplePath } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus, Server, Package, Search } from 'lucide-react';
 import { TableSkeleton, ModrinthResultSkeleton } from '@/components/shared/Skeletons';
 import { cn } from '@/lib/utils';
@@ -592,14 +593,14 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
                     <p className="text-sm font-semibold text-foreground">{preview.name || preview.indexName || selected.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {preview.loaderType && (
-                        <span className="inline-block bg-primary/15 text-primary px-1.5 py-0.5 rounded text-[11px] font-medium mr-1">
+                        <Badge variant="softPrimary" className="mr-1">
                           {preview.loaderType}
-                        </span>
+                        </Badge>
                       )}
                       {preview.mcVersion && (
-                        <span className="inline-block bg-secondary px-1.5 py-0.5 rounded text-[11px] mr-1">
+                        <Badge variant="default" className="mr-1">
                           MC {preview.mcVersion}
-                        </span>
+                        </Badge>
                       )}
                       {preview.loaderVersion && <span className="text-[11px]">loader {preview.loaderVersion}</span>}
                     </p>
@@ -740,7 +741,7 @@ export function ServersView({ onSetActive, onRefresh }) {
                                 <span className="hover:text-primary cursor-pointer" onClick={() => onSetActive(s.id)}>
                                   {s.name}
                                 </span>
-                                {isActive && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary border border-primary/25">{t('servers.activeLabel')}</span>}
+                                {isActive && <Badge variant="active" className="text-[9px] px-1 py-0.5">{t('servers.activeLabel')}</Badge>}
                               </div>
                               <div className="text-xs text-muted-foreground/70 font-mono truncate max-w-[180px]">{s.dir || ''}</div>
                             </div>

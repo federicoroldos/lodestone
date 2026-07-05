@@ -16,7 +16,7 @@ export function ControlBar({ onServerSwitch, onStart, onStop, onRestart }) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
       <div
-        className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card/85 p-1.5 pl-2 shadow-2xl backdrop-blur-md"
+        className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-border/60 bg-card/85 p-1.5 pl-2 shadow-2xl backdrop-blur-md"
         role="toolbar"
         aria-label={t('header.start')}
       >

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { BrandMark } from '@/components/shared/BrandMark';
-import { SettingsDialog } from '@/components/shared/SettingsDialog';
 import { useAuth } from '@/context/AuthContext';
 import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
@@ -13,9 +12,6 @@ import {
   ChevronDown, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 
-// `requiresServer` items are greyed out and unclickable until a server exists
-// (everything they show reads a server). `adminOnly` items are hidden from
-// operators entirely.
 const NAV_GROUPS = [
   {
     key: 'nav.groupOverview',
@@ -75,7 +71,7 @@ function getInitialMode() {
   }
 }
 
-export function Sidebar({ currentView, onNavigate }) {
+export function Sidebar({ currentView, onNavigate, onOpenSettings }) {
   const { logout, user } = useAuth();
   const { servers } = useServer();
   const t = useT();
@@ -83,7 +79,6 @@ export function Sidebar({ currentView, onNavigate }) {
   const hasServers = (servers?.length || 0) > 0;
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [mode, setMode] = useState(getInitialMode);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -130,7 +125,6 @@ export function Sidebar({ currentView, onNavigate }) {
       'fixed top-0 left-0 z-20 flex h-screen flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200',
       isCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
     )}>
-      {/* Stone-tile texture, slightly darker than the main background */}
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.12]"
         style={{
@@ -139,7 +133,6 @@ export function Sidebar({ currentView, onNavigate }) {
           backgroundSize: '120px',
         }}
       />
-      {/* Logo */}
       <div className={cn(
         'flex items-center border-b border-border',
         isCollapsed ? 'justify-center px-2 py-3' : 'px-3 py-3'
@@ -150,7 +143,6 @@ export function Sidebar({ currentView, onNavigate }) {
         />
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter((it) => !(it.adminOnly && !isAdmin));
@@ -170,6 +162,7 @@ export function Sidebar({ currentView, onNavigate }) {
             {(isCollapsed || !collapsed.has(group.key)) && items.map(({ view, labelKey, icon: Icon, requiresServer }) => {
               const label = t(labelKey);
               const disabled = requiresServer && !hasServers;
+              const isActive = currentView === view;
               const itemBtn = (
                 <button
                   key={view}
@@ -177,21 +170,22 @@ export function Sidebar({ currentView, onNavigate }) {
                   onClick={() => { if (!disabled) onNavigate(view); }}
                   aria-disabled={disabled}
                   className={cn(
-                    'flex w-full items-center rounded-md border-l-2 py-1.5 text-sm transition-colors duration-75',
-                    isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                    'flex w-full items-center transition-all duration-75',
+                    isCollapsed ? 'justify-center px-0 py-1.5' : 'gap-3 px-3 py-1.5',
+                    isCollapsed
+                      ? 'rounded-lg'
+                      : 'rounded-lg',
                     disabled
-                      ? 'border-l-transparent text-muted-foreground/35 cursor-not-allowed'
-                      : currentView === view
-                        ? 'border-l-primary bg-primary/10 text-primary'
-                        : 'border-l-transparent text-muted-foreground hover:bg-primary/15 hover:text-primary'
+                      ? 'text-muted-foreground/35 cursor-not-allowed'
+                      : isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {!isCollapsed && <span className="truncate">{label}</span>}
                 </button>
               );
-              // Show a tooltip when collapsed (just the label) or when disabled
-              // (explain that a server is needed). Otherwise the bare button.
               if (!isCollapsed && !disabled) return itemBtn;
               return (
                 <Tooltip key={view}>
@@ -207,7 +201,6 @@ export function Sidebar({ currentView, onNavigate }) {
         })}
       </nav>
 
-      {/* Footer */}
       <div className="border-t border-border p-3 flex flex-col gap-1">
         <Button
           variant="ghost"
@@ -223,7 +216,7 @@ export function Sidebar({ currentView, onNavigate }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setSettingsOpen(true)}
+          onClick={onOpenSettings}
           className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'justify-center px-0' : 'justify-start gap-3')}
           title={t('sidebar.settingsTitle')}
           aria-label={t('sidebar.settingsTitle')}
@@ -242,7 +235,6 @@ export function Sidebar({ currentView, onNavigate }) {
         </Button>
       </div>
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </aside>
   );
 }
