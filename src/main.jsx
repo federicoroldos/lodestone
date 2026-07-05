@@ -16,6 +16,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Toaster
             theme="dark"
             position="bottom-right"
+            className="lodestone-toaster"
             richColors
             closeButton
             duration={3500}

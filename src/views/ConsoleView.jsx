@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { useT } from '@/context/I18nContext';
 import { Send, ArrowDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ConsoleSkeleton } from '@/components/shared/Skeletons';
 
 function detectLevel(text) {
   if (!text) return '';
@@ -184,9 +183,7 @@ export function ConsoleView({ lines, onCommand }) {
       </CardHeader>
 
       <div ref={consoleRef} onScroll={handleScroll} className="console-area relative">
-        {!historyLoaded && displayLines.length === 0 && !normalizedFilter ? (
-          <ConsoleSkeleton rows={6} />
-        ) : displayLines.length === 0 && normalizedFilter ? (
+        {displayLines.length === 0 && normalizedFilter ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground/70">
             {t('console.filterEmpty')}
           </div>

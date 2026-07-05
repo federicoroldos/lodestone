@@ -26,6 +26,15 @@ const ACTION_MSG = {
   pardon: 'players.pardoned',
 };
 
+const LIST_ACTION_MSG = {
+  'whitelist:add': 'players.whitelistAdded',
+  'whitelist:remove': 'players.whitelistRemoved',
+  'op:add': 'players.opAdded',
+  'op:remove': 'players.opRemoved',
+  'ban:add': 'players.banAdded',
+  'ban:remove': 'players.banRemoved',
+};
+
 const headUrl = (name, px) => `https://minotar.net/helm/${encodeURIComponent(name)}/${px}.png`;
 
 function Head({ name, px = 32, className }) {
@@ -325,7 +334,12 @@ export function PlayersView() {
     try {
       const r = await api(`/api/playerlists/${kind}/${op}`, { method: 'POST', body: { name, reason } });
       if (r?.error) { toast.error(r.error); return; }
-      toast.success(r?.note || t('players.listOp', { kind, op, name }));
+      const noteKey = r?.note === 'Already listed.'
+        ? 'players.alreadyListed'
+        : r?.note === 'Updated (server offline).'
+          ? 'players.updatedOffline'
+          : LIST_ACTION_MSG[`${kind}:${op}`] || 'players.listOp';
+      toast.success(t(noteKey, { kind, op, name }));
       loadLists();
       setTimeout(loadLists, 1200);
     } catch (e) { toast.error(e.message); }
@@ -346,7 +360,10 @@ export function PlayersView() {
     const enabled = e.target.checked;
     try {
       const r = await api('/api/whitelist/toggle', { method: 'POST', body: { enabled } });
-      toast.success(r?.note || t(enabled ? 'players.whitelistEnabled' : 'players.whitelistDisabled'));
+      const key = r?.note === 'Saved. Takes effect on next start.'
+        ? 'players.savedNextStart'
+        : enabled ? 'players.whitelistEnabled' : 'players.whitelistDisabled';
+      toast.success(t(key));
       loadLists();
     } catch (err) { toast.error(err.message); loadLists(); }
   }

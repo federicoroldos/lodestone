@@ -8,7 +8,7 @@ import { useT } from '@/context/I18nContext';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Server, BarChart2, Terminal, Users, User, Map,
-  Puzzle, Package, FolderOpen, FileText, Database, Clock, Settings, LogOut,
+  Puzzle, Package, FolderOpen, FileText, Database, Clock,
   ChevronDown, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 
@@ -71,8 +71,8 @@ function getInitialMode() {
   }
 }
 
-export function Sidebar({ currentView, onNavigate, onOpenSettings }) {
-  const { logout, user } = useAuth();
+export function Sidebar({ currentView, onNavigate }) {
+  const { user } = useAuth();
   const { servers } = useServer();
   const t = useT();
   const isAdmin = user?.role === 'admin';
@@ -121,7 +121,7 @@ export function Sidebar({ currentView, onNavigate, onOpenSettings }) {
   }, [isCollapsed]);
 
   return (
-    <aside className={cn(
+    <aside data-tour="sidebar" className={cn(
       'fixed top-0 left-0 z-20 flex h-screen flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200',
       isCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
     )}>
@@ -167,6 +167,7 @@ export function Sidebar({ currentView, onNavigate, onOpenSettings }) {
                 <button
                   key={view}
                   type="button"
+                  data-tour={`nav-${view}`}
                   onClick={() => { if (!disabled) onNavigate(view); }}
                   aria-disabled={disabled}
                   className={cn(
@@ -212,26 +213,6 @@ export function Sidebar({ currentView, onNavigate, onOpenSettings }) {
           {isCollapsed
             ? <ChevronsRight className="h-4 w-4" />
             : <><ChevronsLeft className="h-4 w-4" /> {t('sidebar.collapseLabel')}</>}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onOpenSettings}
-          className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'justify-center px-0' : 'justify-start gap-3')}
-          title={t('sidebar.settingsTitle')}
-          aria-label={t('sidebar.settingsTitle')}
-        >
-          <Settings className="h-4 w-4" />
-          {!isCollapsed && t('sidebar.settings')}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={logout}
-          className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'justify-center px-0' : 'justify-start gap-3')}
-        >
-          <LogOut className="h-4 w-4" />
-          {!isCollapsed && t('sidebar.logout')}
         </Button>
       </div>
 

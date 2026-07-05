@@ -1916,14 +1916,43 @@ app.delete('/api/servers/:id', requireAdmin, (req, res) => {
   if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const m = getManager(s.id);
   if (m.isRunning()) return res.status(409).json({ error: tErr(req.user, 'errors.stopBeforeRemove') });
+  const wantsFiles = req.query.deleteFiles === 'true' || req.query.deleteFiles === '1';
   config.servers = config.servers.filter((x) => x.id !== s.id);
   managers.delete(s.id);
   if (config.activeServerId === s.id) {
     config.activeServerId = config.servers.length ? config.servers[0].id : null;
   }
   saveConfig(config);
-  addNotification('server_removed', 'Server Removed', `Server "${s.name}" has been removed.`, s.id);
-  res.json({ ok: true, activeServerId: config.activeServerId });
+  let filesDeleted = false;
+  if (wantsFiles && s.dir) {
+    const dir = path.resolve(s.dir);
+    const parent = path.dirname(dir);
+    // Guard against wiping a root/drive: the folder must have a real parent.
+    if (dir !== parent && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+      // Make sure no other registered server still lives in this folder.
+      const shared = config.servers.some((x) => x.dir && path.resolve(x.dir) === dir);
+      if (!shared) {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+          filesDeleted = true;
+        } catch (e) {
+          log(`Failed to delete server folder ${dir}: ${e.message}`);
+        }
+      }
+    }
+  }
+  addNotification(
+    'server_removed',
+    'Server Removed',
+    `Server "${s.name}" has been removed${filesDeleted ? ' along with its files' : ''}.`,
+    s.id,
+    {
+      titleKey: 'notifications.serverRemovedTitle',
+      messageKey: filesDeleted ? 'notifications.serverRemovedWithFilesMessage' : 'notifications.serverRemovedMessage',
+      messageVars: { name: s.name },
+    }
+  );
+  res.json({ ok: true, activeServerId: config.activeServerId, filesDeleted });
 });
 
 app.post('/api/active', (req, res) => {
@@ -3997,12 +4026,13 @@ async function systemStats(m) {
 const notifications = [];
 const MAX_NOTIFICATIONS = 200;
 
-function addNotification(type, title, message, serverId) {
+function addNotification(type, title, message, serverId, i18nMeta = {}) {
   const n = {
     id: genId(),
     type,
     title,
     message,
+    ...i18nMeta,
     serverId: serverId || null,
     read: false,
     timestamp: Date.now(),

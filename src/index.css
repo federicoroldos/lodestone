@@ -111,6 +111,36 @@
   }
 }
 
+@layer components {
+  .lodestone-toaster[data-sonner-toaster][data-theme='dark'] {
+    --normal-bg: hsl(var(--card) / 0.94);
+    --normal-bg-hover: hsl(var(--secondary) / 0.94);
+    --normal-border: hsl(var(--border));
+    --normal-border-hover: hsl(var(--muted));
+    --normal-text: hsl(var(--foreground));
+
+    --success-bg: hsl(var(--primary) / 0.12);
+    --success-border: hsl(var(--primary) / 0.30);
+    --success-text: hsl(var(--primary));
+
+    --info-bg: hsl(var(--accent) / 0.42);
+    --info-border: hsl(var(--log-cmd) / 0.28);
+    --info-text: hsl(var(--log-cmd));
+
+    --warning-bg: hsl(var(--status-warn) / 0.12);
+    --warning-border: hsl(var(--status-warn) / 0.30);
+    --warning-text: hsl(var(--status-warn));
+
+    --error-bg: hsl(var(--destructive) / 0.12);
+    --error-border: hsl(var(--destructive) / 0.30);
+    --error-text: hsl(var(--destructive));
+  }
+
+  .lodestone-toaster [data-sonner-toast][data-styled='true'] {
+    box-shadow: var(--shadow-xl);
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
