@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide transition-colors',
+  'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide transition-colors',
   {
     variants: {
       variant: {
@@ -14,6 +14,12 @@ const badgeVariants = cva(
         stopping: 'bg-status-warn/10 text-status-warn border border-status-warn/20',
         active: 'bg-primary/15 text-primary border border-primary/25',
         destructive: 'bg-status-error/10 text-status-error border border-status-error/20',
+        /* Soft chip variants (MatDash-style) */
+        softPrimary: 'bg-primary/10 text-primary',
+        softSuccess: 'bg-status-online/10 text-status-online',
+        softWarn: 'bg-status-warn/10 text-status-warn',
+        softError: 'bg-status-error/10 text-status-error',
+        softInfo: 'bg-accent text-accent-foreground',
       },
     },
     defaultVariants: {
@@ -23,7 +29,7 @@ const badgeVariants = cva(
 );
 
 function Badge({ className, variant, ...props }) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
 export { Badge, badgeVariants };

@@ -13,6 +13,8 @@ import { useApiStream } from '@/hooks/useApiStream';
 import { useT } from '@/context/I18nContext';
 import { fmtUptime, fmtBytes, fmtBytesRaw, osExamplePath } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus, Server, Package, Search } from 'lucide-react';
 import { TableSkeleton, ModrinthResultSkeleton } from '@/components/shared/Skeletons';
 import { cn } from '@/lib/utils';
@@ -592,14 +594,14 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
                     <p className="text-sm font-semibold text-foreground">{preview.name || preview.indexName || selected.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {preview.loaderType && (
-                        <span className="inline-block bg-primary/15 text-primary px-1.5 py-0.5 rounded text-[11px] font-medium mr-1">
+                        <Badge variant="softPrimary" className="mr-1">
                           {preview.loaderType}
-                        </span>
+                        </Badge>
                       )}
                       {preview.mcVersion && (
-                        <span className="inline-block bg-secondary px-1.5 py-0.5 rounded text-[11px] mr-1">
+                        <Badge variant="default" className="mr-1">
                           MC {preview.mcVersion}
-                        </span>
+                        </Badge>
                       )}
                       {preview.loaderVersion && <span className="text-[11px]">loader {preview.loaderVersion}</span>}
                     </p>
@@ -662,16 +664,18 @@ export function ServersView({ onSetActive, onRefresh }) {
   const [modpackOpen, setModpackOpen] = useState(false);
   const [editServer, setEditServer] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleteFiles, setDeleteFiles] = useState(false);
 
-  async function action(act, s) {
+  async function action(act, s, opts = {}) {
     try {
       if (act === 'start') await api(`/api/servers/${s.id}/start`, { method: 'POST' });
       else if (act === 'stop') await api(`/api/servers/${s.id}/stop`, { method: 'POST' });
       else if (act === 'restart') await api(`/api/servers/${s.id}/restart`, { method: 'POST' });
       else if (act === 'active') onSetActive(s.id);
       else if (act === 'delete') {
-        await api(`/api/servers/${s.id}`, { method: 'DELETE' });
-        toast.success(t('servers.removedToast'));
+        const q = opts.deleteFiles ? '?deleteFiles=true' : '';
+        const r = await api(`/api/servers/${s.id}${q}`, { method: 'DELETE' });
+        toast.success(r?.filesDeleted ? t('servers.removedWithFilesToast') : t('servers.removedToast'));
         onRefresh?.();
       }
     } catch (e) { toast.error(e.message); }
@@ -684,11 +688,11 @@ export function ServersView({ onSetActive, onRefresh }) {
           <CardTitle>{t('servers.registeredTitle')}</CardTitle>
           {isAdmin && (
             <div className="flex items-center gap-2">
-              <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
+              <Button data-tour="server-create-new" variant="default" size="sm" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 {t('servers.createNew')}
               </Button>
-              <Button variant="glass" size="sm" onClick={() => setModpackOpen(true)}>
+              <Button data-tour="server-create-modpack" variant="glass" size="sm" onClick={() => setModpackOpen(true)}>
                 <Package className="h-3.5 w-3.5" />
                 {t('servers.createFromModpack')}
               </Button>
@@ -740,7 +744,7 @@ export function ServersView({ onSetActive, onRefresh }) {
                                 <span className="hover:text-primary cursor-pointer" onClick={() => onSetActive(s.id)}>
                                   {s.name}
                                 </span>
-                                {isActive && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary border border-primary/25">{t('servers.activeLabel')}</span>}
+                                {isActive && <Badge variant="active" className="text-[9px] px-1 py-0.5">{t('servers.activeLabel')}</Badge>}
                               </div>
                               <div className="text-xs text-muted-foreground/70 font-mono truncate max-w-[180px]">{s.dir || ''}</div>
                             </div>
@@ -793,26 +797,33 @@ export function ServersView({ onSetActive, onRefresh }) {
       />
 
       {confirmDelete && (
-        <Dialog open onOpenChange={() => setConfirmDelete(null)}>
+        <Dialog open onOpenChange={(o) => { if (!o) { setConfirmDelete(null); setDeleteFiles(false); } }}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>{t('servers.removeTitle')}</DialogTitle></DialogHeader>
-            <p className="px-5 py-3 text-sm text-muted-foreground">{(() => {
-              const notWord = t('servers.removeBodyEm');
-              const txt = t('servers.removeBody', { name: confirmDelete.name, not: notWord });
-              const ni = txt.indexOf(confirmDelete.name);
-              const emi = txt.indexOf(notWord);
-              if (ni < 0 && emi < 0) return txt;
-              const out = [];
-              if (ni >= 0) out.push(txt.slice(0, ni));
-              if (ni >= 0) out.push(<strong key="n" className="text-foreground">{confirmDelete.name}</strong>);
-              if (ni >= 0) out.push(txt.slice(ni + confirmDelete.name.length, emi >= 0 ? emi : undefined));
-              if (emi >= 0) out.push(<em key="e">{notWord}</em>);
-              if (emi >= 0) out.push(txt.slice(emi + notWord.length));
-              return out;
-            })()}</p>
+            <div className="px-5 py-3 space-y-3">
+              <p className="text-sm text-muted-foreground">{(() => {
+                const txt = t('servers.removeBody', { name: confirmDelete.name });
+                const ni = txt.indexOf(confirmDelete.name);
+                if (ni < 0) return txt;
+                return [
+                  txt.slice(0, ni),
+                  <strong key="n" className="text-foreground">{confirmDelete.name}</strong>,
+                  txt.slice(ni + confirmDelete.name.length),
+                ];
+              })()}</p>
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <Checkbox checked={deleteFiles} onCheckedChange={(v) => setDeleteFiles(!!v)} className="mt-0.5" />
+                <span>
+                  <span className="text-foreground">{t('servers.removeFilesLabel')}</span>
+                  {deleteFiles && (
+                    <span className="block text-xs text-status-error mt-0.5">{t('servers.removeFilesWarn')}</span>
+                  )}
+                </span>
+              </label>
+            </div>
             <DialogFooter>
-              <Button variant="glass" onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
-              <Button variant="destructive" onClick={() => { action('delete', confirmDelete); setConfirmDelete(null); }}>{t('common.remove')}</Button>
+              <Button variant="glass" onClick={() => { setConfirmDelete(null); setDeleteFiles(false); }}>{t('common.cancel')}</Button>
+              <Button variant="destructive" onClick={() => { action('delete', confirmDelete, { deleteFiles }); setConfirmDelete(null); setDeleteFiles(false); }}>{t('common.remove')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

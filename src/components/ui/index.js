@@ -8,10 +8,17 @@ export {
   DialogContent, DialogHeader, DialogFooter, DialogBody,
   DialogTitle, DialogDescription,
 } from './dialog';
+export {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
+  DropdownMenuShortcut, DropdownMenuGroup, DropdownMenuPortal,
+  DropdownMenuSub, DropdownMenuRadioGroup,
+} from './dropdown-menu';
 export { Field } from './field';
 export { Input } from './input';
 export { Label } from './label';
 export { NativeSelect } from './native-select';
+export { Progress } from './progress';
 export {
   Select, SelectGroup, SelectValue, SelectTrigger, SelectContent,
   SelectLabel, SelectItem, SelectSeparator, SelectScrollUpButton, SelectScrollDownButton,

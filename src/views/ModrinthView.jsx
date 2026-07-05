@@ -9,6 +9,7 @@ import { useT } from '@/context/I18nContext';
 import { useServer } from '@/context/ServerContext';
 import { osExamplePath } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Search, Download, Check, FolderOpen, Package } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -268,14 +269,14 @@ function ModpacksInstallDialog({ open, onOpenChange, projectId, compat, onInstal
                 <p className="text-sm font-semibold text-foreground">{preview.name || preview.indexName}</p>
                 <p className="text-xs text-muted-foreground">
                   {preview.loaderType && (
-                    <span className="inline-block bg-primary/15 text-primary px-1.5 py-0.5 rounded text-[11px] font-medium mr-1">
+                    <Badge variant="softPrimary" className="mr-1">
                       {preview.loaderType}
-                    </span>
+                    </Badge>
                   )}
                   {preview.mcVersion && (
-                    <span className="inline-block bg-secondary px-1.5 py-0.5 rounded text-[11px] mr-1">
+                    <Badge variant="default" className="mr-1">
                       MC {preview.mcVersion}
-                    </span>
+                    </Badge>
                   )}
                   {t('modrinth.modpackReady', { name: `${preview.serverFileCount}` })}
                 </p>

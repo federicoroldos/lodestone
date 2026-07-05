@@ -1,61 +1,14 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { AreaChart, RadialGauge } from '@/components/ui/chart';
 import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
 import { fmtUptime } from '@/lib/utils';
-import { cn } from '@/lib/utils';
 import { KpiTile } from '@/components/shared/KpiTile';
 import { KpiTileSkeleton, ChartCardSkeleton, InfoRowSkeleton } from '@/components/shared/Skeletons';
 import { Server, Users, Activity, Clock, Terminal, FolderOpen, Database } from 'lucide-react';
-
-// Sparkline canvas helper
-function drawSpark(canvas, data) {
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  const w = rect.width, h = rect.height;
-  ctx.clearRect(0, 0, w, h);
-  if (data.length < 2) return;
-  const max = Math.max(...data, 1);
-  const min = Math.min(...data, 0);
-  const range = max - min || 1;
-  ctx.beginPath();
-  data.forEach((v, i) => {
-    const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  const c = getComputedStyle(document.documentElement).getPropertyValue('--chart-1').trim();
-  ctx.strokeStyle = `hsl(${c})`;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-  ctx.fillStyle = `hsl(${c} / 0.08)`;
-  ctx.fill();
-}
-
-function Sparkline({ data }) {
-  const ref = useRef(null);
-  useEffect(() => { drawSpark(ref.current, data); }, [data]);
-  return <canvas ref={ref} className="h-9 w-full" />;
-}
-
-function MetricRow({ label, value, unit, data }) {
-  return (
-    <div className="pb-3 mb-3 border-b border-border last:border-0 last:mb-0 last:pb-0">
-      <div className="flex items-center justify-between text-sm mb-1.5">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium text-foreground tabular-nums">{value} {unit}</span>
-      </div>
-      <Sparkline data={data} />
-    </div>
-  );
-}
 
 const MAX_SPARK = 150;
 
@@ -72,7 +25,6 @@ export function DashboardView({ active, onNavigate }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Sparkline data
   const sparkRef = useRef({ procmem: [], proccpu: [], syscpu: [], sysmem: [] });
   const [stats, setStats] = useState(null);
 
@@ -89,7 +41,6 @@ export function DashboardView({ active, onNavigate }) {
     push('sysmem', s.memSystemUsed / 1073741824);
   }, []);
 
-  // Register stats listener via context (parent passes it in)
   useEffect(() => {
     if (active) window.__dashOnStats = onStats;
     return () => { if (active) delete window.__dashOnStats; };
@@ -105,6 +56,20 @@ export function DashboardView({ active, onNavigate }) {
   const tpsTone = status.tps >= 19 ? 'online' :
                   status.tps >= 15 ? 'warn' :
                   status.tps ? 'error' : 'neutral';
+
+  // Build area chart series from spark data
+  const sparkSeries = (key, label, colorIdx = 0) => {
+    const data = sparkRef.current[key];
+    if (!data || data.length < 2) return [];
+    return [{
+      name: label,
+      data: data.map((v, i) => ({ x: i, y: Math.round(v * 100) / 100 })),
+    }];
+  };
+
+  const diskPct = stats?.disk?.total
+    ? ((stats.disk.total - stats.disk.free) / stats.disk.total) * 100
+    : 0;
 
   const quickLinks = [
     { view: 'console', icon: Terminal, label: t('dashboard.quickConsole') },
@@ -124,7 +89,7 @@ export function DashboardView({ active, onNavigate }) {
         </div>
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
           <ChartCardSkeleton />
-          <div className="xl:col-span-2 rounded-lg border border-border bg-card p-5 space-y-3">
+          <div className="xl:col-span-2 rounded-2xl border border-border bg-card p-5 space-y-3">
             <InfoRowSkeleton />
             <InfoRowSkeleton />
             <InfoRowSkeleton />
@@ -137,7 +102,7 @@ export function DashboardView({ active, onNavigate }) {
 
   return (
     <div className="space-y-5">
-      {/* KPI grid */}
+      {/* StatCard grid */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <KpiTile
           icon={Server}
@@ -145,6 +110,7 @@ export function DashboardView({ active, onNavigate }) {
           value={t(`status.${status.status}`)}
           sub={server?.name || dash}
           tone={kpiTone}
+          delta={status.status === 'online' ? { value: 'live', direction: 'up' } : undefined}
         />
         <KpiTile
           icon={Users}
@@ -158,89 +124,116 @@ export function DashboardView({ active, onNavigate }) {
           label={t('dashboard.tps')}
           value={status.tps != null && running ? status.tps.toFixed(1) : dash}
           tone={tpsTone}
+          delta={status.tps >= 19 ? { value: 'great', direction: 'up' } : status.tps >= 15 ? { value: 'fair', direction: 'neutral' } : undefined}
         />
         <KpiTile
           icon={Clock}
           label={t('dashboard.uptime')}
           value={uptime}
           tone="neutral"
+          delta={running ? { value: fmtUptime(status.uptimeMs).split(' ')[0] || '', direction: 'up' } : undefined}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
-        {/* Live resources */}
+        {/* Live resources - Area chart card */}
         <Card className="xl:col-span-3">
           <CardHeader>
             <CardTitle>{t('dashboard.liveResources')}</CardTitle>
             <span className="text-xs text-muted-foreground">{t('dashboard.last5min')}</span>
           </CardHeader>
           <CardContent>
-            <MetricRow
-              label={t('dashboard.serverRam')}
-              value={stats ? Math.round(stats.procMem / 1048576) : 0}
-              unit={t('common.unitMB')}
-              data={sparkRef.current.procmem}
-            />
-            <MetricRow
-              label={t('dashboard.serverCpu')}
-              value={stats ? (stats.procCpu || 0).toFixed(0) : 0}
-              unit={t('common.unitPercent')}
-              data={sparkRef.current.proccpu}
-            />
-            <MetricRow
-              label={t('dashboard.systemRam')}
-              value={stats ? `${(stats.memSystemUsed / 1073741824).toFixed(1)} / ${(stats.memSystemTotal / 1073741824).toFixed(1)} ${t('common.unitGB')}` : dash}
-              unit=""
-              data={sparkRef.current.sysmem}
-            />
-            <MetricRow
-              label={t('dashboard.systemCpu')}
-              value={stats ? (stats.cpuSystem || 0).toFixed(0) : 0}
-              unit={t('common.unitPercent')}
-              data={sparkRef.current.syscpu}
-            />
-            {stats?.disk?.total && (
-              <div className="mt-2">
+            <div className="space-y-5">
+              <div>
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">{t('dashboard.disk')}</span>
-                  <span className="font-medium text-foreground tabular-nums">
-                    {((stats.disk.total - stats.disk.free) / 1073741824).toFixed(0)} /&nbsp;
-                    {(stats.disk.total / 1073741824).toFixed(0)} {t('common.unitGB')}
+                  <span className="font-medium text-foreground">{t('dashboard.serverRam')}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {stats ? Math.round(stats.procMem / 1048576) : 0} {t('common.unitMB')}
                   </span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all',
-                      ((stats.disk.total - stats.disk.free) / stats.disk.total) >= 0.9 ? 'bg-status-error' :
-                      ((stats.disk.total - stats.disk.free) / stats.disk.total) >= 0.75 ? 'bg-status-warn' :
-                      'bg-primary'
-                    )}
-                    style={{ width: `${(((stats.disk.total - stats.disk.free) / stats.disk.total) * 100).toFixed(1)}%` }}
-                  />
-                </div>
+                <AreaChart
+                  data={sparkSeries('procmem', t('dashboard.serverRam'))}
+                  height={90}
+                  options={{
+                    chart: { sparkline: { enabled: true } },
+                    stroke: { width: 1.5 },
+                    tooltip: { enabled: false },
+                    yaxis: { show: false, labels: { show: false }, min: 0 },
+                    grid: { show: false, padding: { left: 0, right: 0, top: 4, bottom: 0 } },
+                  }}
+                />
               </div>
-            )}
+              <div>
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="font-medium text-foreground">{t('dashboard.serverCpu')}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {stats ? (stats.procCpu || 0).toFixed(0) : 0} {t('common.unitPercent')}
+                  </span>
+                </div>
+                <AreaChart
+                  data={sparkSeries('proccpu', t('dashboard.serverCpu'))}
+                  height={90}
+                  options={{
+                    chart: { sparkline: { enabled: true } },
+                    stroke: { width: 1.5 },
+                    tooltip: { enabled: false },
+                    yaxis: { show: false, labels: { show: false }, min: 0, max: 100 },
+                    grid: { show: false, padding: { left: 0, right: 0, top: 4, bottom: 0 } },
+                  }}
+                />
+              </div>
+              {stats?.disk?.total && (
+                <div>
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="font-medium text-foreground">{t('dashboard.disk')}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {((stats.disk.total - stats.disk.free) / 1073741824).toFixed(0)} / {(stats.disk.total / 1073741824).toFixed(0)} {t('common.unitGB')}
+                    </span>
+                  </div>
+                  <Progress value={diskPct} />
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Server info */}
-        <Card className="xl:col-span-2">
-          <CardHeader><CardTitle>{t('dashboard.serverInfo')}</CardTitle></CardHeader>
-          <CardContent className="space-y-0 p-0">
-            {[
-              { label: t('dashboard.version'), value: server?.mcVersion || dash },
-              { label: t('dashboard.jar'), value: server?.jar || dash },
-              { label: t('dashboard.worlds'), value: server?.worlds?.join(', ') || dash },
-              { label: t('dashboard.folder'), value: server?.dir || dash },
-            ].map(({ label, value }) => (
-              <div key={label} className="flex items-start justify-between gap-3 px-5 py-2.5 border-b border-border last:border-0 text-sm">
-                <span className="text-muted-foreground shrink-0">{label}</span>
-                <span className="font-medium text-foreground text-right truncate max-w-[160px] font-mono text-xs">{value}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        {/* Right column: Radial gauge + Server info */}
+        <div className="xl:col-span-2 space-y-5">
+          {/* TPS gauge */}
+          {running && status.tps != null && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('dashboard.tps')}</CardTitle>
+                <span className="text-xs text-muted-foreground">{status.tps.toFixed(1)}</span>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <RadialGauge
+                  value={Math.round((status.tps / 20) * 100)}
+                  label="TPS"
+                  height={180}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Server info */}
+          <Card>
+            <CardHeader><CardTitle>{t('dashboard.serverInfo')}</CardTitle></CardHeader>
+            <CardContent className="space-y-0 p-0">
+              {[
+                { label: t('dashboard.version'), value: server?.mcVersion || dash },
+                { label: t('dashboard.jar'), value: server?.jar || dash },
+                { label: t('dashboard.worlds'), value: server?.worlds?.join(', ') || dash },
+                { label: t('dashboard.folder'), value: server?.dir || dash },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-start justify-between gap-3 px-5 py-2.5 border-b border-border last:border-0 text-sm">
+                  <span className="text-muted-foreground shrink-0">{label}</span>
+                  <span className="font-medium text-foreground text-right truncate max-w-[160px] font-mono text-xs">{value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <Card>
