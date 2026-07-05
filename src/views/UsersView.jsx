@@ -14,22 +14,18 @@ import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Pencil, Trash2, Plus, ShieldCheck, Wrench } from 'lucide-react';
 
 function RoleBadge({ role }) {
   const t = useT();
   const admin = role === 'admin';
-  const Icon = admin ? ShieldCheck : Wrench;
+
   return (
-    <span className={
-      'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase border ' +
-      (admin
-        ? 'bg-primary/15 text-primary border-primary/25'
-        : 'bg-secondary/40 text-muted-foreground border-border/60')
-    }>
-      <Icon className="h-2.5 w-2.5" />
+    <Badge variant={admin ? 'softPrimary' : 'default'} className="gap-1 px-1.5 py-0.5 text-[9px]">
+      {admin ? <ShieldCheck className="h-2.5 w-2.5" /> : <Wrench className="h-2.5 w-2.5" />}
       {admin ? t('users.roleAdmin') : t('users.roleOperator')}
-    </span>
+    </Badge>
   );
 }
 
@@ -180,7 +176,7 @@ export function UsersView() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground truncate">{primary}</span>
                         <RoleBadge role={u.role} />
-                        {isSelf && <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase bg-primary/15 text-primary border border-primary/25">{t('users.youBadge')}</span>}
+                        {isSelf && <Badge variant="active" className="text-[9px] px-1 py-0.5">{t('users.youBadge')}</Badge>}
                       </div>
                       <div className="text-xs text-muted-foreground truncate">
                         {secondary ? <span>{secondary}</span> : <span>{u.name || t('common.dashPlaceholder')}</span>}

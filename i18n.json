@@ -182,6 +182,17 @@
         "restartSuccess": "Active server switched",
         "langSwitch": "Language"
       },
+      "notifications": {
+        "title": "Notifications",
+        "empty": "No notifications yet",
+        "markRead": "Mark as read",
+        "readAll": "Mark all as read",
+        "clearAll": "Clear all",
+        "justNow": "just now",
+        "minutesAgo": "{m}m ago",
+        "hoursAgo": "{h}h ago",
+        "daysAgo": "{d}d ago"
+      },
       "login": {
         "heading": "Sign in to your panel",
         "subheading": "Enter your credentials to manage your servers",
@@ -815,6 +826,17 @@
         "restartConfirm": "¿Reiniciar el servidor?",
         "restartSuccess": "Servidor activo cambiado",
         "langSwitch": "Idioma"
+      },
+      "notifications": {
+        "title": "Notificaciones",
+        "empty": "Sin notificaciones",
+        "markRead": "Marcar como leída",
+        "readAll": "Marcar todo como leído",
+        "clearAll": "Limpiar todo",
+        "justNow": "ahora",
+        "minutesAgo": "hace {m}m",
+        "hoursAgo": "hace {h}h",
+        "daysAgo": "hace {d}d"
       },
       "login": {
         "heading": "Inicia sesión en tu panel",

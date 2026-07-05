@@ -827,6 +827,7 @@ class ServerManager {
     if (!wasManual) {
       // Unexpected crash
       notifyDiscord(`:red_circle: "${this.name()}" **crashed** unexpectedly (code=${code}).`);
+      addNotification('server_crashed', 'Server Crashed', `Server "${this.name()}" crashed unexpectedly (code=${code}).`, this.id);
       this._maybeWatchdogRestart();
     }
   }
@@ -903,11 +904,13 @@ class ServerManager {
     if (recent >= (wd.maxRestarts || 3)) {
       this.pushLine(`[Lodestone] Watchdog: ${recent} restarts within the window, NOT relaunching (possible crash-loop).`, 'error');
       notifyDiscord(`:no_entry: Watchdog "${this.name()}": restart limit reached (${recent}). Not relaunching to avoid a crash-loop.`);
+      addNotification('watchdog_limit', 'Watchdog Crash Limit', `Server "${this.name()}" hit the watchdog restart limit (${recent}). Not relaunching to avoid a crash-loop.`, this.id);
       return;
     }
     this.restartTimestamps.push(Date.now());
     this.pushLine('[Lodestone] Watchdog: relaunching the server in 5s...', 'warn');
     notifyDiscord(`:yellow_circle: Watchdog "${this.name()}": relaunching automatically...`);
+    addNotification('watchdog_restart', 'Watchdog Restart', `Server "${this.name()}" crashed and will be automatically restarted in 5s.`, this.id);
     setTimeout(() => {
       if (!this.isRunning()) this.start();
     }, 5000);
@@ -1870,6 +1873,7 @@ app.post('/api/servers', requireAdmin, (req, res) => {
   if (!config.activeServerId) config.activeServerId = entry.id;
   saveConfig(config);
   getManager(entry.id);
+  addNotification('server_added', 'Server Registered', `Server "${entry.name}" has been registered.`, entry.id);
   res.json({ ok: true, server: serverWithStatus(entry) });
 });
 
@@ -1918,6 +1922,7 @@ app.delete('/api/servers/:id', requireAdmin, (req, res) => {
     config.activeServerId = config.servers.length ? config.servers[0].id : null;
   }
   saveConfig(config);
+  addNotification('server_removed', 'Server Removed', `Server "${s.name}" has been removed.`, s.id);
   res.json({ ok: true, activeServerId: config.activeServerId });
 });
 
@@ -1929,12 +1934,23 @@ app.post('/api/active', (req, res) => {
   res.json({ ok: true, activeServerId: id });
 });
 
-app.post('/api/servers/:id/start', (req, res) => res.json(localizeManagerResult(req, getManagerOr404(req, res, (m) => m.start()))));
-app.post('/api/servers/:id/stop', (req, res) => res.json(localizeManagerResult(req, getManagerOr404(req, res, (m) => m.stop(req.body && req.body.force)))));
+app.post('/api/servers/:id/start', (req, res) => {
+  const s = findServer(req.params.id);
+  const r = localizeManagerResult(req, getManagerOr404(req, res, (m) => m.start()));
+  if (r && r.ok) addNotification('server_started', 'Server Started', `Server "${s.name}" has been started.`, s.id);
+  res.json(r);
+});
+app.post('/api/servers/:id/stop', (req, res) => {
+  const s = findServer(req.params.id);
+  const r = localizeManagerResult(req, getManagerOr404(req, res, (m) => m.stop(req.body && req.body.force)));
+  if (r && r.ok) addNotification('server_stopped', 'Server Stopped', `Server "${s.name}" has been stopped.`, s.id);
+  res.json(r);
+});
 app.post('/api/servers/:id/restart', async (req, res) => {
   const s = findServer(req.params.id);
   if (!s) return res.status(404).json({ error: tErr(req.user, 'errors.serverNotFound') });
   const r = await getManager(s.id).restart();
+  if (r && r.ok) addNotification('server_restarted', 'Server Restarted', `Server "${s.name}" has been restarted.`, s.id);
   res.json(localizeManagerResult(req, r));
 });
 
@@ -2342,6 +2358,10 @@ app.get('/api/plugins', (req, res) => {
 });
 
 app.post('/api/plugins/upload', upload.single('plugin'), (req, res) => {
+  const m = targetManager(req);
+  if (m && req.file && req.file.filename) {
+    addNotification('plugin_uploaded', 'Plugin Uploaded', `Plugin "${req.file.filename}" uploaded to "${m.name()}". Restart the server to apply.`, m.id);
+  }
   res.json({ ok: true, name: req.file && req.file.filename, note: 'Restart the server to apply.' });
 }, (err, req, res, next) => {
   res.status(400).json({ error: tErr(req.user, err.message && err.message.includes('Only') ? 'errors.onlyJar' : 'errors.unknownAction') });
@@ -2574,6 +2594,7 @@ async function createBackup(m) {
   const st = fs.statSync(outPath);
   log(`Backup: done -> ${outName} (${(st.size / 1048576).toFixed(1)} MB)`);
   m.pushLine(`[Lodestone] Backup created: ${outName} (${(st.size / 1048576).toFixed(1)} MB)`, 'info');
+  addNotification('backup_created', 'Backup Created', `Backup "${outName}" created for server "${m.name()}" (${(st.size / 1048576).toFixed(1)} MB).`, m.id);
   return { name: outName, size: st.size };
 }
 
@@ -2641,6 +2662,7 @@ app.delete('/api/backups/:name', (req, res) => {
   if (!fs.existsSync(full)) return res.status(404).json({ error: 'Does not exist' });
   try {
     fs.unlinkSync(full);
+    addNotification('backup_deleted', 'Backup Deleted', `Backup "${name}" has been deleted.`);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2780,6 +2802,7 @@ app.post('/api/modrinth/install', async (req, res) => {
     fs.writeFileSync(dest, buf);
     log(`Modrinth: installed ${file.filename} into ${compat.folder}/ for "${m.name()}"`);
     m.pushLine(`[Lodestone] Installed from Modrinth into ${compat.folder}/: ${file.filename}`, 'info');
+    addNotification('plugin_installed', 'Plugin Installed', `"${file.filename}" installed into ${compat.folder}/ for "${m.name()}". Restart the server to apply.`, m.id);
     res.json({ ok: true, name: file.filename, note: 'Restart the server to apply.' });
   } catch (err) {
     log(`Modrinth install failed: ${err.message}`);
@@ -2930,6 +2953,7 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
       if (!config.activeServerId) config.activeServerId = entry.id;
       saveConfig(config);
       getManager(entry.id);
+      addNotification('server_created', 'Modpack Server Created', `Server "${createName}" (${type}, MC ${mcVersion}) created from modpack.`, entry.id);
       log(`Created ${type} server "${createName}" (${mcVersion}) from modpack at ${dir}`);
     } else {
       const m = targetManager(req);
@@ -2970,7 +2994,10 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
       const m = targetManager(req);
       if (m) {
         m.pushLine(`[Lodestone] Installed modpack from Modrinth: ${spec.name || version.name || ''} (${installed} files, ${overridesExtracted} overrides)`, 'info');
+        addNotification('modpack_installed', 'Modpack Installed', `Modpack "${spec.name || version.name || ''}" installed into "${serverName}" (${installed} files, ${overridesExtracted} overrides).`, m.id);
       }
+    } else {
+      addNotification('modpack_installed', 'Modpack Server Created', `Modpack "${spec.name || version.name || ''}" deployed as new server "${serverName}".`);
     }
 
     res.json({
@@ -3782,6 +3809,7 @@ app.post('/api/create', requireAdmin, async (req, res) => {
     if (!config.activeServerId) config.activeServerId = entry.id;
     saveConfig(config);
     getManager(entry.id);
+    addNotification('server_created', 'Server Created', `Server "${name}" (${type}, MC ${mcVersion}) created at ${dir}.`, entry.id);
     log(`Created ${type} server "${name}" (${mcVersion}) at ${dir}`);
 
     send({ type: 'done', server: serverWithStatus(entry) });
@@ -3963,6 +3991,62 @@ async function systemStats(m) {
 }
 
 // ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+const notifications = [];
+const MAX_NOTIFICATIONS = 200;
+
+function addNotification(type, title, message, serverId) {
+  const n = {
+    id: genId(),
+    type,
+    title,
+    message,
+    serverId: serverId || null,
+    read: false,
+    timestamp: Date.now(),
+  };
+  notifications.unshift(n);
+  if (notifications.length > MAX_NOTIFICATIONS) notifications.pop();
+  globalBroadcast({ type: 'notification', notification: n });
+  return n;
+}
+
+// GET /api/notifications
+app.get('/api/notifications', (req, res) => {
+  res.json({ notifications });
+});
+
+// POST /api/notifications/:id/read
+app.post('/api/notifications/:id/read', (req, res) => {
+  const n = notifications.find((x) => x.id === req.params.id);
+  if (!n) return res.status(404).json({ error: 'Notification not found' });
+  n.read = true;
+  res.json({ ok: true });
+});
+
+// POST /api/notifications/read-all
+app.post('/api/notifications/read-all', (req, res) => {
+  for (const n of notifications) n.read = true;
+  res.json({ ok: true });
+});
+
+// POST /api/notifications/clear
+app.post('/api/notifications/clear', (req, res) => {
+  notifications.length = 0;
+  res.json({ ok: true });
+});
+
+// DELETE /api/notifications/:id
+app.delete('/api/notifications/:id', (req, res) => {
+  const idx = notifications.findIndex((x) => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Notification not found' });
+  notifications.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // WebSocket
 // ---------------------------------------------------------------------------
 
@@ -4008,6 +4092,8 @@ wss.on('connection', (ws) => {
     ws.send(JSON.stringify({ type: 'status', status: m.statusPayload() }));
   }
   if (config.activeServerId) sendServerSnapshot(ws, config.activeServerId);
+  // Send existing notifications
+  ws.send(JSON.stringify({ type: 'notifications', notifications }));
 
   ws.on('message', (data) => {
     let msg;
