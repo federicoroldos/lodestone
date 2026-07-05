@@ -34,7 +34,7 @@ export function Header({ currentView, onServerSwitch, onOpenSettings }) {
     : user?.username?.slice(0, 2).toUpperCase() || '?';
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-5 relative">
+    <header data-tour="header" className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-5 relative">
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.12]"
         style={{
@@ -52,12 +52,13 @@ export function Header({ currentView, onServerSwitch, onOpenSettings }) {
 
       <div className="flex items-center gap-2">
         {/* Notifications */}
-        <NotificationBell />
+        <div data-tour="notifications"><NotificationBell /></div>
 
         {/* Profile dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
+              data-tour="profile"
               variant="ghost"
               size="sm"
               className="gap-2 px-2 text-muted-foreground hover:text-foreground"

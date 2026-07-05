@@ -39,6 +39,13 @@ function timeAgo(ts, t) {
   return t('notifications.daysAgo', { d });
 }
 
+function notificationText(n, t) {
+  return {
+    title: n.titleKey ? t(n.titleKey, n.titleVars) : n.title,
+    message: n.messageKey ? t(n.messageKey, n.messageVars) : n.message,
+  };
+}
+
 export function NotificationBell() {
   const t = useT();
   const api = useApi();
@@ -140,6 +147,7 @@ export function NotificationBell() {
           items.map((n) => {
             const Icon = TYPE_ICONS[n.type] || Bell;
             const sname = serverName(n.serverId);
+            const text = notificationText(n, t);
             return (
               <DropdownMenuItem
                 key={n.id}
@@ -161,10 +169,10 @@ export function NotificationBell() {
                     'text-xs leading-tight',
                     !n.read ? 'font-semibold text-foreground' : 'text-muted-foreground'
                   )}>
-                    {n.title}
+                    {text.title}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
-                    {n.message}
+                    {text.message}
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
                     {sname && (

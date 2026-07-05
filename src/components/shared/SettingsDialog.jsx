@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordStrength } from '@/components/shared/PasswordStrength';
-import { Check, Globe, Keyboard, Languages, UserCog, KeyRound } from 'lucide-react';
+import { Check, Globe, Keyboard, Languages, UserCog, KeyRound, Compass } from 'lucide-react';
 import { useI18n, useT } from '@/context/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { useApi } from '@/hooks/useApi';
@@ -164,7 +164,7 @@ function PasswordSection() {
   );
 }
 
-export function SettingsDialog({ open, onOpenChange }) {
+export function SettingsDialog({ open, onOpenChange, onStartTour }) {
   const t = useT();
   const { lang, setLang, supported, labels } = useI18n();
 
@@ -236,6 +236,15 @@ export function SettingsDialog({ open, onOpenChange }) {
                   </li>
                 ))}
               </ul>
+            </section>
+
+            {/* Onboarding tour */}
+            <section>
+              <SectionHeading icon={Compass}>{t('settings.tour')}</SectionHeading>
+              <p className="mb-3 text-xs text-muted-foreground">{t('settings.tourDesc')}</p>
+              <Button variant="glass" size="sm" onClick={onStartTour}>
+                <Compass className="h-3.5 w-3.5" /> {t('settings.tourRepeat')}
+              </Button>
             </section>
           </DialogBody>
         </div>

@@ -172,7 +172,10 @@
         "hotkeyConsoleHistory": "Console command history",
         "hotkeyConsoleHistoryHint": "Browse previously sent commands in the Console",
         "hotkeyCloseMenu": "Close menu",
-        "hotkeyCloseMenuHint": "Dismiss open dropdowns and overlays"
+        "hotkeyCloseMenuHint": "Dismiss open dropdowns and overlays",
+        "tour": "Onboarding tour",
+        "tourDesc": "Walk through the panel's main areas again.",
+        "tourRepeat": "Repeat tour"
       },
       "header": {
         "start": "Start",
@@ -181,6 +184,59 @@
         "restartConfirm": "Restart the server?",
         "restartSuccess": "Active server switched",
         "langSwitch": "Language"
+      },
+      "tour": {
+        "badge": "Step {n} of {total}",
+        "next": "Next",
+        "finish": "Finish",
+        "welcome": {
+          "title": "Welcome to Lodestone",
+          "body": "A quick tour of the panel's main areas. Use Next to step through, or close it anytime - you can replay it later from Settings."
+        },
+        "sidebar": {
+          "title": "Navigation",
+          "body": "The sidebar groups every section: overview, operation, content, maintenance, and settings. Collapse it with the chevron at the bottom or Ctrl+B."
+        },
+        "createServer": {
+          "title": "Create or register servers",
+          "body": "Open Servers to add a server. Use Create new when Lodestone should download the server for you, or Register existing when you already have a folder and jar."
+        },
+        "serverTypes": {
+          "title": "Vanilla, plugins, or mods",
+          "body": "Create new lets you choose Vanilla, Spigot, Paper, Fabric, Forge, or NeoForge. Pick Vanilla for a clean server, Paper or Spigot for plugins, and Fabric, Forge, or NeoForge for mods."
+        },
+        "modpackServer": {
+          "title": "Create from a modpack",
+          "body": "Create from modpack searches Modrinth and builds a matching Fabric, Forge, or NeoForge server with the pack files and configs in a new folder."
+        },
+        "configureTabs": {
+          "title": "Configure after creation",
+          "body": "Use Configs for common server.properties settings, Files for direct file edits, and Console to run commands after the server is active."
+        },
+        "contentTabs": {
+          "title": "Add plugins, mods, and packs",
+          "body": "Use Plugins for plugin servers and Modrinth for mods or modpacks. Backups and Schedules help protect and automate the server once it is running."
+        },
+        "header": {
+          "title": "Server context",
+          "body": "The header shows the active server and the current section. Most views act on the server selected here."
+        },
+        "notifications": {
+          "title": "Notifications",
+          "body": "Server events, backups, plugin installs, and watchdog alerts are collected here in real time."
+        },
+        "profile": {
+          "title": "Profile & settings",
+          "body": "Open your profile menu to edit your account, change the panel language, or log out. Settings also holds this tour."
+        },
+        "controlbar": {
+          "title": "Server controls",
+          "body": "Start, restart, and stop the active server from this bar. The status pill shows its current state at a glance."
+        },
+        "done": {
+          "title": "You're all set",
+          "body": "That's the tour. Register a server under Servers, then start it from the control bar. Repeat this walkthrough anytime from Settings."
+        }
       },
       "notifications": {
         "title": "Notifications",
@@ -191,7 +247,10 @@
         "justNow": "just now",
         "minutesAgo": "{m}m ago",
         "hoursAgo": "{h}h ago",
-        "daysAgo": "{d}d ago"
+        "daysAgo": "{d}d ago",
+        "serverRemovedTitle": "Server Removed",
+        "serverRemovedMessage": "Server \"{name}\" has been removed.",
+        "serverRemovedWithFilesMessage": "Server \"{name}\" has been removed along with its files."
       },
       "login": {
         "heading": "Sign in to your panel",
@@ -252,6 +311,7 @@
         "btnEdit": "Edit",
         "btnRemove": "Remove",
         "removedToast": "Server removed",
+        "removedWithFilesToast": "Server and its files removed",
         "editTitle": "Edit server",
         "registerTitle": "Register server",
         "fieldName": "Name",
@@ -307,8 +367,9 @@
         "updatedToast": "Server updated",
         "registeredToast": "Server registered",
         "removeTitle": "Remove server",
-        "removeBody": "Remove \"{name}\" from the panel? Server files are {not} deleted.",
-        "removeBodyEm": "not"
+        "removeBody": "Remove \"{name}\" from the panel?",
+        "removeFilesLabel": "Also delete the server folder from this computer",
+        "removeFilesWarn": "This permanently deletes all server files, worlds, and backups. This cannot be undone."
       },
       "metrics": {
         "title": "Metrics",
@@ -331,7 +392,8 @@
         "clearFilter": "Clear filter",
         "filterEmpty": "No console lines match that filter.",
         "commandPlaceholder": "Type a command (e.g. say hi, list, time set day)",
-        "send": "Send"
+        "send": "Send",
+        "serverOffline": "The server is offline. Start it before sending commands."
       },
       "players": {
         "onlineTitle": "Online players",
@@ -367,6 +429,15 @@
         "bannedEmpty": "No banned players.",
         "actionApplied": "{action}: {name}",
         "listOp": "{kind} {op}: {name}",
+        "whitelistAdded": "Added {name} to whitelist",
+        "whitelistRemoved": "Removed {name} from whitelist",
+        "opAdded": "Made {name} an operator",
+        "opRemoved": "Removed operator from {name}",
+        "banAdded": "Banned {name}",
+        "banRemoved": "Pardoned {name}",
+        "alreadyListed": "{name} is already listed",
+        "updatedOffline": "Updated. The server is offline.",
+        "savedNextStart": "Saved. Takes effect on next start.",
         "opped": "Opped {name}",
         "deopped": "De-opped {name}",
         "kicked": "Kicked {name}",
@@ -817,7 +888,10 @@
         "hotkeyConsoleHistory": "Historial de la consola",
         "hotkeyConsoleHistoryHint": "Recorrer comandos enviados en la Consola",
         "hotkeyCloseMenu": "Cerrar menú",
-        "hotkeyCloseMenuHint": "Cerrar menús y overlays abiertos"
+        "hotkeyCloseMenuHint": "Cerrar menús y overlays abiertos",
+        "tour": "Tour de bienvenida",
+        "tourDesc": "Vuelve a recorrer las áreas principales del panel.",
+        "tourRepeat": "Repetir tour"
       },
       "header": {
         "start": "Iniciar",
@@ -826,6 +900,59 @@
         "restartConfirm": "¿Reiniciar el servidor?",
         "restartSuccess": "Servidor activo cambiado",
         "langSwitch": "Idioma"
+      },
+      "tour": {
+        "badge": "Paso {n} de {total}",
+        "next": "Siguiente",
+        "finish": "Finalizar",
+        "welcome": {
+          "title": "Te damos la bienvenida a Lodestone",
+          "body": "Un recorrido rápido por las áreas principales del panel. Usa Siguiente para avanzar o ciérralo cuando quieras: puedes repetirlo más tarde desde Ajustes."
+        },
+        "sidebar": {
+          "title": "Navegación",
+          "body": "La barra lateral agrupa todas las secciones: resumen, operación, contenido, mantenimiento y ajustes. Contráela con la flecha inferior o con Ctrl+B."
+        },
+        "createServer": {
+          "title": "Crear o registrar servidores",
+          "body": "Abre Servidores para agregar un servidor. Usa Crear nuevo cuando Lodestone deba descargar el servidor por ti, o Registrar existente si ya tienes una carpeta y un jar."
+        },
+        "serverTypes": {
+          "title": "Vanilla, plugins o mods",
+          "body": "Crear nuevo te permite elegir Vanilla, Spigot, Paper, Fabric, Forge o NeoForge. Elige Vanilla para un servidor limpio, Paper o Spigot para plugins, y Fabric, Forge o NeoForge para mods."
+        },
+        "modpackServer": {
+          "title": "Crear desde un modpack",
+          "body": "Crear desde modpack busca en Modrinth y crea un servidor Fabric, Forge o NeoForge compatible con los archivos y configuraciones del pack en una carpeta nueva."
+        },
+        "configureTabs": {
+          "title": "Configurar después de crear",
+          "body": "Usa Configuraciones para ajustes comunes de server.properties, Archivos para ediciones directas y Consola para ejecutar comandos cuando el servidor esté activo."
+        },
+        "contentTabs": {
+          "title": "Agregar plugins, mods y packs",
+          "body": "Usa Plugins para servidores con plugins y Modrinth para mods o modpacks. Copias y Tareas ayudan a proteger y automatizar el servidor cuando esté en marcha."
+        },
+        "header": {
+          "title": "Contexto del servidor",
+          "body": "La cabecera muestra el servidor activo y la sección actual. La mayoría de las vistas actúan sobre el servidor seleccionado aquí."
+        },
+        "notifications": {
+          "title": "Notificaciones",
+          "body": "Los eventos del servidor, copias de seguridad, instalación de plugins y alertas del watchdog se reúnen aquí en tiempo real."
+        },
+        "profile": {
+          "title": "Perfil y ajustes",
+          "body": "Abre el menú de perfil para editar tu cuenta, cambiar el idioma del panel o salir. Ajustes también incluye este tour."
+        },
+        "controlbar": {
+          "title": "Controles del servidor",
+          "body": "Inicia, reinicia y detén el servidor activo desde esta barra. La píldora de estado muestra su estado actual de un vistazo."
+        },
+        "done": {
+          "title": "Todo listo",
+          "body": "Eso es todo. Registra un servidor en Servidores y arráncalo desde la barra de control. Repite este recorrido cuando quieras desde Ajustes."
+        }
       },
       "notifications": {
         "title": "Notificaciones",
@@ -836,7 +963,10 @@
         "justNow": "ahora",
         "minutesAgo": "hace {m}m",
         "hoursAgo": "hace {h}h",
-        "daysAgo": "hace {d}d"
+        "daysAgo": "hace {d}d",
+        "serverRemovedTitle": "Servidor eliminado",
+        "serverRemovedMessage": "Servidor \"{name}\" eliminado.",
+        "serverRemovedWithFilesMessage": "Servidor \"{name}\" eliminado junto con sus archivos."
       },
       "login": {
         "heading": "Inicia sesión en tu panel",
@@ -897,6 +1027,7 @@
         "btnEdit": "Editar",
         "btnRemove": "Quitar",
         "removedToast": "Servidor eliminado",
+        "removedWithFilesToast": "Servidor y sus archivos eliminados",
         "editTitle": "Editar servidor",
         "registerTitle": "Registrar servidor",
         "fieldName": "Nombre",
@@ -952,8 +1083,9 @@
         "updatedToast": "Servidor actualizado",
         "registeredToast": "Servidor registrado",
         "removeTitle": "Quitar servidor",
-        "removeBody": "¿Quitar \"{name}\" del panel? Los archivos del servidor {not} se eliminan.",
-        "removeBodyEm": "no"
+        "removeBody": "¿Quitar \"{name}\" del panel?",
+        "removeFilesLabel": "Eliminar también la carpeta del servidor de este equipo",
+        "removeFilesWarn": "Esto elimina permanentemente todos los archivos, mundos y copias de seguridad del servidor. No se puede deshacer."
       },
       "metrics": {
         "title": "Métricas",
@@ -976,7 +1108,8 @@
         "clearFilter": "Limpiar filtro",
         "filterEmpty": "Ninguna línea coincide con ese filtro.",
         "commandPlaceholder": "Escribe un comando (ej. say hola, list, time set day)",
-        "send": "Enviar"
+        "send": "Enviar",
+        "serverOffline": "El servidor está apagado. Inícialo antes de enviar comandos."
       },
       "players": {
         "onlineTitle": "Jugadores en línea",
@@ -1012,6 +1145,15 @@
         "bannedEmpty": "No hay jugadores baneados.",
         "actionApplied": "{action}: {name}",
         "listOp": "{kind} {op}: {name}",
+        "whitelistAdded": "{name} añadido a la whitelist",
+        "whitelistRemoved": "{name} quitado de la whitelist",
+        "opAdded": "{name} ahora es operador",
+        "opRemoved": "{name} ya no es operador",
+        "banAdded": "{name} baneado",
+        "banRemoved": "{name} perdonado",
+        "alreadyListed": "{name} ya está en la lista",
+        "updatedOffline": "Actualizado. El servidor está apagado.",
+        "savedNextStart": "Guardado. Se aplicará en el próximo inicio.",
         "opped": "{name} ahora es operador",
         "deopped": "{name} ya no es operador",
         "kicked": "{name} expulsado",
