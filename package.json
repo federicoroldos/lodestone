@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/server-create.test.cjs && node test/mrpack.test.cjs",
+    "test": "node test/server-create.test.cjs && node test/mrpack.test.cjs && node test/console-history.test.cjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
