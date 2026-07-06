@@ -38,6 +38,7 @@ const {
   installerFailureMessage,
   runForgeInstaller: runForgeInstallerProcess,
 } = require('./lib/serverInstaller.cjs');
+const { appendConsoleLine } = require('./lib/consoleHistory.cjs');
 const { extractRuntimeArchive } = require('./lib/runtimeArchive.cjs');
 const {
   readMrpackIndex,
@@ -463,11 +464,8 @@ class ServerManager {
 
   pushLine(text, level = 'info') {
     const entry = { ts: Date.now(), text, level };
-    this.history.push(entry);
     const max = config.consoleHistoryLines || 500;
-    if (this.history.length > max) {
-      this.history.splice(0, this.history.length - max);
-    }
+    if (!appendConsoleLine(this.history, entry, max)) return;
     this.broadcast({ type: 'line', line: entry });
   }
 
