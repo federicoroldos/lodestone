@@ -155,6 +155,8 @@ function genId() {
   return crypto.randomUUID();
 }
 
+const SERVER_NAME_MAX_LENGTH = 30;
+
 function slugify(s) {
   return String(s || 'server').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
 }
@@ -596,6 +598,7 @@ class ServerManager {
     this.startedAt = Date.now();
     this.adopted = false;
     this.adoptedPid = null;
+    markServerStarted(this.id);
     // Persist the pid so a future panel restart can re-adopt this child.
     setRunRecord(this.id, { pid: proc.pid, startedAt: this.startedAt });
 
@@ -1771,11 +1774,20 @@ app.get('/api/pick-folder', (req, res) => {
 // user away from modding before a first start.
 function hasGeneratedContent(s) {
   if (!s || !s.dir) return false;
+  if (s.hasStarted) return true;
   try {
     return fs.existsSync(path.join(s.dir, 'server.properties'));
   } catch (_) {
     return false;
   }
+}
+
+function markServerStarted(id) {
+  const s = findServer(id);
+  if (!s || s.hasStarted) return;
+  s.hasStarted = true;
+  saveConfig(config);
+  globalBroadcast({ type: 'server', server: serverWithStatus(s) });
 }
 
 function serverWithStatus(s) {
@@ -1793,6 +1805,7 @@ function serverWithStatus(s) {
     watchdog: s.watchdog,
     mapUrl: s.mapUrl || '',
     active: s.id === config.activeServerId,
+    hasStarted: !!s.hasStarted,
     hasGenerated: hasGeneratedContent(s),
     status: m.statusPayload(),
   };
@@ -1810,6 +1823,7 @@ function validateServerInput(body, user) {
   const dir = String(body.dir || '').trim();
   let jar = String(body.jar || '').trim();
   if (!name) return { error: eKey('errors.nameRequired') };
+  if (name.length > SERVER_NAME_MAX_LENGTH) return { error: eKey('errors.nameTooLong', { max: SERVER_NAME_MAX_LENGTH }) };
   if (!dir) return { error: eKey('errors.folderRequired') };
   if (!fs.existsSync(dir)) return { error: eKey('errors.folderDoesNotExist', { path: dir }) };
   if (!fs.statSync(dir).isDirectory()) return { error: eKey('errors.notAFolder') };
@@ -2922,6 +2936,7 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
       const createName = String(body.name || spec.name || index.name || 'Modpack Server').trim();
       const parentDir = String(body.parentDir || '').trim();
       if (!createName) return res.status(400).json({ error: tErr(req.user, 'errors.nameRequired') });
+      if (createName.length > SERVER_NAME_MAX_LENGTH) return res.status(400).json({ error: tErr(req.user, 'errors.nameTooLong', { max: SERVER_NAME_MAX_LENGTH }) });
       if (!parentDir || !fs.existsSync(parentDir)) return res.status(400).json({ error: tErr(req.user, 'errors.pickParentFolder') });
 
       const dir = path.join(parentDir, slugify(createName));
@@ -3722,6 +3737,7 @@ app.post('/api/create', requireAdmin, async (req, res) => {
   const mcVersion = String(body.mcVersion || '').trim();
   if (!SERVER_TYPES.includes(type)) return res.status(400).json({ error: tErr(req.user, 'errors.pickServerType') });
   if (!name) return res.status(400).json({ error: tErr(req.user, 'errors.nameRequired') });
+  if (name.length > SERVER_NAME_MAX_LENGTH) return res.status(400).json({ error: tErr(req.user, 'errors.nameTooLong', { max: SERVER_NAME_MAX_LENGTH }) });
   if (!parentDir || !fs.existsSync(parentDir)) return res.status(400).json({ error: tErr(req.user, 'errors.pickParentFolder') });
   if (!mcVersion) return res.status(400).json({ error: tErr(req.user, 'errors.pickMcVersion') });
   if (!body.eula) return res.status(400).json({ error: tErr(req.user, 'errors.eulaRequired') });
