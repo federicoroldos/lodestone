@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus, Server, Package, Search } from 'lucide-react';
 import { TableSkeleton, ModrinthResultSkeleton } from '@/components/shared/Skeletons';
 import { cn } from '@/lib/utils';
+import { SERVER_NAME_MAX_LENGTH } from '@/lib/limits';
 
 function FolderBrowserModal({ open, onOpenChange, onSelect, initial = '' }) {
   const api = useApi();
@@ -150,7 +151,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
           <div className="px-5 py-4 space-y-4">
             <div className="space-y-1.5">
               <Label>{t('servers.fieldName')}</Label>
-              <Input value={form.name} onChange={f('name')} placeholder={t('servers.namePlaceholder')} />
+              <Input value={form.name} onChange={f('name')} maxLength={SERVER_NAME_MAX_LENGTH} placeholder={t('servers.namePlaceholder')} />
             </div>
             <div className="space-y-1.5">
               <Label>{t('servers.fieldFolder')}</Label>
@@ -322,7 +323,7 @@ function CreateServerModal({ open, onOpenChange, onCreated }) {
           <p className="text-xs text-muted-foreground">{t('servers.createIntro')}</p>
           <div className="space-y-1.5">
             <Label>{t('servers.fieldName')}</Label>
-            <Input value={form.name} onChange={f('name')} disabled={loading} placeholder={t('servers.namePlaceholderCreate')} />
+            <Input value={form.name} onChange={f('name')} maxLength={SERVER_NAME_MAX_LENGTH} disabled={loading} placeholder={t('servers.namePlaceholderCreate')} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -609,7 +610,7 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
                   </div>
                   <div className="space-y-1.5">
                     <Label>{t('servers.fieldName')}</Label>
-                    <Input value={name} onChange={e => setName(e.target.value)} disabled={installing} placeholder={t('modrinth.modpackCreateName')} autoFocus />
+                    <Input value={name} onChange={e => setName(e.target.value)} maxLength={SERVER_NAME_MAX_LENGTH} disabled={installing} placeholder={t('modrinth.modpackCreateName')} autoFocus />
                   </div>
                   <div className="space-y-1.5">
                     <Label>{t('servers.fieldParent')}</Label>
@@ -739,9 +740,9 @@ export function ServersView({ onSetActive, onRefresh }) {
                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-border bg-muted/30 text-muted-foreground">
                               <Server className="h-4 w-4" />
                             </div>
-                            <div>
-                              <div className="flex items-center gap-1.5 font-medium text-foreground">
-                                <span className="hover:text-primary cursor-pointer" onClick={() => onSetActive(s.id)}>
+                            <div className="min-w-0">
+                              <div className="flex max-w-[240px] items-center gap-1.5 font-medium text-foreground">
+                                <span className="truncate hover:text-primary cursor-pointer" title={s.name} onClick={() => onSetActive(s.id)}>
                                   {s.name}
                                 </span>
                                 {isActive && <Badge variant="active" className="text-[9px] px-1 py-0.5">{t('servers.activeLabel')}</Badge>}
@@ -801,7 +802,7 @@ export function ServersView({ onSetActive, onRefresh }) {
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>{t('servers.removeTitle')}</DialogTitle></DialogHeader>
             <div className="px-5 py-3 space-y-3">
-              <p className="text-sm text-muted-foreground">{(() => {
+              <p className="break-words text-sm text-muted-foreground">{(() => {
                 const txt = t('servers.removeBody', { name: confirmDelete.name });
                 const ni = txt.indexOf(confirmDelete.name);
                 if (ni < 0) return txt;

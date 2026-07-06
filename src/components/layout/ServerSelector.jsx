@@ -70,7 +70,7 @@ export function ServerSelector({ onSwitch, placement = 'bottom' }) {
         aria-expanded={open}
       >
         {active && <StatusDot status={serverStatus(active, statuses).status || 'offline'} />}
-        <span className="truncate text-foreground">{active ? active.name : t('serverSelector.noServers')}</span>
+        <span className="truncate text-foreground" title={active?.name || undefined}>{active ? active.name : t('serverSelector.noServers')}</span>
         <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
 
