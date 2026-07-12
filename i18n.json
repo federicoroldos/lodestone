@@ -137,13 +137,15 @@
         "dashboard": "Dashboard",
         "servers": "Servers",
         "metrics": "Metrics",
+        "health": "Health",
         "console": "Console",
         "players": "Players",
         "map": "Map",
-        "plugins": "Plugins",
+        "addons": "Addons",
         "modrinth": "Modrinth",
         "files": "Files",
         "configs": "Configs",
+        "updates": "Updates",
         "backups": "Backups",
         "schedules": "Schedules",
         "users": "Users",
@@ -251,7 +253,13 @@
         "daysAgo": "{d}d ago",
         "serverRemovedTitle": "Server Removed",
         "serverRemovedMessage": "Server \"{name}\" has been removed.",
-        "serverRemovedWithFilesMessage": "Server \"{name}\" has been removed along with its files."
+        "serverRemovedWithFilesMessage": "Server \"{name}\" has been removed along with its files.",
+        "server_crashedTitle": "Server crashed",
+        "server_crashedMessage": "Server \"{name}\" stopped unexpectedly.",
+        "watchdog_limitTitle": "Watchdog restart limit reached",
+        "watchdog_limitMessage": "Server \"{name}\" will not restart again to prevent a crash loop.",
+        "watchdog_restartTitle": "Watchdog restart",
+        "watchdog_restartMessage": "Server \"{name}\" crashed and will restart automatically."
       },
       "login": {
         "heading": "Sign in to your panel",
@@ -385,6 +393,88 @@
         "chartWorldSize": "World size",
         "sampledEveryMinute": "Sampled every minute."
       },
+      "health": {
+        "resources": "Resources",
+        "crashes": "Crashes",
+        "noCrashes": "No unexpected exits have been captured.",
+        "occurrences": "{count} occurrences",
+        "acknowledged": "Acknowledged",
+        "acknowledge": "Acknowledge",
+        "unacknowledge": "Unacknowledge",
+        "evidence": "Evidence",
+        "evidenceImmutable": "Captured evidence is immutable and stored separately from heuristic conclusions.",
+        "occurred": "Occurred",
+        "exitCode": "Exit code",
+        "signal": "Signal",
+        "consoleTail": "Console tail",
+        "latestLog": "Latest log excerpt",
+        "crashReport": "Crash report excerpt",
+        "unavailable": "Unavailable",
+        "conclusions": "Conclusions",
+        "heuristicNotice": "These are local heuristics, not diagnoses. Verify each suggestion against the evidence.",
+        "unknown": "No rule matched this incident. Review the evidence without assuming a cause.",
+        "suggestedChecks": "Suggested checks",
+        "confidence": {
+          "high": "High confidence",
+          "medium": "Medium confidence",
+          "low": "Low confidence"
+        },
+        "rule": {
+          "category": {
+            "memory": "Memory",
+            "java": "Java",
+            "watchdog": "Watchdog",
+            "plugin_or_mod": "Plugin or mod",
+            "resources": "Resources",
+            "unknown": "Unknown"
+          },
+          "memory.oom": {
+            "reasoning": {
+              "0": "Memory exhaustion markers were found."
+            },
+            "suggestions": {
+              "0": "Review the server memory limit and recent memory use.",
+              "1": "Check for plugins or mods retaining excessive memory."
+            }
+          },
+          "java.incompatible": {
+            "reasoning": {
+              "0": "Java class-version incompatibility markers were found."
+            },
+            "suggestions": {
+              "0": "Use the Java major required by this Minecraft or loader version.",
+              "1": "Check recently changed plugins or mods for Java requirements."
+            }
+          },
+          "watchdog.loop": {
+            "reasoning": {
+              "0": "Watchdog or stalled-tick markers were found."
+            },
+            "suggestions": {
+              "0": "Inspect the named thread stack and the work running on the server tick.",
+              "1": "Check recent CPU and memory pressure."
+            }
+          },
+          "loader.component": {
+            "reasoning": {
+              "0": "A plugin or mod loading failure was found."
+            },
+            "suggestions": {
+              "0": "Review the named component and its dependencies.",
+              "1": "Confirm it supports this server loader and Minecraft version."
+            }
+          },
+          "resource.pressure": {
+            "reasoning": {
+              "0": "Recent local metrics show resource pressure near the crash."
+            },
+            "suggestions": {
+              "0": "Compare the incident time with the Health resource charts.",
+              "1": "Check host capacity and the configured heap limit."
+            }
+          }
+        }
+      },
       "console": {
         "title": "Console",
         "autoscroll": "Autoscroll",
@@ -465,18 +555,24 @@
         "presetPl3xMap": "Pl3xMap (8080)",
         "presetCustom": "Custom"
       },
-      "plugins": {
-        "title": "Plugins",
+      "addons": {
+        "title": "Addons",
+        "tabPlugins": "Plugins",
+        "tabMods": "Mods",
         "uploadJar": "Upload .jar",
-        "hint": "After uploading or deleting, restart the server to apply.",
-        "empty": "No plugins installed. Upload a .jar or browse Modrinth.",
-        "deleteTitle": "Delete plugin",
+        "hint": "Uploads and deletions go to the {folder}/ folder. After uploading or deleting, restart the server to apply.",
+        "emptyPlugins": "No plugins installed. Upload a .jar or browse Modrinth.",
+        "emptyMods": "No mods installed. Upload a .jar or browse Modrinth.",
+        "deleteTitlePlugin": "Delete plugin",
+        "deleteTitleMod": "Delete mod",
         "deleteBody": "Delete \"{name}\"? Restart the server afterwards to apply.",
         "deletedToast": "Deleted. Restart to apply.",
         "uploadedToast": "Uploaded. Restart to apply."
       },
       "modrinth": {
         "title": "Browse content",
+        "browseGroup": "Browse",
+        "manageGroup": "Manage",
         "tabPlugins": "Plugins",
         "tabMods": "Mods",
         "tabModsDisabled": "Mods (not available for this server)",
@@ -508,11 +604,18 @@
         "modpackNotEligible": "This server is not compatible with this modpack.",
         "modpackReady": "Modpack ready: {name}",
         "modpackProgress": "Installing modpack…",
+        "modpackProgressBackground": "You can close this window. Installation will continue in the background.",
         "modpackCreated": "Created server {name} from modpack",
         "modpackUnsupportedToast": "This modpack targets an unsupported loader ({loader}). Only Fabric, Forge, and NeoForge modpacks can be installed.",
         "modpackIncompatibleToast": "This modpack doesn't match this server. Create a new server to match.",
         "modpackCreateName": "New server name",
-        "modpackCreateFolder": "Parent folder"
+        "modpackCreateFolder": "Parent folder",
+        "tabInstalledPack": "Installed Pack",
+        "tabHistory": "History",
+        "noInstalledPack": "No managed modpack is installed on this server.",
+        "packFiles": "{count} managed files",
+        "packInstalledAt": "Installed {date}",
+        "packVersion": "Version {version}"
       },
       "files": {
         "title": "File manager",
@@ -577,28 +680,142 @@
         "restartErrorToast": "Restart failed: {error}",
         "restartSuccessToast": "Restart requested.",
         "field": {
-          "max-players":          { "label": "Max players", "description": "Maximum number of players that can join the server at once." },
-          "gamemode":             { "label": "Default gamemode", "description": "The game mode new players start in when they join." },
-          "difficulty":           { "label": "Difficulty", "description": "How hard the world is: hostile mobs, hunger, and damage." },
-          "pvp":                  { "label": "Player vs player", "description": "When on, players can hurt each other. Turn off for a peaceful build server." },
-          "hardcore":             { "label": "Hardcore", "description": "Players are banned from the server on death." },
-          "motd":                 { "label": "Server message of the day", "description": "The text shown in the Minecraft server list under the server name." },
-          "white-list":           { "label": "Whitelist", "description": "Only players added to the whitelist can join." },
-          "allow-flight":         { "label": "Allow flight", "description": "Let players fly in survival mode. Useful for creative-style building on survival servers." },
-          "spawn-protection":     { "label": "Spawn protection radius", "description": "Blocks in this radius around spawn can only be broken by operators. Set to 0 to disable." },
-
-          "view-distance":        { "label": "View distance", "description": "How many chunks around each player are loaded. Higher is prettier but heavier." },
-          "simulation-distance":  { "label": "Simulation distance", "description": "How far away mobs, redstone and other game logic still tick. Lower than view distance saves CPU." },
-          "max-tick-time":        { "label": "Max tick time (ms)", "description": "If a single server tick takes longer than this, the watchdog crashes the server to recover." },
-          "max-world-size":       { "label": "Max world size (blocks)", "description": "Hard cap on the overworld border. New chunks stop generating past this radius." },
-
-          "server-port":          { "label": "Server port", "description": "TCP port the server listens on. Default 25565. Change if you run multiple servers on one machine." },
-          "online-mode":          { "label": "Online mode (authenticate)", "description": "Verify players against Mojang's servers. Turn off only for a private offline server." },
-          "enable-command-block": { "label": "Command blocks", "description": "Allow command blocks placed in the world to run commands." },
-          "level-name":           { "label": "World folder name", "description": "Folder under the server root that holds the world data. Renaming creates a fresh world." },
-          "level-seed":           { "label": "World seed", "description": "Seed used to generate the world. Leave blank to use the current seed." },
-          "level-type":           { "label": "World type", "description": "Shape of the world: default, flat, amplified, large biomes, etc.", "warning": "Changing the world type will regenerate the world on the next start and cannot be undone." },
-          "generate-structures":  { "label": "Generate structures", "description": "Whether villages, temples, strongholds and other structures spawn in new chunks." }
+          "max-players": {
+            "label": "Max players",
+            "description": "Maximum number of players that can join the server at once."
+          },
+          "gamemode": {
+            "label": "Default gamemode",
+            "description": "The game mode new players start in when they join."
+          },
+          "difficulty": {
+            "label": "Difficulty",
+            "description": "How hard the world is: hostile mobs, hunger, and damage."
+          },
+          "pvp": {
+            "label": "Player vs player",
+            "description": "When on, players can hurt each other. Turn off for a peaceful build server."
+          },
+          "hardcore": {
+            "label": "Hardcore",
+            "description": "Players are banned from the server on death."
+          },
+          "motd": {
+            "label": "Server message of the day",
+            "description": "The text shown in the Minecraft server list under the server name."
+          },
+          "white-list": {
+            "label": "Whitelist",
+            "description": "Only players added to the whitelist can join."
+          },
+          "allow-flight": {
+            "label": "Allow flight",
+            "description": "Let players fly in survival mode. Useful for creative-style building on survival servers."
+          },
+          "spawn-protection": {
+            "label": "Spawn protection radius",
+            "description": "Blocks in this radius around spawn can only be broken by operators. Set to 0 to disable."
+          },
+          "view-distance": {
+            "label": "View distance",
+            "description": "How many chunks around each player are loaded. Higher is prettier but heavier."
+          },
+          "simulation-distance": {
+            "label": "Simulation distance",
+            "description": "How far away mobs, redstone and other game logic still tick. Lower than view distance saves CPU."
+          },
+          "max-tick-time": {
+            "label": "Max tick time (ms)",
+            "description": "If a single server tick takes longer than this, the watchdog crashes the server to recover."
+          },
+          "max-world-size": {
+            "label": "Max world size (blocks)",
+            "description": "Hard cap on the overworld border. New chunks stop generating past this radius."
+          },
+          "server-port": {
+            "label": "Server port",
+            "description": "TCP port the server listens on. Default 25565. Change if you run multiple servers on one machine."
+          },
+          "online-mode": {
+            "label": "Online mode (authenticate)",
+            "description": "Verify players against Mojang's servers. Turn off only for a private offline server."
+          },
+          "enable-command-block": {
+            "label": "Command blocks",
+            "description": "Allow command blocks placed in the world to run commands."
+          },
+          "level-name": {
+            "label": "World folder name",
+            "description": "Folder under the server root that holds the world data. Renaming creates a fresh world."
+          },
+          "level-seed": {
+            "label": "World seed",
+            "description": "Seed used to generate the world. Leave blank to use the current seed."
+          },
+          "level-type": {
+            "label": "World type",
+            "description": "Shape of the world: default, flat, amplified, large biomes, etc.",
+            "warning": "Changing the world type will regenerate the world on the next start and cannot be undone."
+          },
+          "generate-structures": {
+            "label": "Generate structures",
+            "description": "Whether villages, temples, strongholds and other structures spawn in new chunks."
+          }
+        }
+      },
+      "updates": {
+        "title": "Safe update center",
+        "scan": "Scan for updates",
+        "hint": "Only Lodestone-managed artifacts with authoritative, compatible metadata can be updated.",
+        "lastScan": "Last scan",
+        "fresh": "Source metadata is fresh",
+        "stale": "Source metadata is stale",
+        "scanPrompt": "Scan to inventory managed and unmanaged content.",
+        "noManaged": "No managed plugins or mods yet.",
+        "current": "Up to date",
+        "unmanaged": "Unmanaged files",
+        "unmanagedHint": "These files cannot be selected because their identity is not verified.",
+        "createPlan": "Review plan",
+        "plan": "Update plan",
+        "status": "Status",
+        "diskNeed": "Download size",
+        "offlineSnapshot": "Offline commit · verified snapshot",
+        "apply": "Apply updates",
+        "rollback": "Rollback",
+        "history": "Operation history",
+        "applied": "Updates applied",
+        "rolledBack": "Update rolled back",
+        "reason": {
+          "missing": "Managed file is missing",
+          "locally_modified": "File differs from managed hash",
+          "unsupported_provider": "Provider is not supported",
+          "stale_metadata": "Metadata is stale",
+          "provider_error": "Provider could not be reached"
+        },
+        "scanning": "Scanning…",
+        "available": "Updates available",
+        "upToDate": "Up to date",
+        "attention": "Needs attention",
+        "attentionHint": "These files cannot be updated automatically until the issue below is resolved.",
+        "selectServer": "Select a server to scan its plugins and mods.",
+        "selectAll": "Select all",
+        "selectedCount": "{count} selected",
+        "snapshotNote": "A verified snapshot is taken before anything is written, so you can roll back.",
+        "noManagedHint": "Install plugins or mods from the Modrinth tab and they will show up here.",
+        "allCurrent": "Everything is up to date",
+        "allCurrentHint": "Every managed plugin and mod is on its latest compatible version.",
+        "mustBeOffline": "The server must be stopped before updates can be applied.",
+        "stopServer": "Stop server",
+        "itemCount": "{count} files",
+        "applyConfirm": "The selected files will be replaced after a verified snapshot is taken. You can roll back afterwards.",
+        "rollbackConfirm": "The snapshot taken before this update will be restored, undoing the updated files.",
+        "state": {
+          "planned": "Ready to apply",
+          "applying": "Applying…",
+          "succeeded": "Applied",
+          "failed": "Failed",
+          "rollback_available": "Failed · rollback available",
+          "rolled_back": "Rolled back"
         }
       },
       "backups": {
@@ -619,7 +836,26 @@
         "maxCountHint": "Keep only the N most recent (0 = unlimited).",
         "maxSizeMB": "Max total size (MB)",
         "maxSizeMBHint": "Delete oldest when the server's total backup size exceeds this (0 = unlimited).",
-        "savedToast": "Retention saved. Excess backups were pruned."
+        "savedToast": "Retention saved. Excess backups were pruned.",
+        "verified": "Verified",
+        "unverified": "Unverified",
+        "verify": "Verify backup",
+        "verifiedToast": "Backup verified successfully",
+        "contents": "Backup contents",
+        "fileCount": "{count} files",
+        "worldCount": "{count} worlds",
+        "drill": "Run recovery drill",
+        "drillQueued": "Recovery drill queued",
+        "drilled": "Drilled {age}",
+        "restore": "Restore backup",
+        "restorePreview": "Restore impact preview",
+        "restoreWarning": "The server must be offline before the staged restore can commit. A verified snapshot is created first.",
+        "replacements": "Replaced worlds",
+        "preserved": "Preserved worlds",
+        "diskRequired": "Required staging space",
+        "rollbackAvailable": "Rollback will be available after commit.",
+        "confirmRestore": "Stage and restore",
+        "restoreQueued": "Restore queued ({id})"
       },
       "tasks": {
         "title": "Scheduled tasks",
@@ -854,13 +1090,15 @@
         "dashboard": "Panel",
         "servers": "Servidores",
         "metrics": "Métricas",
+        "health": "Salud",
         "console": "Consola",
         "players": "Jugadores",
         "map": "Mapa",
-        "plugins": "Plugins",
+        "addons": "Addons",
         "modrinth": "Modrinth",
         "files": "Archivos",
         "configs": "Configs",
+        "updates": "Actualizaciones",
         "backups": "Copias",
         "schedules": "Tareas",
         "users": "Usuarios",
@@ -968,7 +1206,13 @@
         "daysAgo": "hace {d}d",
         "serverRemovedTitle": "Servidor eliminado",
         "serverRemovedMessage": "Servidor \"{name}\" eliminado.",
-        "serverRemovedWithFilesMessage": "Servidor \"{name}\" eliminado junto con sus archivos."
+        "serverRemovedWithFilesMessage": "Servidor \"{name}\" eliminado junto con sus archivos.",
+        "server_crashedTitle": "El servidor se cerró inesperadamente",
+        "server_crashedMessage": "El servidor \"{name}\" se detuvo inesperadamente.",
+        "watchdog_limitTitle": "Se alcanzó el límite de reinicios del monitor",
+        "watchdog_limitMessage": "El servidor \"{name}\" no volverá a reiniciarse para evitar un ciclo de fallos.",
+        "watchdog_restartTitle": "Reinicio del monitor",
+        "watchdog_restartMessage": "El servidor \"{name}\" falló y se reiniciará automáticamente."
       },
       "login": {
         "heading": "Inicia sesión en tu panel",
@@ -1102,6 +1346,88 @@
         "chartWorldSize": "Tamaño del mundo",
         "sampledEveryMinute": "Muestreo cada minuto."
       },
+      "health": {
+        "resources": "Recursos",
+        "crashes": "Fallos",
+        "noCrashes": "No se capturaron cierres inesperados.",
+        "occurrences": "{count} ocurrencias",
+        "acknowledged": "Reconocido",
+        "acknowledge": "Reconocer",
+        "unacknowledge": "Quitar reconocimiento",
+        "evidence": "Evidencia",
+        "evidenceImmutable": "La evidencia capturada es inmutable y se almacena separada de las conclusiones heurísticas.",
+        "occurred": "Ocurrió",
+        "exitCode": "Código de salida",
+        "signal": "Señal",
+        "consoleTail": "Final de la consola",
+        "latestLog": "Extracto del registro más reciente",
+        "crashReport": "Extracto del informe de fallo",
+        "unavailable": "No disponible",
+        "conclusions": "Conclusiones",
+        "heuristicNotice": "Estas son heurísticas locales, no diagnósticos. Verifica cada sugerencia con la evidencia.",
+        "unknown": "Ninguna regla coincidió con este incidente. Revisa la evidencia sin asumir una causa.",
+        "suggestedChecks": "Comprobaciones sugeridas",
+        "confidence": {
+          "high": "Confianza alta",
+          "medium": "Confianza media",
+          "low": "Confianza baja"
+        },
+        "rule": {
+          "category": {
+            "memory": "Memoria",
+            "java": "Java",
+            "watchdog": "Watchdog",
+            "plugin_or_mod": "Plugin o mod",
+            "resources": "Recursos",
+            "unknown": "Desconocido"
+          },
+          "memory.oom": {
+            "reasoning": {
+              "0": "Se encontraron marcadores de agotamiento de memoria."
+            },
+            "suggestions": {
+              "0": "Revisa el límite de memoria del servidor y el uso de memoria reciente.",
+              "1": "Comprueba si hay plugins o mods que retengan excesiva memoria."
+            }
+          },
+          "java.incompatible": {
+            "reasoning": {
+              "0": "Se encontraron marcadores de incompatibilidad de versión de Java."
+            },
+            "suggestions": {
+              "0": "Usa la versión principal de Java que requiere esta versión de Minecraft o loader.",
+              "1": "Comprueba los plugins o mods cambiados recientemente por requisitos de Java."
+            }
+          },
+          "watchdog.loop": {
+            "reasoning": {
+              "0": "Se encontraron marcadores de watchdog o de ticks detenidos."
+            },
+            "suggestions": {
+              "0": "Inspecciona la pila del hilo nombrado y el trabajo ejecutándose en el tick del servidor.",
+              "1": "Comprueba la presión reciente de CPU y memoria."
+            }
+          },
+          "loader.component": {
+            "reasoning": {
+              "0": "Se encontró una falla de carga de un plugin o mod."
+            },
+            "suggestions": {
+              "0": "Revisa el componente nombrado y sus dependencias.",
+              "1": "Confirma que soporta este loader de servidor y versión de Minecraft."
+            }
+          },
+          "resource.pressure": {
+            "reasoning": {
+              "0": "Las métricas locales recientes muestran presión de recursos cerca del fallo."
+            },
+            "suggestions": {
+              "0": "Compara el momento del incidente con los gráficos de recursos de Salud.",
+              "1": "Comprueba la capacidad del host y el límite de heap configurado."
+            }
+          }
+        }
+      },
       "console": {
         "title": "Consola",
         "autoscroll": "Auto-desplazar",
@@ -1182,18 +1508,24 @@
         "presetPl3xMap": "Pl3xMap (8080)",
         "presetCustom": "Personalizado"
       },
-      "plugins": {
-        "title": "Plugins",
+      "addons": {
+        "title": "Addons",
+        "tabPlugins": "Plugins",
+        "tabMods": "Mods",
         "uploadJar": "Subir .jar",
-        "hint": "Después de subir o eliminar, reinicia el servidor para aplicar.",
-        "empty": "No hay plugins instalados. Sube un .jar o explora Modrinth.",
-        "deleteTitle": "Eliminar plugin",
+        "hint": "Las subidas y eliminaciones van a la carpeta {folder}/. Después de subir o eliminar, reinicia el servidor para aplicar.",
+        "emptyPlugins": "No hay plugins instalados. Sube un .jar o explora Modrinth.",
+        "emptyMods": "No hay mods instalados. Sube un .jar o explora Modrinth.",
+        "deleteTitlePlugin": "Eliminar plugin",
+        "deleteTitleMod": "Eliminar mod",
         "deleteBody": "¿Eliminar \"{name}\"? Reinicia el servidor después para aplicar.",
         "deletedToast": "Eliminado. Reinicia para aplicar.",
         "uploadedToast": "Subido. Reinicia para aplicar."
       },
       "modrinth": {
         "title": "Explorar contenido",
+        "browseGroup": "Explorar",
+        "manageGroup": "Administrar",
         "tabPlugins": "Plugins",
         "tabMods": "Mods",
         "tabModsDisabled": "Mods (no disponible para este servidor)",
@@ -1225,11 +1557,18 @@
         "modpackNotEligible": "Este servidor no es compatible con este modpack.",
         "modpackReady": "Modpack listo: {name}",
         "modpackProgress": "Instalando modpack…",
+        "modpackProgressBackground": "Puedes cerrar esta ventana. La instalación continuará en segundo plano.",
         "modpackCreated": "Servidor {name} creado desde modpack",
         "modpackUnsupportedToast": "Este modpack usa un loader no soportado ({loader}). Solo se pueden instalar modpacks de Fabric, Forge y NeoForge.",
         "modpackIncompatibleToast": "Este modpack no coincide con este servidor. Crea uno nuevo para este modpack.",
         "modpackCreateName": "Nombre del nuevo servidor",
-        "modpackCreateFolder": "Carpeta contenedora"
+        "modpackCreateFolder": "Carpeta contenedora",
+        "tabInstalledPack": "Pack instalado",
+        "tabHistory": "Historial",
+        "noInstalledPack": "No hay ningún modpack administrado instalado en este servidor.",
+        "packFiles": "{count} archivos administrados",
+        "packInstalledAt": "Instalado el {date}",
+        "packVersion": "Versión {version}"
       },
       "files": {
         "title": "Administrador de archivos",
@@ -1294,28 +1633,142 @@
         "restartErrorToast": "Error al reiniciar: {error}",
         "restartSuccessToast": "Reinicio solicitado.",
         "field": {
-          "max-players":          { "label": "Máx. jugadores", "description": "Número máximo de jugadores que pueden conectarse al servidor a la vez." },
-          "gamemode":             { "label": "Modo de juego por defecto", "description": "El modo de juego en el que entran los jugadores nuevos al unirse." },
-          "difficulty":           { "label": "Dificultad", "description": "Qué tan difícil es el mundo: mobs hostiles, hambre y daño." },
-          "pvp":                  { "label": "Jugador contra jugador", "description": "Activado, los jugadores pueden hacerse daño. Desactívalo para un servidor de construcción pacífico." },
-          "hardcore":             { "label": "Hardcore", "description": "Los jugadores son baneados del servidor al morir." },
-          "motd":                 { "label": "Mensaje del día del servidor", "description": "Texto que se muestra en la lista de servidores de Minecraft, debajo del nombre." },
-          "white-list":           { "label": "Lista blanca", "description": "Solo los jugadores añadidos a la lista blanca pueden unirse." },
-          "allow-flight":         { "label": "Permitir vuelo", "description": "Permite a los jugadores volar en modo supervivencia. Útil para construir al estilo creativo en servidores survival." },
-          "spawn-protection":     { "label": "Radio de protección del spawn", "description": "Los bloques en este radio alrededor del spawn solo pueden romperse por operadores. Pon 0 para desactivarlo." },
-
-          "view-distance":        { "label": "Distancia de visión", "description": "Cuántos chunks alrededor de cada jugador se cargan. Más alto se ve mejor pero consume más recursos." },
-          "simulation-distance":  { "label": "Distancia de simulación", "description": "A qué distancia siguen tickeando mobs, redstone y la lógica del juego. Más bajo que la distancia de visión ahorra CPU." },
-          "max-tick-time":        { "label": "Tiempo máx. de tick (ms)", "description": "Si un solo tick tarda más que esto, el watchdog cierra el servidor para recuperarse." },
-          "max-world-size":       { "label": "Tamaño máx. del mundo (bloques)", "description": "Límite duro del borde del overworld. Los chunks nuevos dejan de generarse pasado este radio." },
-
-          "server-port":          { "label": "Puerto del servidor", "description": "Puerto TCP en el que escucha el servidor. Por defecto 25565. Cámbialo si ejecutas varios servidores en la misma máquina." },
-          "online-mode":          { "label": "Modo en línea (autenticar)", "description": "Verifica a los jugadores contra los servidores de Mojang. Desactívalo solo para un servidor privado sin conexión." },
-          "enable-command-block": { "label": "Bloques de comandos", "description": "Permite que los bloques de comandos colocados en el mundo ejecuten comandos." },
-          "level-name":           { "label": "Nombre de la carpeta del mundo", "description": "Carpeta dentro de la raíz del servidor que contiene los datos del mundo. Renombrarla crea un mundo nuevo." },
-          "level-seed":           { "label": "Semilla del mundo", "description": "Semilla usada para generar el mundo. Déjala en blanco para usar la semilla actual." },
-          "level-type":           { "label": "Tipo de mundo", "description": "Forma del mundo: por defecto, plano, amplificado, biomas grandes, etc.", "warning": "Cambiar el tipo de mundo regenerará el mundo en el próximo inicio y no se puede deshacer." },
-          "generate-structures":  { "label": "Generar estructuras", "description": "Si aldeas, templos, fortalezas y otras estructuras aparecen en los chunks nuevos." }
+          "max-players": {
+            "label": "Máx. jugadores",
+            "description": "Número máximo de jugadores que pueden conectarse al servidor a la vez."
+          },
+          "gamemode": {
+            "label": "Modo de juego por defecto",
+            "description": "El modo de juego en el que entran los jugadores nuevos al unirse."
+          },
+          "difficulty": {
+            "label": "Dificultad",
+            "description": "Qué tan difícil es el mundo: mobs hostiles, hambre y daño."
+          },
+          "pvp": {
+            "label": "Jugador contra jugador",
+            "description": "Activado, los jugadores pueden hacerse daño. Desactívalo para un servidor de construcción pacífico."
+          },
+          "hardcore": {
+            "label": "Hardcore",
+            "description": "Los jugadores son baneados del servidor al morir."
+          },
+          "motd": {
+            "label": "Mensaje del día del servidor",
+            "description": "Texto que se muestra en la lista de servidores de Minecraft, debajo del nombre."
+          },
+          "white-list": {
+            "label": "Lista blanca",
+            "description": "Solo los jugadores añadidos a la lista blanca pueden unirse."
+          },
+          "allow-flight": {
+            "label": "Permitir vuelo",
+            "description": "Permite a los jugadores volar en modo supervivencia. Útil para construir al estilo creativo en servidores survival."
+          },
+          "spawn-protection": {
+            "label": "Radio de protección del spawn",
+            "description": "Los bloques en este radio alrededor del spawn solo pueden romperse por operadores. Pon 0 para desactivarlo."
+          },
+          "view-distance": {
+            "label": "Distancia de visión",
+            "description": "Cuántos chunks alrededor de cada jugador se cargan. Más alto se ve mejor pero consume más recursos."
+          },
+          "simulation-distance": {
+            "label": "Distancia de simulación",
+            "description": "A qué distancia siguen tickeando mobs, redstone y la lógica del juego. Más bajo que la distancia de visión ahorra CPU."
+          },
+          "max-tick-time": {
+            "label": "Tiempo máx. de tick (ms)",
+            "description": "Si un solo tick tarda más que esto, el watchdog cierra el servidor para recuperarse."
+          },
+          "max-world-size": {
+            "label": "Tamaño máx. del mundo (bloques)",
+            "description": "Límite duro del borde del overworld. Los chunks nuevos dejan de generarse pasado este radio."
+          },
+          "server-port": {
+            "label": "Puerto del servidor",
+            "description": "Puerto TCP en el que escucha el servidor. Por defecto 25565. Cámbialo si ejecutas varios servidores en la misma máquina."
+          },
+          "online-mode": {
+            "label": "Modo en línea (autenticar)",
+            "description": "Verifica a los jugadores contra los servidores de Mojang. Desactívalo solo para un servidor privado sin conexión."
+          },
+          "enable-command-block": {
+            "label": "Bloques de comandos",
+            "description": "Permite que los bloques de comandos colocados en el mundo ejecuten comandos."
+          },
+          "level-name": {
+            "label": "Nombre de la carpeta del mundo",
+            "description": "Carpeta dentro de la raíz del servidor que contiene los datos del mundo. Renombrarla crea un mundo nuevo."
+          },
+          "level-seed": {
+            "label": "Semilla del mundo",
+            "description": "Semilla usada para generar el mundo. Déjala en blanco para usar la semilla actual."
+          },
+          "level-type": {
+            "label": "Tipo de mundo",
+            "description": "Forma del mundo: por defecto, plano, amplificado, biomas grandes, etc.",
+            "warning": "Cambiar el tipo de mundo regenerará el mundo en el próximo inicio y no se puede deshacer."
+          },
+          "generate-structures": {
+            "label": "Generar estructuras",
+            "description": "Si aldeas, templos, fortalezas y otras estructuras aparecen en los chunks nuevos."
+          }
+        }
+      },
+      "updates": {
+        "title": "Centro de actualizaciones seguras",
+        "scan": "Buscar actualizaciones",
+        "hint": "Solo se pueden actualizar elementos gestionados por Lodestone con metadatos compatibles y verificados.",
+        "lastScan": "Último análisis",
+        "fresh": "Los metadatos están actualizados",
+        "stale": "Los metadatos están desactualizados",
+        "scanPrompt": "Analiza para inventariar contenido gestionado y no gestionado.",
+        "noManaged": "Aún no hay plugins o mods gestionados.",
+        "current": "Actualizado",
+        "unmanaged": "Archivos no gestionados",
+        "unmanagedHint": "No se pueden seleccionar porque su identidad no está verificada.",
+        "createPlan": "Revisar plan",
+        "plan": "Plan de actualización",
+        "status": "Estado",
+        "diskNeed": "Tamaño de descarga",
+        "offlineSnapshot": "Aplicación sin conexión · copia verificada",
+        "apply": "Aplicar actualizaciones",
+        "rollback": "Revertir",
+        "history": "Historial de operaciones",
+        "applied": "Actualizaciones aplicadas",
+        "rolledBack": "Actualización revertida",
+        "reason": {
+          "missing": "Falta el archivo gestionado",
+          "locally_modified": "El archivo difiere del hash gestionado",
+          "unsupported_provider": "El proveedor no es compatible",
+          "stale_metadata": "Los metadatos están desactualizados",
+          "provider_error": "No se pudo contactar al proveedor"
+        },
+        "scanning": "Analizando…",
+        "available": "Actualizaciones disponibles",
+        "upToDate": "Al día",
+        "attention": "Requieren atención",
+        "attentionHint": "Estos archivos no se pueden actualizar automáticamente hasta resolver el problema indicado.",
+        "selectServer": "Selecciona un servidor para analizar sus plugins y mods.",
+        "selectAll": "Seleccionar todo",
+        "selectedCount": "{count} seleccionados",
+        "snapshotNote": "Se toma una instantánea verificada antes de escribir nada, para poder revertir.",
+        "noManagedHint": "Instala plugins o mods desde la pestaña Modrinth y aparecerán aquí.",
+        "allCurrent": "Todo está al día",
+        "allCurrentHint": "Todos los plugins y mods gestionados están en su última versión compatible.",
+        "mustBeOffline": "El servidor debe estar detenido para aplicar actualizaciones.",
+        "stopServer": "Detener servidor",
+        "itemCount": "{count} archivos",
+        "applyConfirm": "Los archivos seleccionados se reemplazarán tras tomar una instantánea verificada. Podrás revertir después.",
+        "rollbackConfirm": "Se restaurará la instantánea tomada antes de esta actualización, deshaciendo los archivos actualizados.",
+        "state": {
+          "planned": "Lista para aplicar",
+          "applying": "Aplicando…",
+          "succeeded": "Aplicada",
+          "failed": "Fallida",
+          "rollback_available": "Fallida · se puede revertir",
+          "rolled_back": "Revertida"
         }
       },
       "backups": {
@@ -1336,7 +1789,26 @@
         "maxCountHint": "Conservar solo las N más recientes (0 = sin límite).",
         "maxSizeMB": "Tamaño total máx. (MB)",
         "maxSizeMBHint": "Borrar la más antigua cuando el total del servidor supere este valor (0 = sin límite).",
-        "savedToast": "Retención guardada. Se eliminaron las copias sobrantes."
+        "savedToast": "Retención guardada. Se eliminaron las copias sobrantes.",
+        "verified": "Verificada",
+        "unverified": "Sin verificar",
+        "verify": "Verificar copia",
+        "verifiedToast": "Copia verificada correctamente",
+        "contents": "Contenido de la copia",
+        "fileCount": "{count} archivos",
+        "worldCount": "{count} mundos",
+        "drill": "Ejecutar simulacro de recuperación",
+        "drillQueued": "Simulacro de recuperación en cola",
+        "drilled": "Simulacro {age}",
+        "restore": "Restaurar copia",
+        "restorePreview": "Vista previa del impacto",
+        "restoreWarning": "El servidor debe estar apagado para confirmar la restauración preparada. Primero se crea una copia verificada.",
+        "replacements": "Mundos reemplazados",
+        "preserved": "Mundos conservados",
+        "diskRequired": "Espacio necesario",
+        "rollbackAvailable": "La reversión estará disponible después de confirmar.",
+        "confirmRestore": "Preparar y restaurar",
+        "restoreQueued": "Restauración en cola ({id})"
       },
       "tasks": {
         "title": "Tareas programadas",

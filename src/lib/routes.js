@@ -6,15 +6,16 @@
 export const VIEW_PATHS = {
   dashboard: '/',
   servers: '/servers',
-  metrics: '/metrics',
+  health: '/health',
   console: '/console',
   players: '/players',
   map: '/map',
-  plugins: '/plugins',
+  addons: '/addons',
   modrinth: '/mods',
   files: '/files',
   configs: '/configs',
   backups: '/backups',
+  updates: '/updates',
   tasks: '/schedules',
   users: '/users',
 };
@@ -22,6 +23,7 @@ export const VIEW_PATHS = {
 const PATH_TO_VIEW = Object.fromEntries(
   Object.entries(VIEW_PATHS).map(([view, path]) => [path, view])
 );
+PATH_TO_VIEW['/metrics'] = 'health';
 
 export function viewToPath(view) {
   return VIEW_PATHS[view] || '/';

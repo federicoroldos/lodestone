@@ -100,7 +100,7 @@ There are **no tests and no linter**. "Verify" means: start the panel, open
 | Active-server control | `GET /status`, `POST /server/{start,stop,restart}`, `POST /command` |
 | Players | `GET /players`, `POST /players/:action`, `GET /playerlists`, `POST /whitelist/toggle`, `POST /playerlists/:kind/:op` |
 | Metrics | `GET /metrics?serverId=&range=` |
-| Plugins | `GET /plugins`, `POST /plugins/upload`, `DELETE /plugins/:name` |
+| Addons (plugins + mods) | `GET /addons?kind=`, `POST /addons/upload?kind=`, `DELETE /addons/:name?kind=` (`kind` = `plugins` \| `mods`) |
 | Configs editor | `GET /configs`, `GET/PUT /configs/:name` |
 | File manager | `GET /files`, `GET /files/read`, `PUT /files/write`, `POST /files/{mkdir,rename,upload}`, `DELETE /files`, `GET /files/download` |
 | Backups | `GET/POST /backups`, `DELETE /backups/:name`, `GET /backups/:name/download` |
@@ -115,7 +115,7 @@ Edit the React source under `src/`, never the built `public/assets/*` (see "Run 
 
 - **`src/main.jsx` / `src/App.jsx`** bootstrap the SPA and route between views via the sidebar.
   One file per view in **`src/views/*`** (`DashboardView, ServersView, MetricsView, ConsoleView,
-  PlayersView, MapView, PluginsView, ModrinthView, FileManagerView, ConfigsView, BackupsView,
+  PlayersView, MapView, AddonsView, ModrinthView, FileManagerView, ConfigsView, BackupsView,
   TasksView (Schedules), UsersView, LoginView`).
 - **State/context** lives in `src/context/*` (`AuthContext`, `ServerContext`, `I18nContext`)
   and **`src/hooks/*`** (`useApi`, `useApiStream`, `useWebSocket`): the token sits in

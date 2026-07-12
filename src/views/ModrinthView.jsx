@@ -8,19 +8,14 @@ import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { useServer } from '@/context/ServerContext';
 import { osExamplePath } from '@/lib/utils';
+import { jarIsModLoader } from '@/lib/compat';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Search, Download, Check, FolderOpen, Package } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ModrinthResultSkeleton } from '@/components/shared/Skeletons';
-
-function jarIsModLoader(jar, loader) {
-  const l = String(loader || '').toLowerCase();
-  if (['fabric', 'quilt', 'neoforge', 'forge'].includes(l)) return true;
-  const j = String(jar || '').toLowerCase();
-  return /fabric|quilt|neoforge|forge/.test(j) && !/paper|spigot|bukkit|vanilla|minecraft_server/.test(j);
-}
+import { showModpackProgressToast } from '@/components/shared/ModpackProgressToast';
 
 function ModrinthResults({ compat, projectType, onInstalled }) {
   const api = useApi();
@@ -212,6 +207,7 @@ function ModpacksInstallDialog({ open, onOpenChange, projectId, compat, onInstal
   async function installModpack(installMode) {
     if (!preview) return;
     setInstalling(true);
+    let progressToast;
     try {
       const body = { versionId: preview.versionId, mode: installMode };
       if (installMode === 'create') {
@@ -220,15 +216,18 @@ function ModpacksInstallDialog({ open, onOpenChange, projectId, compat, onInstal
         if (!body.name.trim()) { toast.error(t('modrinth.modpackCreateName')); setInstalling(false); return; }
         if (!body.parentDir.trim()) { toast.error(t('modrinth.modpackCreateFolder')); setInstalling(false); return; }
       }
+      progressToast = showModpackProgressToast(t);
       const r = await api('/api/modrinth/modpack/install', { method: 'POST', body });
+      toast.dismiss(progressToast);
       if (installMode === 'create') {
         toast.success(t('modrinth.modpackCreated', { name: name || r.name }));
       } else {
         toast.success(t('modrinth.installedToast', { name: r.name }));
       }
       onOpenChange(false);
-      onInstalled?.();
+      onInstalled?.(r, installMode);
     } catch (e) {
+      if (progressToast) toast.dismiss(progressToast);
       toast.error(e.message);
     }
     setInstalling(false);
@@ -464,9 +463,36 @@ function ModpacksTab({ compat, onInstalled }) {
   );
 }
 
-export function ModrinthView() {
+function InstalledPackTab({ history = false, refreshKey = 0 }) {
+  const api = useApi();
   const t = useT();
-  const { servers, activeServerId } = useServer();
+  const { activeServerId } = useServer();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!activeServerId) return;
+    api(`/api/modpacks/installed?serverId=${encodeURIComponent(activeServerId)}`).then(setData).catch(e => setError(e.message));
+  }, [api, activeServerId, refreshKey]);
+  if (error) return <ErrorState error={error} />;
+  if (!data) return <Skeleton className="h-24 w-full rounded-md" />;
+  const items = history ? data.history : (data.installed ? [data.installed] : []);
+  if (!items.length) return <p className="text-sm text-muted-foreground italic">{t('modrinth.noInstalledPack')}</p>;
+  return <div className="space-y-2">{items.map(item => (
+    <div key={item.id} className="flex gap-4 rounded-lg border border-border/60 bg-secondary/20 p-4">
+      {item.iconUrl && <img src={item.iconUrl} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{item.projectName || item.project_id}</span><Badge variant="softPrimary">{item.loader}</Badge><Badge variant="default">MC {item.mc_version}</Badge></div>
+        <p className="mt-1 text-sm text-muted-foreground">{item.versionName || item.versionNumber || item.version_id}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{t('modrinth.packFiles', { count: item.file_count })} · {t('modrinth.packInstalledAt', { date: new Date(item.installed_at).toLocaleString() })}</p>
+      </div>
+    </div>
+  ))}</div>;
+}
+
+export function ModrinthView() {
+  const api = useApi();
+  const t = useT();
+  const { servers, setServers, activeServerId, setActiveServerId } = useServer();
 
   const activeServer = useMemo(
     () => servers.find(s => s.id === activeServerId) || null,
@@ -501,6 +527,21 @@ export function ModrinthView() {
   }, [activeServer]);
 
   const [tab, setTab] = useState('plugins');
+  const [installedPackRefreshKey, setInstalledPackRefreshKey] = useState(0);
+
+  const handleModpackInstalled = async (result, mode) => {
+    if (mode === 'create' && result?.serverId) {
+      if (result.server) {
+        setServers(current => current.some(server => server.id === result.serverId)
+          ? current.map(server => server.id === result.serverId ? result.server : server)
+          : [...current, result.server]);
+      }
+      await api('/api/active', { method: 'POST', body: { serverId: result.serverId } });
+      setActiveServerId(result.serverId);
+    }
+    setInstalledPackRefreshKey(key => key + 1);
+    setTab('installed');
+  };
 
   useEffect(() => {
     if (!compat?.canMods && tab === 'mods') setTab('plugins');
@@ -513,13 +554,29 @@ export function ModrinthView() {
       </CardHeader>
       <CardContent>
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="plugins">{t('modrinth.tabPlugins')}</TabsTrigger>
-            <TabsTrigger value="mods" disabled={!compat?.canMods}>
-              {compat?.canMods ? t('modrinth.tabMods') : t('modrinth.tabModsDisabled')}
-            </TabsTrigger>
-            <TabsTrigger value="modpacks">{t('modrinth.tabModpacks')}</TabsTrigger>
-          </TabsList>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5">
+              <div className="px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {t('modrinth.browseGroup')}
+              </div>
+              <TabsList>
+                <TabsTrigger value="plugins">{t('modrinth.tabPlugins')}</TabsTrigger>
+                <TabsTrigger value="mods" disabled={!compat?.canMods}>
+                  {compat?.canMods ? t('modrinth.tabMods') : t('modrinth.tabModsDisabled')}
+                </TabsTrigger>
+                <TabsTrigger value="modpacks">{t('modrinth.tabModpacks')}</TabsTrigger>
+              </TabsList>
+            </div>
+            <div className="space-y-1.5 sm:border-l sm:border-border sm:pl-4">
+              <div className="px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {t('modrinth.manageGroup')}
+              </div>
+              <TabsList>
+                <TabsTrigger value="installed">{t('modrinth.tabInstalledPack')}</TabsTrigger>
+                <TabsTrigger value="history">{t('modrinth.tabHistory')}</TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
           <TabsContent value="plugins">
             <ModrinthResults compat={compat} projectType="plugin" />
           </TabsContent>
@@ -527,8 +584,13 @@ export function ModrinthView() {
             <ModsTab compat={compat} serverLabel={compat?.label} />
           </TabsContent>
           <TabsContent value="modpacks">
-            <ModpacksTab compat={compat} />
+            <ModpacksTab
+              compat={compat}
+              onInstalled={handleModpackInstalled}
+            />
           </TabsContent>
+          <TabsContent value="installed"><InstalledPackTab refreshKey={installedPackRefreshKey} /></TabsContent>
+          <TabsContent value="history"><InstalledPackTab history refreshKey={installedPackRefreshKey} /></TabsContent>
         </Tabs>
       </CardContent>
     </Card>

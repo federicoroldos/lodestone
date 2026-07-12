@@ -18,7 +18,11 @@ export function useApi() {
       throw new Error(t('common.sessionExpired'));
     }
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || t('common.httpError', { status: r.status }));
+    if (!r.ok) {
+      const error = data.error;
+      const translated = typeof error === 'string' ? t(error) : '';
+      throw new Error(error && translated !== error ? translated : (error || t('common.httpError', { status: r.status })));
+    }
     return data;
   }, [token, logout, t]);
 
