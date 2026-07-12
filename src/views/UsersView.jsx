@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -12,10 +13,90 @@ import { ListSkeleton } from '@/components/shared/Skeletons';
 import { PasswordStrength } from '@/components/shared/PasswordStrength';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
+import { useServer } from '@/context/ServerContext';
 import { useT } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Trash2, Plus, ShieldCheck, Wrench } from 'lucide-react';
+import { Pencil, Trash2, Plus, ShieldCheck, Wrench, KeyRound } from 'lucide-react';
+
+function PermissionModal({ open, onOpenChange, user, onSaved }) {
+  const api = useApi();
+  const t = useT();
+  const { servers } = useServer();
+  const [catalog, setCatalog] = useState({ perServer: [], global: [] });
+  const [selected, setSelected] = useState(new Set());
+  const [loading, setLoading] = useState(false);
+  const key = (serverId, capability) => `${serverId || ''}\0${capability}`;
+
+  useEffect(() => {
+    if (!open || !user) return;
+    setLoading(true);
+    api(`/api/users/${user.id}/permissions`)
+      .then((data) => {
+        setCatalog(data.capabilities);
+        setSelected(new Set(data.permissions.grants.map((grant) => key(grant.serverId, grant.capability))));
+      })
+      .catch((error) => toast.error(error.message))
+      .finally(() => setLoading(false));
+  }, [open, user]);
+
+  function toggle(serverId, capability, checked) {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      const value = key(serverId, capability);
+      if (checked) next.add(value); else next.delete(value);
+      return next;
+    });
+  }
+
+  async function save() {
+    const grants = [];
+    for (const capability of catalog.global) if (selected.has(key(null, capability))) grants.push({ serverId: null, capability });
+    for (const server of servers) for (const capability of catalog.perServer) {
+      if (selected.has(key(server.id, capability))) grants.push({ serverId: server.id, capability });
+    }
+    try {
+      await api(`/api/users/${user.id}/permissions`, { method: 'PUT', body: { grants } });
+      toast.success(t('users.permissionsSaved'));
+      onSaved();
+      onOpenChange(false);
+    } catch (error) { toast.error(error.message); }
+  }
+
+  const permissionLabel = (capability) => capability.split('.').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  const group = (title, serverId, capabilities) => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-foreground">{title}</div>
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        {capabilities.map((capability) => (
+          <label key={capability} className="flex items-center gap-2 rounded-md border border-border/60 px-2.5 py-2 text-xs">
+            <Checkbox checked={selected.has(key(serverId, capability))} onCheckedChange={(checked) => toggle(serverId, capability, checked === true)} />
+            {permissionLabel(capability)}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>{t('users.permissionsTitle', { user: user?.username || user?.email || '' })}</DialogTitle></DialogHeader>
+        <div className="max-h-[65vh] space-y-5 overflow-y-auto px-5 py-4">
+          <p className="text-xs text-muted-foreground">{t('users.permissionsHint')}</p>
+          {loading ? <ListSkeleton rows={4} /> : <>
+            {group(t('users.globalPermissions'), null, catalog.global)}
+            {servers.map((server) => <div key={server.id}>{group(server.name, server.id, catalog.perServer)}</div>)}
+          </>}
+        </div>
+        <DialogFooter>
+          <Button variant="glass" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button onClick={save} disabled={loading}>{t('common.save')}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function RoleBadge({ role }) {
   const t = useT();
@@ -125,6 +206,7 @@ export function UsersView() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [permissionUser, setPermissionUser] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -185,6 +267,11 @@ export function UsersView() {
                     <Button variant="glass" size="xs" onClick={() => { setEditUser(u); setModalOpen(true); }}>
                       <Pencil className="h-3 w-3" />{t('common.edit')}
                     </Button>
+                    {u.role !== 'admin' && (
+                      <Button variant="glass" size="xs" onClick={() => setPermissionUser(u)}>
+                        <KeyRound className="h-3 w-3" />{t('users.permissions')}
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon-xs"
                       disabled={isSelf}
                       onClick={() => setPendingDelete(u)}>
@@ -212,6 +299,12 @@ export function UsersView() {
         confirmLabel={t('common.delete')}
         destructive
         onConfirm={() => { deleteUser(pendingDelete.id); setPendingDelete(null); }}
+      />
+      <PermissionModal
+        open={!!permissionUser}
+        onOpenChange={(value) => { if (!value) setPermissionUser(null); }}
+        user={permissionUser}
+        onSaved={load}
       />
     </>
   );

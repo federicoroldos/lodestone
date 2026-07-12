@@ -12,10 +12,10 @@ import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
 const VIEW_KEYS = {
   servers:  'nav.servers',
   dashboard:'nav.dashboard',
-  metrics:  'nav.metrics',
+  health:   'nav.health',
   console:  'nav.console',
   players:  'nav.players',
-  plugins:  'nav.plugins',
+  addons:   'nav.addons',
   configs:  'nav.configs',
   files:    'nav.files',
   tasks:    'nav.schedules',
@@ -23,6 +23,9 @@ const VIEW_KEYS = {
   modrinth: 'nav.modrinth',
   map:      'nav.map',
   users:    'nav.users',
+  worlds:   'nav.worlds',
+  updates:  'nav.updates',
+  audit:    'nav.audit',
 };
 
 export function Header({ currentView, onServerSwitch, onOpenSettings }) {

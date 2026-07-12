@@ -64,12 +64,13 @@ detect_pm
 [ -n "$PM" ] && echo "  Package manager: $PM" || echo "  No known package manager detected."
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "[MISSING] Node.js is not installed (need version 18 or newer)."
+  echo "[MISSING] Node.js is not installed (need version 20 or newer)."
   if confirm_install "Node.js"; then install_dep node || true; fi
 fi
-command -v node >/dev/null 2>&1 || { echo "[ERROR] Node.js still not available. Install Node 18+ and retry."; exit 1; }
-if [ "$(node_major)" -lt 18 ] 2>/dev/null; then
-  echo "[WARN] Node $(node -v) is older than v18; the panel needs the global fetch() (Node 18+)."
+command -v node >/dev/null 2>&1 || { echo "[ERROR] Node.js still not available. Install Node 20+ and retry."; exit 1; }
+if [ "$(node_major)" -lt 20 ] 2>/dev/null; then
+  echo "[ERROR] Node $(node -v) is unsupported. Lodestone requires Node.js 20+ for its SQLite foundation."
+  exit 1
 fi
 if ! command -v npm >/dev/null 2>&1; then
   echo "[MISSING] npm is not installed."
@@ -84,6 +85,16 @@ echo
 if [ ! -d node_modules ]; then
   echo "First run: installing dependencies with npm..."
   npm install || { echo "[ERROR] npm install failed. Check your internet connection."; exit 1; }
+fi
+
+# Native addons are tied to the Node.js ABI. A Node upgrade or switching Node
+# installations can leave better-sqlite3 present but unloadable.
+if ! sh -c 'node -e "const Database = require('\''better-sqlite3'\''); const db = new Database('\'':memory:'\''); db.close()"' >/dev/null 2>&1; then
+  echo "Rebuilding the SQLite module for Node $(node -v)..."
+  npm rebuild better-sqlite3 || {
+    echo "[ERROR] Could not rebuild better-sqlite3 for Node $(node -v)."
+    exit 1
+  }
 fi
 
 # --- Seed config.json from the template on first run (never overwrite an existing one) ---
@@ -106,6 +117,15 @@ if command -v lsof >/dev/null 2>&1; then
     echo "Stopping previous backend instance (PID $OLD_PIDS)..."
     # shellcheck disable=SC2086
     kill $OLD_PIDS 2>/dev/null || true
+    for _ in {1..25}; do
+      REMAINING="$(lsof -ti tcp:"$PORT" -sTCP:LISTEN 2>/dev/null || true)"
+      [ -z "$REMAINING" ] && break
+      sleep 0.1
+    done
+    [ -z "${REMAINING:-}" ] || {
+      echo "[ERROR] Port $PORT is still in use after stopping the previous backend."
+      exit 1
+    }
   fi
 fi
 

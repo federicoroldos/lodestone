@@ -74,18 +74,19 @@ echo "Checking dependencies..."
 detect_pm
 [ -n "$PM" ] && echo "  Package manager: $PM" || echo "  No known package manager detected."
 
-# --- Node.js (>=18) - required to run the panel itself ---
+# --- Node.js (>=22) - required by the SQLite foundation ---
 if ! command -v node >/dev/null 2>&1; then
-  echo "[MISSING] Node.js is not installed (need version 18 or newer)."
+  echo "[MISSING] Node.js is not installed (need version 22 or newer)."
   if confirm_install "Node.js"; then install_dep node || true; fi
 fi
 if ! command -v node >/dev/null 2>&1; then
-  echo "[ERROR] Node.js is still not available. Install Node 18+ from https://nodejs.org/ and retry."
+  echo "[ERROR] Node.js is still not available. Install Node 22+ from https://nodejs.org/ and retry."
   exit 1
 fi
-if [ "$(node_major)" -lt 18 ] 2>/dev/null; then
-  echo "[WARN] Node $(node -v) is older than v18. The panel uses the global fetch() (Node 18+)."
-  echo "       If it fails to start, install a newer Node (nvm or https://nodejs.org/)."
+if [ "$(node_major)" -lt 22 ] 2>/dev/null; then
+  echo "[ERROR] Node $(node -v) is unsupported. Lodestone requires Node.js 22+ for its SQLite foundation."
+  echo "        Install a current Node LTS release, then re-run this launcher."
+  exit 1
 fi
 
 # --- npm - required to install deps and build ---

@@ -13,7 +13,16 @@ REM --- Check Node.js is installed ---
 where node >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] Node.js was not found in PATH.
-  echo Install it from https://nodejs.org/ ^(LTS, version 18 or newer^) and try again.
+  echo Install it from https://nodejs.org/ ^(LTS, version 22 or newer^) and try again.
+  echo.
+  pause
+  exit /b 1
+)
+
+for /f %%v in ('node -p "process.versions.node.split('.')[0]"') do set "NODE_MAJOR=%%v"
+if %NODE_MAJOR% LSS 22 (
+  echo [ERROR] Node.js %NODE_MAJOR% is unsupported. Lodestone requires Node.js 22+ for its SQLite foundation.
+  echo Install a current Node LTS release, then re-run this launcher.
   echo.
   pause
   exit /b 1

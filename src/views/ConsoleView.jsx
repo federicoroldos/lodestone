@@ -31,11 +31,42 @@ const MAX_LINES = 1200;
 const HISTORY_KEY = 'lodestone.console.history';
 const HISTORY_LIMIT = 50;
 
-// Strip the leading Minecraft log timestamp ([HH:MM:SS INFO]: or [HH:MM:SS] [thread/LEVEL]: )
-// so our custom timestamp column is the only one shown.
-const MC_TS_RE = /^\[\d{2}:\d{2}:\d{2}(?:\s+\w+)?\](?:\s*\[[^\]]*\])?:\s*/;
+// Strip the many Minecraft log header shapes that come in front of real text
+// so our custom timestamp column is the only one shown. This covers, in order:
+//
+//   [HH:MM:SS INFO]:                      Spigot/CraftBukkit
+//   [HH:MM:SS] [Server thread/INFO]:      Vanilla / Paper
+//   [HH:MM:SS] [thread/INFO] [mod/LEVEL]:  Forge / Fabric / mod loaders
+//   [HH:MM:SS.mmm] [main/INFO]:           Minecraft 1.21+ seconds precision
+//   [2024-12-31T12:34:56.789Z] [m/INFO]:  ISO full-date (some plugins/log4j)
+//
+// The leading bracket (date ISO, abbreviated date, or time)+optional space+ategor +
+// zero+ following bracket groups (thread/level and trailing [mod/LEVEL]) + colon +
+// spaces is removed.  Then an optional plugin-supplied nested timestamp like
+// `[HH:MM:SS]` or `[HH:MM:SS.mmm]` left right at the start of the remaining text
+// is also removed — an in-line duplicate timestamp that some plugins (Essentials,
+// LogBlock, ...) prepend inside their own messages.  This second stripping is only
+// applied at the start of the cleaned message so we never over-strip real content.
+const MC_TS_RE = new RegExp(
+  '^' +
+  '(?:' +                                       // leading timestamp bracket
+    '\\[\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?\\]' +       // ISO date+time
+    '|' +
+    '\\[\\d{1,2}\\s[A-Za-z]{3}\\s\\d{4}\\s\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?\\]' + // 31Dec2024 12:34:56
+    '|' +
+    '\\[\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:\\s+[A-Za-z]+)?\\]' +                // time [+ category]
+  ')' +
+  '(?:\\s*\\[[^\\]]*\\])*' +                  // 0..N [thread/level] / [mod/level] groups
+  '\\s*:\\s*',                                // colon + spaces separator
+);
+// A leftover plugin-style timestamp that some plugins prepend inside their own
+// messages *after* the MC header has already been stripped.
+const PLUGIN_TS_RE = /^\[\d{2}:\d{2}:\d{2}(?:\.\d+)?\]\s+/;
 function stripMcTs(text) {
-  return text ? text.replace(MC_TS_RE, '') : text;
+  if (!text) return text;
+  let out = text.replace(MC_TS_RE, '');
+  out = out.replace(PLUGIN_TS_RE, '');
+  return out;
 }
 
 function fmtTs(ts) {
