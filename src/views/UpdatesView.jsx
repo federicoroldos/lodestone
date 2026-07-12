@@ -17,6 +17,7 @@ import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { useServer } from '@/context/ServerContext';
 import { fmtBytes, cn } from '@/lib/utils';
+import { PageIntro } from '@/components/layout/Page';
 
 const STATUS_TONE = {
   planned: 'softInfo',
@@ -117,12 +118,9 @@ export function UpdatesView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">{t('updates.title')}</h1>
-          <p className="text-xs text-muted-foreground">{t('updates.hint')}</p>
-        </div>
-        <div className="flex items-center gap-3">
+      <PageIntro
+        description={t('updates.hint')}
+        actions={<div className="flex items-center gap-3">
           {data?.scan && (
             <span className="text-xs text-muted-foreground">
               {t('updates.lastScan')}: {new Date(data.scan.scannedAt).toLocaleTimeString()}
@@ -133,8 +131,8 @@ export function UpdatesView() {
             <RefreshCw className={cn('h-3.5 w-3.5', scanning && 'animate-spin')} />
             {scanning ? t('updates.scanning') : t('updates.scan')}
           </Button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {!activeServerId ? (
         <Card><CardContent><EmptyState icon={PackageSearch} title={t('updates.selectServer')} /></CardContent></Card>

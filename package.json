@@ -6,13 +6,13 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/modpack-lifecycle.test.cjs && node test/foundation-db.test.cjs && node test/foundation-audit.test.cjs && node test/foundation-capabilities.test.cjs && node test/foundation-operations.test.cjs && node test/foundation-snapshots-tx.test.cjs && node test/foundation-redact-archive.test.cjs && node test/foundation-downloads.test.cjs && node test/foundation-routes.test.cjs && node test/foundation-boot.test.cjs && node test/server-create.test.cjs && node test/mrpack.test.cjs && node test/console-history.test.cjs",
+    "test": "node test/modpack-lifecycle.test.cjs && node test/foundation-db.test.cjs && node test/foundation-audit.test.cjs && node test/foundation-capabilities.test.cjs && node test/foundation-operations.test.cjs && node test/foundation-snapshots-tx.test.cjs && node test/foundation-redact-archive.test.cjs && node test/foundation-downloads.test.cjs && node test/foundation-routes.test.cjs && node test/foundation-boot.test.cjs && node test/health.test.cjs && node test/worlds.test.cjs && node test/worlds-routes.test.cjs && node test/server-create.test.cjs && node test/mrpack.test.cjs && node test/console-history.test.cjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "dependencies": {
     "apexcharts": "^5.16.0",

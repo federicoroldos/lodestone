@@ -23,6 +23,9 @@ const VIEW_KEYS = {
   modrinth: 'nav.modrinth',
   map:      'nav.map',
   users:    'nav.users',
+  worlds:   'nav.worlds',
+  updates:  'nav.updates',
+  audit:    'nav.audit',
 };
 
 export function Header({ currentView, onServerSwitch, onOpenSettings }) {

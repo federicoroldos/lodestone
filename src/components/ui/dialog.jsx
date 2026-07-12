@@ -28,8 +28,8 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%]',
-        'rounded-lg border border-border bg-card shadow-xl',
+        'fixed left-[50%] top-[50%] z-50 w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%]',
+        'max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-border bg-card shadow-xl',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -48,17 +48,17 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }) => (
-  <div className={cn('flex flex-col space-y-1.5 px-6 py-4 border-b border-border/60', className)} {...props} />
+  <div className={cn('flex min-h-14 flex-col justify-center space-y-1.5 border-b border-border/70 px-5 py-4', className)} {...props} />
 );
 DialogHeader.displayName = 'DialogHeader';
 
 const DialogFooter = ({ className, ...props }) => (
-  <div className={cn('flex items-center justify-end gap-2 px-6 py-4 border-t border-border/60', className)} {...props} />
+  <div className={cn('flex items-center justify-end gap-2 border-t border-border/70 bg-secondary/10 px-5 py-3', className)} {...props} />
 );
 DialogFooter.displayName = 'DialogFooter';
 
 function DialogBody({ className, ...props }) {
-  return <div className={cn('px-6 py-5', className)} {...props} />;
+  return <div className={cn('overflow-y-auto px-5 py-4', className)} {...props} />;
 }
 DialogBody.displayName = 'DialogBody';
 
