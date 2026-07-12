@@ -14,10 +14,12 @@ export const VIEW_PATHS = {
   modrinth: '/mods',
   files: '/files',
   configs: '/configs',
+  worlds: '/worlds',
   backups: '/backups',
   updates: '/updates',
   tasks: '/schedules',
   users: '/users',
+  audit: '/audit',
 };
 
 const PATH_TO_VIEW = Object.fromEntries(

@@ -20,9 +20,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   const isLoggedIn = !!token && !isJwtExpired(token);
+  const hasCapability = useCallback((capability, serverId = null) => {
+    if (user?.role === 'admin' || user?.permissions?.admin) return true;
+    return !!user?.permissions?.grants?.some((grant) => grant.capability === capability && (grant.serverId || null) === (serverId || null));
+  }, [user]);
 
   return (
-    <AuthContext.Provider value={{ token, user, setUser, login, logout, isLoggedIn }}>
+    <AuthContext.Provider value={{ token, user, setUser, login, logout, isLoggedIn, hasCapability }}>
       {children}
     </AuthContext.Provider>
   );

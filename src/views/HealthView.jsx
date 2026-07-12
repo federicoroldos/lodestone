@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, Check, ChevronLeft, Activity, HardDrive, Archive, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { MetricsView } from './MetricsView';
 import { useApi } from '@/hooks/useApi';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ErrorState } from '@/components/shared/ErrorState';
 
 const fmt = (value) => value ? new Date(value).toLocaleString() : '-';
 
@@ -27,7 +28,198 @@ const categoryLabel = (t, category) => {
 
 export function HealthView() {
   const t = useT();
-  return <Tabs defaultValue="resources" className="space-y-5"><TabsList><TabsTrigger value="resources">{t('health.resources')}</TabsTrigger><TabsTrigger value="crashes">{t('health.crashes')}</TabsTrigger></TabsList><TabsContent value="resources"><MetricsView /></TabsContent><TabsContent value="crashes"><Crashes /></TabsContent></Tabs>;
+  return (
+    <Tabs defaultValue="overview" className="space-y-5">
+      <TabsList>
+        <TabsTrigger value="overview">{t('health.overview')}</TabsTrigger>
+        <TabsTrigger value="resources">{t('health.resources')}</TabsTrigger>
+        <TabsTrigger value="crashes">{t('health.crashes')}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="overview"><Overview /></TabsContent>
+      <TabsContent value="resources"><MetricsView /></TabsContent>
+      <TabsContent value="crashes"><Crashes /></TabsContent>
+    </Tabs>
+  );
+}
+
+const num = (value, digits = 1) => (value == null || !Number.isFinite(value) ? null : Number(value).toFixed(digits).replace(/\.0+$/, ''));
+const gb = (mb) => (mb == null ? null : mb >= 1024 ? `${num(mb / 1024)} GB` : `${num(mb, 0)} MB`);
+const pct = (ratio) => (ratio == null ? null : `${Math.round(ratio * 100)}%`);
+
+// Why a card is missing is more useful than a fabricated card. Every
+// insufficiency reason from the analyzer has a plain-English explanation.
+function Insufficient({ t, detail }) {
+  const reason = detail?.reason || 'insufficient_samples';
+  const hint = {
+    insufficient_samples: t('health.reason.samples', { have: detail?.sampleCount ?? 0, need: detail?.requiredSamples ?? '-' }),
+    insufficient_coverage: t('health.reason.coverage'),
+    capacity_unavailable: t('health.reason.capacity'),
+    no_growth: t('health.reason.noGrowth'),
+    poor_fit: t('health.reason.poorFit'),
+    beyond_horizon: t('health.reason.beyondHorizon', { days: num(detail?.daysUntilFull, 0) ?? '-' }),
+    heap_unknown: t('health.reason.heapUnknown'),
+    insufficient_pairs: t('health.reason.pairs'),
+    no_variance: t('health.reason.noVariance'),
+  }[reason] || t('health.reason.unknown');
+  return <p className="text-sm text-muted-foreground">{hint}</p>;
+}
+
+// One finding. Severity, the numbers it was derived from (window, samples,
+// coverage, spread), whether it is currently suppressed, and what to do next.
+function Finding({ f, t }) {
+  const e = f.evidence || {};
+  const detail = {
+    'cpu.sustained': t('health.finding.cpu', { p95: num(e.p95, 0) ?? '-', threshold: num(e.threshold, 0) ?? '-' }),
+    'memory.pressure': t('health.finding.memory', { used: gb(e.p95Mb) ?? '-', heap: gb(e.heapMb) ?? '-', ratio: pct(e.heapRatio) ?? '-' }),
+    'tps.low': t('health.finding.tps', { p10: num(e.p10) ?? '-', threshold: num(e.threshold) ?? '-' }),
+    'disk.forecast': t('health.finding.disk', { days: num(e.daysUntilFull, 0) ?? '-', free: gb(e.freeMb) ?? '-', growth: gb(e.growthMbPerDay) ?? '-' }),
+    'backup.stale': e.reason === 'no_backups' ? t('health.finding.backupNone')
+      : e.reason === 'no_verified_backup' ? t('health.finding.backupUnverified')
+        : t('health.finding.backupStale', { days: num(e.ageDays, 0) ?? '-' }),
+  }[f.ruleId] || f.ruleId;
+
+  const support = [
+    e.window ? t('health.support.window', { window: e.window }) : null,
+    e.sampleCount != null ? t('health.support.samples', { count: e.sampleCount }) : null,
+    e.coverage != null ? t('health.support.coverage', { pct: pct(e.coverage) }) : null,
+    e.iqr != null ? t('health.support.spread', { iqr: num(e.iqr) }) : null,
+    e.fitQuality != null ? t('health.support.fit', { pct: pct(e.fitQuality) }) : null,
+    Array.isArray(e.daysUntilFullRange) && e.daysUntilFullRange[0] != null
+      ? t('health.support.range', { low: num(e.daysUntilFullRange[0], 0), high: num(e.daysUntilFullRange[1], 0) })
+      : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <AlertTriangle className={f.severity === 'critical' ? 'h-4 w-4 text-status-error' : 'h-4 w-4 text-status-warning'} />
+        <span className="font-medium">{t(`health.rules.${f.ruleId}.title`)}</span>
+        <Badge variant={f.severity === 'critical' ? 'destructive' : 'secondary'}>{t(`health.severity.${f.severity}`)}</Badge>
+        {f.suppressed && <Badge variant="outline">{t('health.suppressed', { until: fmt(f.cooldownUntil) })}</Badge>}
+      </div>
+      <p className="mt-2 text-sm">{detail}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{t('health.nextAction')}: {t(`health.rules.${f.ruleId}.action`)}</p>
+      {support.length > 0 && <p className="mt-2 text-xs text-muted-foreground">{support.join(' · ')}</p>}
+      <p className="mt-1 text-xs text-muted-foreground">{t('health.seenSince', { first: fmt(f.firstSeenAt), last: fmt(f.lastSeenAt) })}</p>
+    </div>
+  );
+}
+
+function Overview() {
+  const api = useApi(); const t = useT(); const { activeServerId } = useServer();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true); setError('');
+    try {
+      const q = activeServerId ? `?serverId=${encodeURIComponent(activeServerId)}` : '';
+      setData(await api(`/api/health${q}`));
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [activeServerId]);
+
+  if (error && !data) return <ErrorState error={error} onRetry={load} />;
+  if (loading && !data) return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
+  if (!data) return null;
+
+  const { findings = [], forecast, backups, correlations, baselines } = data;
+  const active = findings.filter((f) => !f.suppressed);
+
+  return (
+    <div className="space-y-5">
+      {data.stale && (
+        <div className="flex items-start gap-2 rounded-lg border border-status-warning/40 bg-status-warning/10 p-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
+          <span>{t('health.staleNotice', { at: fmt(data.computedAt) })}</span>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('health.findings')}</CardTitle>
+          <span className="text-xs text-muted-foreground">
+            {data.computedAt ? t('health.computedAt', { at: fmt(data.computedAt) }) : t('health.notAnalyzed')}
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!findings.length ? (
+            <p className="text-sm text-muted-foreground">
+              {active.length === 0 && data.status === 'pending' ? t('health.gathering') : t('health.noFindings')}
+            </p>
+          ) : findings.map((f) => <Finding key={f.id} f={f} t={t} />)}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><HardDrive className="h-4 w-4" />{t('health.capacity')}</CardTitle></CardHeader>
+          <CardContent>
+            {forecast?.available ? (
+              <div className="space-y-1 text-sm">
+                <p>{t('health.diskFull', { days: num(forecast.daysUntilFull, 0) })}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('health.diskDetail', { free: gb(forecast.freeMb), total: gb(forecast.totalMb), growth: gb(forecast.growthMbPerDay) })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t('health.support.range', { low: num(forecast.daysUntilFullRange?.[0], 0), high: num(forecast.daysUntilFullRange?.[1], 0) })}
+                  {' · '}{t('health.support.fit', { pct: pct(forecast.fitQuality) })}
+                  {' · '}{t('health.support.samples', { count: forecast.sampleCount })}
+                </p>
+              </div>
+            ) : <Insufficient t={t} detail={forecast} />}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Archive className="h-4 w-4" />{t('health.backupFreshness')}</CardTitle></CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {backups?.verifiedBackup ? (
+              <>
+                <p>{t('health.backupVerifiedAgo', { days: num(backups.ageDays, 1) })}</p>
+                <p className="text-xs text-muted-foreground">{t('health.backupVerifiedAt', { at: fmt(backups.verifiedBackup.verifiedAt) })}</p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">{backups?.reason === 'no_backups' ? t('health.finding.backupNone') : t('health.finding.backupUnverified')}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="h-4 w-4" />{t('health.baselines')}</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {[['cpu', baselines?.cpu], ['memory', baselines?.memory?.baseline || baselines?.memory], ['tps', baselines?.tps]].map(([key, base]) => (
+              <div key={key} className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">{t(`health.baseline.${key}`)}</span>
+                {base?.available
+                  ? <span>{t('health.baselineValue', { p50: num(base.p50), p95: num(base.p95), count: base.sampleCount })}</span>
+                  : <span className="text-xs text-muted-foreground">{t('health.notEnoughData')}</span>}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('health.correlations')}</CardTitle>
+            <span className="text-xs text-muted-foreground">{t('health.associationNotice')}</span>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {[['tpsPlayers', correlations?.tpsPlayers], ['tpsCpu', correlations?.tpsCpu]].map(([key, c]) => (
+              <div key={key} className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">{t(`health.correlation.${key}`)}</span>
+                {c?.available
+                  ? <span>{t('health.correlationValue', { r: num(c.coefficient, 2), pairs: c.pairs })}</span>
+                  : <span className="text-xs text-muted-foreground">{t('health.notEnoughData')}</span>}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 function Crashes() {

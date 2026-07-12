@@ -60,6 +60,7 @@ const {
 const { bootFoundation, foundationStatus } = require('./lib/foundation.cjs');
 const { router: operationsRouter } = require('./lib/routes/operations.cjs');
 const foundationAudit = require('./lib/audit.cjs');
+const auditRouter = require('./lib/routes/audit.cjs');
 const foundationCapabilities = require('./lib/capabilities.cjs');
 const crashIntelligence = require('./lib/crashes.cjs');
 const updateCenter = require('./lib/updates.cjs');
@@ -67,6 +68,10 @@ const modpackLifecycle = require('./lib/modpacks.cjs');
 const foundationSnapshots = require('./lib/snapshots.cjs');
 const foundationOperations = require('./lib/operations.cjs');
 const recovery = require('./lib/recovery.cjs');
+const health = require('./lib/health.cjs');
+const healthRouter = require('./lib/routes/health.cjs');
+const worlds = require('./lib/worlds.cjs');
+const worldsRouter = require('./lib/routes/worlds.cjs');
 const { CAPABILITIES, requireCap } = foundationCapabilities;
 
 // pidusage on Windows shells out to wmic.exe, which Microsoft removed from
@@ -230,6 +235,17 @@ function publicUser(u) {
   };
 }
 
+function publicPermissions(u) {
+  if (!u || u.role === 'admin') return { admin: !!u, grants: [] };
+  return {
+    admin: false,
+    grants: foundationCapabilities.listForUser(u.id).map((grant) => ({
+      serverId: grant.server_id,
+      capability: grant.capability,
+    })),
+  };
+}
+
 function isAdmin(u) {
   return !!u && u.role === 'admin';
 }
@@ -383,6 +399,27 @@ if (!_foundationBoot.ok) {
     ', applied=' + (_foundationBoot.steps.find((s) => s.step === 'migrate') || {}).applied + ')');
 }
 
+// Expired world previews, and the archives uploaded for import previews that
+// were never applied, are scratch: drop them at boot so a cancelled import does
+// not leave a multi-gigabyte zip behind forever.
+function sweepWorldImports() {
+  try {
+    worlds.purgeExpiredPreviews();
+    const dir = path.join(require('./lib/db.cjs').dataDir(), 'world-imports');
+    if (!fs.existsSync(dir)) return;
+    const cutoff = Date.now() - worlds.PREVIEW_TTL;
+    for (const name of fs.readdirSync(dir)) {
+      const file = path.join(dir, name);
+      try {
+        if (fs.statSync(file).mtimeMs < cutoff) fs.rmSync(file, { force: true, recursive: true });
+      } catch (_) { /* locked: try again next boot */ }
+    }
+  } catch (err) {
+    log(`World import sweep failed: ${err.message}`);
+  }
+}
+sweepWorldImports();
+
 function findServer(id) {
   return config.servers.find((s) => s.id === id) || null;
 }
@@ -455,6 +492,17 @@ class ServerManager {
     this.adopted = false;
     this.adoptedPid = null;
     this.adoptedWatch = null;
+    // Console line subscribers. Long operations that drive the server through
+    // its console (world pre-generation) read progress from here instead of
+    // re-parsing the history buffer.
+    this.lineWatchers = new Set();
+  }
+
+  // Subscribe to console lines. Returns the unsubscribe function; a watcher
+  // that throws is dropped rather than allowed to break the console pump.
+  watchLines(fn) {
+    this.lineWatchers.add(fn);
+    return () => this.lineWatchers.delete(fn);
   }
 
   // The OS pid of the running server, whether we spawned it this session
@@ -678,6 +726,18 @@ class ServerManager {
   }
 
   _inspectLine(line) {
+    // Fan out first: the parsing below returns early on the lines it claims,
+    // and a subscriber must see every line regardless of what this method
+    // makes of it. A watcher that throws is dropped, never allowed to break
+    // the console pump.
+    for (const watcher of this.lineWatchers) {
+      try { watcher(line); }
+      catch (err) {
+        this.lineWatchers.delete(watcher);
+        log(`Console watcher removed after an error: ${err.message}`);
+      }
+    }
+
     // Server ready
     if (this.status === STATUS.STARTING && /Done \([\d.]+s\)!/.test(line)) {
       this.setStatus(STATUS.ONLINE);
@@ -1264,6 +1324,8 @@ app.post('/api/login', async (req, res) => {
   if (!user || !verifyPassword(password, user.passwordHash)) {
     noteLoginFailure(ipKey, LOGIN_IP_MAX_ATTEMPTS);
     if (identifier) noteLoginFailure(idKey, LOGIN_MAX_ATTEMPTS);
+    try { foundationAudit.record({ action: 'auth.login', outcome: 'failure', metadata: { reason: 'invalid_credentials' } }); }
+    catch (err) { log('audit: login failure capture failed:', err.message); }
     return res.status(401).json({ error: tErr({ language: lang }, 'errors.wrongCredentials') });
   }
   clearLoginFailures(ipKey, idKey);
@@ -1281,7 +1343,10 @@ app.post('/api/login', async (req, res) => {
   // before) - no IP geolocation guessing, so the default stays predictable.
   user.language = chosen;
 
-  res.json({ token: signToken(user), user: publicUser(user) });
+  try { foundationAudit.record({ actorId: user.id, actorUsername: user.username, action: 'auth.login', targetType: 'session', outcome: 'success' }); }
+  catch (err) { return res.status(503).json({ error: 'Could not record security event' }); }
+
+  res.json({ token: signToken(user), user: { ...publicUser(user), permissions: publicPermissions(user) } });
 });
 
 // Everything else under /api requires a token
@@ -1308,7 +1373,7 @@ function requestServerId(req) {
   }
   const requested = (req.body && req.body.serverId) || (req.query && req.query.serverId);
   if (requested) return requested;
-  if (/^\/(?:server|status|metrics|crashes|command|players|playerlists|whitelist|addons|modrinth|modpacks|configs|files|backups|tasks)(?:\/|$)/.test(req.path)) {
+  if (/^\/(?:server|status|metrics|health|crashes|command|players|playerlists|whitelist|addons|modrinth|modpacks|configs|files|backups|tasks|worlds)(?:\/|$)/.test(req.path)) {
     return config.activeServerId || null;
   }
   return null;
@@ -1334,17 +1399,19 @@ function capabilityForRequest(req) {
   if (/^\/files(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.FILES_VIEW : foundationCapabilities.CAPABILITIES.FILES_MANAGE;
   if (/^\/backups(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.FILES_VIEW : foundationCapabilities.CAPABILITIES.BACKUPS_MANAGE;
   if (/^\/tasks(?:\/|$)/.test(p)) return foundationCapabilities.CAPABILITIES.SERVER_CONTROL;
-  if (p === '/status' || p === '/metrics' || /^\/crashes(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.HEALTH_VIEW : foundationCapabilities.CAPABILITIES.HEALTH_MANAGE;
+  if (p === '/status' || p === '/metrics' || /^\/(?:health|crashes)(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.HEALTH_VIEW : foundationCapabilities.CAPABILITIES.HEALTH_MANAGE;
   return null;
 }
 
 app.use('/api', (req, res, next) => {
-  if (req.user && req.method !== 'GET' && req.method !== 'HEAD') {
+  const sensitiveRead = req.method === 'GET' && /^\/(?:users|configs|files|backups|audit)(?:\/|$)/.test(req.path);
+  if (req.user && req.method !== 'HEAD' && (req.method !== 'GET' || sensitiveRead)) {
     const startedAt = Date.now();
     res.on('finish', () => {
       try {
         foundationAudit.record({
           actorId: req.user.id,
+          actorUsername: req.user.username,
           serverId: requestServerId(req),
           action: `${req.method.toLowerCase()} ${req.path}`,
           target: { path: req.path },
@@ -1373,6 +1440,33 @@ app.use('/api', (req, res, next) => {
 // defined in docs/roadmap/README.md. Mount it after the auth middleware
 // so its handlers can read req.user.
 app.use('/api/operations', operationsRouter());
+app.use('/api/audit', auditRouter());
+app.use('/api/health', healthRouter({
+  resolveServerId: (req) => (req.query && req.query.serverId) || (req.body && req.body.serverId) || config.activeServerId || null,
+  knownServer: (id) => !!findServer(id),
+}));
+
+// World operations (docs/roadmap/08-world-operations.md). The router owns its
+// own capability checks and durable operations; what it needs from the panel is
+// the server registry, the console, and the backup pipeline (a world archive is
+// a restore point and gets the same manifest + verification as any other).
+app.use('/api/worlds', worldsRouter({
+  activeServerId: () => config.activeServerId || null,
+  findServer,
+  getManager,
+  detectCompat,
+  backupsDir,
+  saveWorlds: (serverId, next) => {
+    const server = findServer(serverId);
+    if (!server) throw new Error('Server not found.');
+    worlds.assertNoOverlap(next);
+    server.worlds = next;
+    saveConfig(config);
+  },
+  inspectBackup: (args) => recovery.inspect(args),
+  verifyBackup: (args) => recovery.verify(args),
+  recordProvenance: (args) => updateCenter.recordModrinth(args),
+}));
 
 // Foundation status: lightweight endpoint that reports the database path,
 // applied migrations, and aggregate row counts. Useful for diagnosing
@@ -1409,7 +1503,7 @@ function validateIdentifier({ email, username }) {
   return { email: e, username: u };
 }
 
-app.get('/api/me', (req, res) => res.json(publicUser(req.user)));
+app.get('/api/me', (req, res) => res.json({ ...publicUser(req.user), permissions: publicPermissions(req.user) }));
 
 // Self-service profile edit. A user can change their own name, email, and
 // username, but never their own role (that would let an operator promote
@@ -1475,11 +1569,35 @@ function normalizeRole(role) {
   return role === 'operator' ? 'operator' : role === 'admin' ? 'admin' : null;
 }
 
-app.get('/api/users', requireAdmin, (req, res) => {
-  res.json({ users: (config.users || []).map(publicUser) });
+app.get('/api/users', (req, res) => {
+  res.json({ users: (config.users || []).map((user) => ({ ...publicUser(user), permissions: publicPermissions(user) })) });
 });
 
-app.post('/api/users', requireAdmin, (req, res) => {
+app.get('/api/users/:id/permissions', (req, res) => {
+  const user = findUser(req.params.id);
+  if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
+  res.json({
+    permissions: publicPermissions(user),
+    capabilities: {
+      perServer: foundationCapabilities.perServerCapabilities(),
+      global: foundationCapabilities.globalCapabilities(),
+    },
+  });
+});
+
+app.put('/api/users/:id/permissions', (req, res) => {
+  const user = findUser(req.params.id);
+  if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
+  if (user.role === 'admin') return res.status(400).json({ error: tErr(req.user, 'errors.adminPermissions') });
+  try {
+    const grants = foundationCapabilities.replaceForUser(user.id, req.body?.grants, req.user.id);
+    res.json({ ok: true, permissions: { admin: false, grants: grants.map((grant) => ({ serverId: grant.server_id, capability: grant.capability })) } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/users', (req, res) => {
   const { email, username, name, password, role } = req.body || {};
   const v = validateIdentifier({ email, username });
   if (v.error === 'emailInvalid') return res.status(400).json({ error: tErr(req.user, 'errors.emailInvalid') });
@@ -1505,7 +1623,7 @@ app.post('/api/users', requireAdmin, (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-app.put('/api/users/:id', requireAdmin, (req, res) => {
+app.put('/api/users/:id', (req, res) => {
   const user = findUser(req.params.id);
   if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
   const { email, username, name, password, role } = req.body || {};
@@ -1551,7 +1669,7 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-app.delete('/api/users/:id', requireAdmin, (req, res) => {
+app.delete('/api/users/:id', (req, res) => {
   const user = findUser(req.params.id);
   if (!user) return res.status(404).json({ error: tErr(req.user, 'errors.userNotFound') });
   if (config.users.length <= 1) return res.status(400).json({ error: tErr(req.user, 'errors.cannotDeleteLastUser') });
@@ -2079,6 +2197,7 @@ app.delete('/api/servers/:id', requireAdmin, (req, res) => {
   const wantsFiles = req.query.deleteFiles === 'true' || req.query.deleteFiles === '1';
   config.servers = config.servers.filter((x) => x.id !== s.id);
   foundationCapabilities.deleteServerGrants(s.id);
+  try { health.deleteServerData(s.id); } catch (err) { log('health: cleanup failed for', s.id, err.message); }
   managers.delete(s.id);
   if (config.activeServerId === s.id) {
     config.activeServerId = config.servers.length ? config.servers[0].id : null;
@@ -2457,10 +2576,27 @@ function worldSizeMB(m) {
   return Math.round(bytes / 1048576);
 }
 
+// Capacity of the filesystem holding a server folder. statfs is not available
+// on every mount (network shares, containers with restricted /proc), and the
+// health analysis treats "we don't know" as a first-class answer, so a failure
+// here yields nulls rather than zeros.
+async function diskUsage(dir) {
+  try {
+    const st = await fs.promises.statfs(dir);
+    const totalMb = (st.blocks * st.bsize) / 1048576;
+    const freeMb = (st.bfree * st.bsize) / 1048576;
+    return { usedMb: totalMb - freeMb, totalMb };
+  } catch (_) {
+    return { usedMb: null, totalMb: null };
+  }
+}
+
 async function sampleMetrics() {
   metricsTick++;
   const recomputeWorld = (metricsTick % WORLD_SIZE_EVERY) === 1;
   const now = Date.now();
+  const systemTotalMb = os.totalmem() / 1048576;
+  const systemFreeMb = os.freemem() / 1048576;
   for (const s of config.servers) {
     const m = getManager(s.id);
     let cpu = 0, memMB = 0, players = 0;
@@ -2484,6 +2620,25 @@ async function sampleMetrics() {
     let drop = 0;
     while (drop < arr.length && arr[drop][0] < cutoff) drop++;
     if (drop) arr.splice(0, drop);
+
+    // Health and capacity: the same sample, plus the fields the analysis needs.
+    // TPS is only meaningful while the server is up and reporting it; leaving it
+    // null keeps a gap a gap instead of inventing a 20.0.
+    const disk = s.dir ? await diskUsage(s.dir) : { usedMb: null, totalMb: null };
+    try {
+      health.recordSample({
+        serverId: s.id, ts: now, cpu, memoryMb: memMB, players, worldMb: worldMB,
+        online: !!pid,
+        tps: pid && m.lastTps != null ? m.lastTps : null,
+        heapMb: health.parseHeapMb(s.javaArgs),
+        diskUsedMb: disk.usedMb, diskTotalMb: disk.totalMb,
+      });
+      health.analyze(s.id, { systemTotalMb, systemFreeMb }, now);
+    } catch (err) {
+      // Analysis is advisory: a database problem must never disturb the panel
+      // or the servers it supervises.
+      log('health: sample/analysis failed for', s.id, err.message);
+    }
   }
   for (const id of Object.keys(metrics)) {
     if (!config.servers.some((s) => s.id === id)) delete metrics[id];
@@ -2495,6 +2650,16 @@ setInterval(sampleMetrics, METRICS_INTERVAL_MS);
 setTimeout(sampleMetrics, 4000); // first sample shortly after boot
 setInterval(saveMetrics, 5 * 60 * 1000);
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveMetrics(); process.exit(0); });
+
+// Bounded database growth: fold aged-out raw samples into hourly rollups and
+// drop what is past the retention horizon. Low priority - hourly, and a failure
+// is logged and retried on the next tick.
+function runMetricsRetention() {
+  try { health.runRetention(); }
+  catch (err) { log('health: retention failed:', err.message); }
+}
+setInterval(runMetricsRetention, 60 * 60 * 1000);
+setTimeout(runMetricsRetention, 30 * 1000);
 
 const METRICS_RANGES = { hour: 3600e3, '6h': 6 * 3600e3, day: 24 * 3600e3, week: 7 * 24 * 3600e3 };
 function queueCrashCapture(payload, attempt = 0) {
@@ -2512,14 +2677,20 @@ function queueCrashCapture(payload, attempt = 0) {
   });
 }
 
+// Same contract as before (t/cpu/mem/players/world per point), now served from
+// SQLite with a bounded time window and page size. The response carries the
+// extra columns (tps, disk) too; older clients simply ignore them.
 app.get('/api/metrics', (req, res) => {
   const id = (req.query.serverId) || config.activeServerId;
   const rangeKey = METRICS_RANGES[req.query.range] ? req.query.range : '6h';
-  const cutoff = Date.now() - METRICS_RANGES[rangeKey];
-  const points = (metrics[id] || [])
-    .filter((p) => p[0] >= cutoff)
-    .map((p) => ({ t: p[0], cpu: p[1], mem: p[2], players: p[3], world: p[4] }));
-  res.json({ serverId: id, range: rangeKey, points });
+  if (!id) return res.json({ serverId: id, range: rangeKey, points: [] });
+  try {
+    const points = health.querySamples(id, { since: Date.now() - METRICS_RANGES[rangeKey] });
+    return res.json({ serverId: id, range: rangeKey, points });
+  } catch (err) {
+    log('metrics query failed:', err.message);
+    return res.status(503).json({ error: 'Metrics history is unavailable.' });
+  }
 });
 
 app.get('/api/crashes', (req, res) => {
