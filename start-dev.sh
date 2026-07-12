@@ -64,12 +64,13 @@ detect_pm
 [ -n "$PM" ] && echo "  Package manager: $PM" || echo "  No known package manager detected."
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "[MISSING] Node.js is not installed (need version 18 or newer)."
+  echo "[MISSING] Node.js is not installed (need version 22 or newer)."
   if confirm_install "Node.js"; then install_dep node || true; fi
 fi
-command -v node >/dev/null 2>&1 || { echo "[ERROR] Node.js still not available. Install Node 18+ and retry."; exit 1; }
-if [ "$(node_major)" -lt 18 ] 2>/dev/null; then
-  echo "[WARN] Node $(node -v) is older than v18; the panel needs the global fetch() (Node 18+)."
+command -v node >/dev/null 2>&1 || { echo "[ERROR] Node.js still not available. Install Node 22+ and retry."; exit 1; }
+if [ "$(node_major)" -lt 22 ] 2>/dev/null; then
+  echo "[ERROR] Node $(node -v) is unsupported. Lodestone requires Node.js 22+ for its SQLite foundation."
+  exit 1
 fi
 if ! command -v npm >/dev/null 2>&1; then
   echo "[MISSING] npm is not installed."

@@ -6,12 +6,14 @@ import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { ListSkeleton } from '@/components/shared/Skeletons';
 import { useApi } from '@/hooks/useApi';
 import { useT } from '@/context/I18nContext';
 import { fmtBytes } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Download, Trash2, Plus } from 'lucide-react';
+import { Download, Trash2, Plus, ShieldCheck, RotateCcw, ListTree, FlaskConical } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 function RetentionCard({ onSaved }) {
@@ -89,6 +91,9 @@ export function BackupsView() {
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [contents, setContents] = useState(null);
+  const [impact, setImpact] = useState(null);
+  const [action, setAction] = useState('');
 
   async function load() {
     setListLoading(true);
@@ -126,6 +131,31 @@ export function BackupsView() {
     } catch (e) { toast.error(e.message); }
   }
 
+  async function showContents(name) {
+    try { setAction(name); const r = await api(`/api/backups/${encodeURIComponent(name)}/contents`); setContents(r.manifest); }
+    catch (e) { toast.error(e.message); } finally { setAction(''); }
+  }
+
+  async function verify(name) {
+    try { setAction(name); await api(`/api/backups/${encodeURIComponent(name)}/verify`, { method: 'POST' }); toast.success(t('backups.verifiedToast')); await load(); }
+    catch (e) { toast.error(e.message); } finally { setAction(''); }
+  }
+
+  async function previewRestore(name) {
+    try { setAction(name); await api(`/api/backups/${encodeURIComponent(name)}/verify`, { method: 'POST' }); const r = await api(`/api/backups/${encodeURIComponent(name)}/impact`, { method: 'POST' }); setImpact({ name, ...r.impact }); await load(); }
+    catch (e) { toast.error(e.message); } finally { setAction(''); }
+  }
+
+  async function restore() {
+    try { setAction(impact.name); const key = crypto.randomUUID(); const r = await api(`/api/backups/${encodeURIComponent(impact.name)}/restore`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: { token: impact.token } }); toast.success(t('backups.restoreQueued', { id: r.operationId })); setImpact(null); }
+    catch (e) { toast.error(e.message); } finally { setAction(''); }
+  }
+
+  async function drill(name) {
+    try { setAction(name); await api(`/api/backups/${encodeURIComponent(name)}/drill`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } }); toast.success(t('backups.drillQueued')); }
+    catch (e) { toast.error(e.message); } finally { setAction(''); }
+  }
+
   return (
     <div className="space-y-5">
       <Card>
@@ -158,7 +188,16 @@ export function BackupsView() {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-foreground truncate">{b.name}</div>
                     <div className="text-xs text-muted-foreground">{fmtBytes(b.size)} · {new Date(b.mtime).toLocaleString()}</div>
+                    <div className="mt-1 flex gap-1.5">
+                      <Badge variant={b.verification?.status === 'verified' ? 'softSuccess' : 'default'}>{t(`backups.${b.verification?.status === 'verified' ? 'verified' : 'unverified'}`)}</Badge>
+                      {b.manifest?.worldRoots?.length > 0 && <Badge>{t('backups.worldCount', { count: b.manifest.worldRoots.length })}</Badge>}
+                      {b.drill?.completedAt && <span className="text-[11px] text-muted-foreground">{t('backups.drilled', { age: new Date(b.drill.completedAt).toLocaleDateString() })}</span>}
+                    </div>
                   </div>
+                  <Button variant="ghost" size="icon-xs" title={t('backups.contents')} onClick={() => showContents(b.name)} disabled={action === b.name}><ListTree className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon-xs" title={t('backups.verify')} onClick={() => verify(b.name)} disabled={action === b.name}><ShieldCheck className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon-xs" title={t('backups.drill')} onClick={() => drill(b.name)} disabled={action === b.name}><FlaskConical className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon-xs" title={t('backups.restore')} onClick={() => previewRestore(b.name)} disabled={action === b.name}><RotateCcw className="h-3.5 w-3.5" /></Button>
                   <Button variant="glass" size="xs" asChild>
                     <a href={`/api/backups/${encodeURIComponent(b.name)}/download?token=${encodeURIComponent(token)}`} download>
                       <Download className="h-3 w-3" />
@@ -184,6 +223,17 @@ export function BackupsView() {
         destructive
         onConfirm={() => { deleteBackup(pendingDelete); setPendingDelete(null); }}
       />
+      <Dialog open={!!contents} onOpenChange={(o) => { if (!o) setContents(null); }}>
+        <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>{t('backups.contents')}</DialogTitle></DialogHeader><DialogBody>
+          {contents && <><div className="mb-3 text-xs text-muted-foreground">{fmtBytes(contents.sizeBytes)} · SHA-256 <code>{contents.sha256}</code> · {t('backups.fileCount', { count: contents.inventory.length })}</div>
+            <div className="max-h-80 overflow-auto rounded border p-2 font-mono text-xs">{contents.inventory.map((e) => <div key={e.path} className="flex justify-between gap-4"><span className="truncate">{e.path}</span><span>{fmtBytes(e.size)}</span></div>)}</div></>}
+        </DialogBody></DialogContent>
+      </Dialog>
+      <Dialog open={!!impact} onOpenChange={(o) => { if (!o) setImpact(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>{t('backups.restorePreview')}</DialogTitle></DialogHeader><DialogBody className="space-y-3">
+          {impact && <><p className="text-sm">{t('backups.restoreWarning')}</p><div className="rounded border p-3 text-xs space-y-1"><div>{t('backups.replacements')}: {impact.replacements.map((x) => x.root).join(', ')}</div><div>{t('backups.preserved')}: {impact.preserved.join(', ') || '—'}</div><div>{t('backups.diskRequired')}: {fmtBytes(impact.requiredBytes)}</div><div>{t('backups.rollbackAvailable')}</div></div></>}
+        </DialogBody><DialogFooter><Button variant="ghost" onClick={() => setImpact(null)}>{t('common.cancel')}</Button><Button onClick={restore} disabled={!!action}>{t('backups.confirmRestore')}</Button></DialogFooter></DialogContent>
+      </Dialog>
     </div>
   );
 }

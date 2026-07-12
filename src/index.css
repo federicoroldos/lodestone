@@ -139,6 +139,16 @@
   .lodestone-toaster [data-sonner-toast][data-styled='true'] {
     box-shadow: var(--shadow-xl);
   }
+
+  .modpack-progress-indeterminate {
+    width: 38%;
+    animation: modpack-progress-slide 1.25s ease-in-out infinite;
+  }
+}
+
+@keyframes modpack-progress-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(270%); }
 }
 
 @layer base {

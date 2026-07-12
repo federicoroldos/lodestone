@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Server, BarChart2, Terminal, Users, User, Map,
   Puzzle, Package, FolderOpen, FileText, Database, Clock,
+  RefreshCw,
   ChevronDown, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 
@@ -18,7 +19,7 @@ const NAV_GROUPS = [
     items: [
       { view: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
       { view: 'servers',   labelKey: 'nav.servers',   icon: Server },
-      { view: 'metrics',   labelKey: 'nav.metrics',   icon: BarChart2, requiresServer: true },
+      { view: 'health',    labelKey: 'nav.health',    icon: BarChart2, requiresServer: true },
     ],
   },
   {
@@ -32,7 +33,7 @@ const NAV_GROUPS = [
   {
     key: 'nav.groupContent',
     items: [
-      { view: 'plugins',  labelKey: 'nav.plugins',  icon: Puzzle, requiresServer: true },
+      { view: 'addons',   labelKey: 'nav.addons',   icon: Puzzle, requiresServer: true },
       { view: 'modrinth', labelKey: 'nav.modrinth', icon: Package, requiresServer: true },
       { view: 'files',    labelKey: 'nav.files',    icon: FolderOpen, requiresServer: true },
       { view: 'configs',  labelKey: 'nav.configs',  icon: FileText, requiresServer: true },
@@ -41,6 +42,7 @@ const NAV_GROUPS = [
   {
     key: 'nav.groupMaintenance',
     items: [
+      { view: 'updates', labelKey: 'nav.updates', icon: RefreshCw, requiresServer: true },
       { view: 'backups', labelKey: 'nav.backups',   icon: Database, requiresServer: true },
       { view: 'tasks',   labelKey: 'nav.schedules', icon: Clock, requiresServer: true },
     ],

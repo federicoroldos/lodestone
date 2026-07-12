@@ -12,10 +12,10 @@ import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
 const VIEW_KEYS = {
   servers:  'nav.servers',
   dashboard:'nav.dashboard',
-  metrics:  'nav.metrics',
+  health:   'nav.health',
   console:  'nav.console',
   players:  'nav.players',
-  plugins:  'nav.plugins',
+  addons:   'nav.addons',
   configs:  'nav.configs',
   files:    'nav.files',
   tasks:    'nav.schedules',

@@ -39,6 +39,14 @@ const {
   runForgeInstaller: runForgeInstallerProcess,
 } = require('./lib/serverInstaller.cjs');
 const { appendConsoleLine } = require('./lib/consoleHistory.cjs');
+
+// Minecraft servers and plugins sometimes emit ANSI colour escapes even when
+// their stdout/stderr is captured by a web panel (player "left/joined the game"
+// lines, coloured command output, etc.). Strip them at the source so the live
+// WebSocket frame, the join/leave parser (_inspectLine), and the level
+// classifier all see plain text — and the broadcast we send to clients matches
+// the normalized text we already persist in the console history.
+const ANSI_ESCAPE_RE = /[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~])/g;
 const { extractRuntimeArchive } = require('./lib/runtimeArchive.cjs');
 const {
   readMrpackIndex,
@@ -49,6 +57,17 @@ const {
   downloadAndVerify,
   safeResolve: mrpackSafeResolve,
 } = require('./lib/mrpack.cjs');
+const { bootFoundation, foundationStatus } = require('./lib/foundation.cjs');
+const { router: operationsRouter } = require('./lib/routes/operations.cjs');
+const foundationAudit = require('./lib/audit.cjs');
+const foundationCapabilities = require('./lib/capabilities.cjs');
+const crashIntelligence = require('./lib/crashes.cjs');
+const updateCenter = require('./lib/updates.cjs');
+const modpackLifecycle = require('./lib/modpacks.cjs');
+const foundationSnapshots = require('./lib/snapshots.cjs');
+const foundationOperations = require('./lib/operations.cjs');
+const recovery = require('./lib/recovery.cjs');
+const { CAPABILITIES, requireCap } = foundationCapabilities;
 
 // pidusage on Windows shells out to wmic.exe, which Microsoft removed from
 // Windows 11, so every pidusage() call throws `spawn wmic ENOENT` and process
@@ -337,6 +356,33 @@ function migrateConfig() {
 
 migrateConfig();
 
+// ---------------------------------------------------------------------------
+// Platform foundation (docs/roadmap/README.md "Shared platform foundation")
+//
+// Boot order:
+//   1. config.json is loaded and migrateConfig() has normalized it.
+//   2. open the SQLite database, run migrations, sweep stale operations,
+//      sweep orphan staging directories, record the one-shot metrics.json
+//      import.
+//   3. /api/operations is mounted once the auth middleware is in place
+//      (see below). The boot itself happens here, before any routes, so
+//      the foundation tables exist by the time any handler runs.
+//
+// Boot is best-effort: a database failure logs a warning but does not
+// abort the panel. Per spec: "Database failure must not affect process
+// supervision; emit a safe panel warning and retry a bounded queued
+// capture."
+// ---------------------------------------------------------------------------
+
+const _foundationBoot = bootFoundation({ servers: config.servers || [], users: config.users || [], logFn: log });
+if (!_foundationBoot.ok) {
+  log('foundation: boot reported failures; panel running with reduced capability:',
+    _foundationBoot.steps.filter((s) => !s.ok).map((s) => `${s.step}:${s.error}`).join('; '));
+} else {
+  log('foundation: ready (db=' + require('./lib/db.cjs').dbPath() +
+    ', applied=' + (_foundationBoot.steps.find((s) => s.step === 'migrate') || {}).applied + ')');
+}
+
 function findServer(id) {
   return config.servers.find((s) => s.id === id) || null;
 }
@@ -426,8 +472,9 @@ class ServerManager {
   dir() {
     return this.desc().dir;
   }
-  pluginsDir() {
-    return path.join(this.dir(), 'plugins');
+  // Addons live in plugins/ (Paper/Spigot/Bukkit) or mods/ (Fabric/Forge/NeoForge/Quilt).
+  addonsDir(kind) {
+    return path.join(this.dir(), kind === 'mods' ? 'mods' : 'plugins');
   }
   watchdogCfg() {
     return this.desc().watchdog || { enabled: false, maxRestarts: 3, windowMinutes: 10 };
@@ -619,7 +666,7 @@ class ServerManager {
     while ((idx = this[key].indexOf('\n')) !== -1) {
       let line = this[key].slice(0, idx);
       this[key] = this[key].slice(idx + 1);
-      line = line.replace(/\r$/, '');
+      line = line.replace(/\r$/, '').replace(ANSI_ESCAPE_RE, '');
       if (line.length === 0) {
         this.pushLine('', 'info');
         continue;
@@ -812,6 +859,9 @@ class ServerManager {
 
   _onExit(code, signal) {
     const wasManual = this.manualStop;
+    const crashOccurredAt = Date.now();
+    const crashRuntimeMs = this.startedAt ? crashOccurredAt - this.startedAt : null;
+    const crashHistory = this.history.slice();
     this._stopPlayerPolling();
     if (this.killTimer) {
       clearTimeout(this.killTimer);
@@ -827,6 +877,7 @@ class ServerManager {
 
     if (!wasManual) {
       // Unexpected crash
+      queueCrashCapture({ serverId: this.id, root: this.dir(), history: crashHistory, exitCode: code, signal, occurredAt: crashOccurredAt, runtimeMs: crashRuntimeMs });
       notifyDiscord(`:red_circle: "${this.name()}" **crashed** unexpectedly (code=${code}).`);
       addNotification('server_crashed', 'Server Crashed', `Server "${this.name()}" crashed unexpectedly (code=${code}).`, this.id);
       this._maybeWatchdogRestart();
@@ -869,6 +920,8 @@ class ServerManager {
   _onAdoptedExit() {
     if (this.adoptedPid == null) return; // already handled (watcher vs. _waitForExit race)
     const wasManual = this.manualStop;
+    const crashOccurredAt = Date.now();
+    const crashRuntimeMs = this.startedAt ? crashOccurredAt - this.startedAt : null;
     this._stopAdoptedWatch();
     if (this.killTimer) {
       clearTimeout(this.killTimer);
@@ -884,6 +937,7 @@ class ServerManager {
     this.setStatus(STATUS.OFFLINE);
 
     if (!wasManual) {
+      queueCrashCapture({ serverId: this.id, root: this.dir(), history: this.history.slice(), exitCode: null, signal: null, occurredAt: crashOccurredAt, runtimeMs: crashRuntimeMs });
       notifyDiscord(`:red_circle: "${this.name()}" **crashed** unexpectedly (was running detached).`);
       this._maybeWatchdogRestart();
     }
@@ -1236,6 +1290,99 @@ app.use('/api', (req, res, next) => {
   return authMiddleware(req, res, next);
 });
 
+function requestServerId(req) {
+  if (req.path.startsWith('/crashes/')) {
+    const parts = req.path.split('/');
+    const id = decodeURIComponent(parts[2] === 'groups' ? parts[3] || '' : parts[2] || '');
+    try {
+      const item = crashIntelligence.detail(id);
+      if (item) return item.group.serverId;
+    } catch (_) {}
+  }
+  const pathMatch = req.path.match(/^\/servers\/([^/]+)/);
+  if (pathMatch) return decodeURIComponent(pathMatch[1]);
+  const taskMatch = req.path.match(/^\/tasks\/([^/]+)/);
+  if (taskMatch) {
+    const task = (config.tasks || []).find((item) => item.id === decodeURIComponent(taskMatch[1]));
+    if (task) return task.serverId;
+  }
+  const requested = (req.body && req.body.serverId) || (req.query && req.query.serverId);
+  if (requested) return requested;
+  if (/^\/(?:server|status|metrics|crashes|command|players|playerlists|whitelist|addons|modrinth|modpacks|configs|files|backups|tasks)(?:\/|$)/.test(req.path)) {
+    return config.activeServerId || null;
+  }
+  return null;
+}
+
+function capabilityForRequest(req) {
+  const p = req.path;
+  const method = req.method;
+  if (p === '/login' || p.startsWith('/me') || p.startsWith('/foundation/') || p.startsWith('/operations')) return null;
+  if (/^\/users(?:\/|$)/.test(p)) return foundationCapabilities.CAPABILITIES.USERS_MANAGE;
+  if (/^\/servers(?:\/|$)/.test(p) && !/^\/servers\/[^/]+\/(?:start|stop|restart)$/.test(p)) return foundationCapabilities.CAPABILITIES.SERVER_REGISTER;
+  if (/^\/(?:server\/(?:start|stop|restart)|servers\/[^/]+\/(?:start|stop|restart))$/.test(p)) return foundationCapabilities.CAPABILITIES.SERVER_CONTROL;
+  if (p === '/command') return foundationCapabilities.CAPABILITIES.COMMANDS_RUN;
+  if (/^\/(?:players|playerlists|whitelist)(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.CONSOLE_VIEW : foundationCapabilities.CAPABILITIES.PLAYERS_MANAGE;
+  if (/^\/modpacks(?:\/|$)/.test(p)) {
+    if (method === 'GET') return foundationCapabilities.CAPABILITIES.CONTENT_VIEW;
+    if (/\/clone$/.test(p)) return foundationCapabilities.CAPABILITIES.SERVER_MANAGE;
+    if (/\/update(?:\/|$)/.test(p) || /\/rollback$/.test(p)) return foundationCapabilities.CAPABILITIES.UPDATES_APPLY;
+    return foundationCapabilities.CAPABILITIES.CONTENT_INSTALL;
+  }
+  if (/^\/addons(?:\/|$)/.test(p) || p === '/modrinth/install') return method === 'GET' ? foundationCapabilities.CAPABILITIES.FILES_VIEW : foundationCapabilities.CAPABILITIES.PLUGINS_MANAGE;
+  if (/^\/configs(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.CONFIGS_VIEW : foundationCapabilities.CAPABILITIES.CONFIGS_MANAGE;
+  if (/^\/files(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.FILES_VIEW : foundationCapabilities.CAPABILITIES.FILES_MANAGE;
+  if (/^\/backups(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.FILES_VIEW : foundationCapabilities.CAPABILITIES.BACKUPS_MANAGE;
+  if (/^\/tasks(?:\/|$)/.test(p)) return foundationCapabilities.CAPABILITIES.SERVER_CONTROL;
+  if (p === '/status' || p === '/metrics' || /^\/crashes(?:\/|$)/.test(p)) return method === 'GET' ? foundationCapabilities.CAPABILITIES.HEALTH_VIEW : foundationCapabilities.CAPABILITIES.HEALTH_MANAGE;
+  return null;
+}
+
+app.use('/api', (req, res, next) => {
+  if (req.user && req.method !== 'GET' && req.method !== 'HEAD') {
+    const startedAt = Date.now();
+    res.on('finish', () => {
+      try {
+        foundationAudit.record({
+          actorId: req.user.id,
+          serverId: requestServerId(req),
+          action: `${req.method.toLowerCase()} ${req.path}`,
+          target: { path: req.path },
+          outcome: res.statusCode < 400 ? 'success' : 'failure',
+          requestId: req.requestId,
+          metadata: { statusCode: res.statusCode, durationMs: Date.now() - startedAt },
+        });
+      } catch (err) { log('foundation: audit capture failed:', err.message); }
+    });
+  }
+  next();
+});
+
+app.use('/api', (req, res, next) => {
+  const capability = capabilityForRequest(req);
+  if (!capability) return next();
+  const globalCapability = capability === foundationCapabilities.CAPABILITIES.USERS_MANAGE;
+  const serverId = globalCapability ? null : requestServerId(req);
+  if (!foundationCapabilities.has(req.user, serverId, capability)) {
+    return res.status(403).json({ error: tErr(req.user, 'errors.forbidden'), capability });
+  }
+  next();
+});
+
+// Platform foundation: /api/operations is the durable-operations surface
+// defined in docs/roadmap/README.md. Mount it after the auth middleware
+// so its handlers can read req.user.
+app.use('/api/operations', operationsRouter());
+
+// Foundation status: lightweight endpoint that reports the database path,
+// applied migrations, and aggregate row counts. Useful for diagnosing
+// "did the foundation actually boot?" without scraping logs.
+app.get('/api/foundation/status', (req, res) => {
+  const user = userFromToken((req.headers.authorization || '').startsWith('Bearer ') ? req.headers.authorization.slice(7) : (req.query.token || ''));
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: tErr(user, 'errors.forbidden') });
+  res.json({ ok: true, foundation: foundationStatus() });
+});
+
 // --- users CRUD (any logged-in user can manage users) ---
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -1415,6 +1562,7 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
   }
   config.users = config.users.filter((u) => u.id !== user.id);
   saveConfig(config);
+  foundationCapabilities.deleteUserGrants(user.id);
   res.json({ ok: true });
 });
 
@@ -1930,6 +2078,7 @@ app.delete('/api/servers/:id', requireAdmin, (req, res) => {
   if (m.isRunning()) return res.status(409).json({ error: tErr(req.user, 'errors.stopBeforeRemove') });
   const wantsFiles = req.query.deleteFiles === 'true' || req.query.deleteFiles === '1';
   config.servers = config.servers.filter((x) => x.id !== s.id);
+  foundationCapabilities.deleteServerGrants(s.id);
   managers.delete(s.id);
   if (config.activeServerId === s.id) {
     config.activeServerId = config.servers.length ? config.servers[0].id : null;
@@ -2348,6 +2497,21 @@ setInterval(saveMetrics, 5 * 60 * 1000);
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveMetrics(); process.exit(0); });
 
 const METRICS_RANGES = { hour: 3600e3, '6h': 6 * 3600e3, day: 24 * 3600e3, week: 7 * 24 * 3600e3 };
+function queueCrashCapture(payload, attempt = 0) {
+  setImmediate(() => {
+    try {
+      const latest = (metrics[payload.serverId] || []).at(-1);
+      const result = crashIntelligence.capture({ ...payload, recentMetrics: latest ? { ts: latest[0], cpu: latest[1], memoryMb: latest[2] } : null });
+      globalBroadcast({ type: 'crash', serverId: payload.serverId, groupId: result.groupId, incidentId: result.incidentId });
+    } catch (err) {
+      log('Crash capture failed:', err.message);
+      const manager = getManager(payload.serverId);
+      if (manager) manager.pushLine('[Lodestone] Crash evidence could not be saved. Server supervision will continue.', 'warn');
+      if (attempt < 2) setTimeout(() => queueCrashCapture(payload, attempt + 1), 1000 * (attempt + 1));
+    }
+  });
+}
+
 app.get('/api/metrics', (req, res) => {
   const id = (req.query.serverId) || config.activeServerId;
   const rangeKey = METRICS_RANGES[req.query.range] ? req.query.range : '6h';
@@ -2358,13 +2522,37 @@ app.get('/api/metrics', (req, res) => {
   res.json({ serverId: id, range: rangeKey, points });
 });
 
-// --- plugins ---
+app.get('/api/crashes', (req, res) => {
+  const acknowledged = req.query.acknowledged === 'true' ? true : req.query.acknowledged === 'false' ? false : undefined;
+  const data = crashIntelligence.list({ cursor: Number(req.query.cursor) || undefined, serverId: req.query.serverId || config.activeServerId, acknowledged, from: Number(req.query.from) || undefined, to: Number(req.query.to) || undefined });
+  res.json(data);
+});
+app.get('/api/crashes/:id', (req, res) => {
+  const item = crashIntelligence.detail(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Crash group not found.' });
+  res.json(item);
+});
+for (const [suffix, value] of [['acknowledge', true], ['unacknowledge', false]]) {
+  app.post(`/api/crashes/groups/:id/${suffix}`, (req, res) => {
+    const result = crashIntelligence.acknowledge(req.params.id, req.user.id, value);
+    if (!result) return res.status(404).json({ error: 'Crash group not found.' });
+    res.json({ ok: true, ...result });
+  });
+}
+
+// --- addons (plugins + mods) ---
+// Both kinds are just .jar files in a folder; `kind` picks which folder.
+function addonKind(req) {
+  const raw = (req.query && req.query.kind) || (req.body && req.body.kind) || 'plugins';
+  return String(raw).toLowerCase() === 'mods' ? 'mods' : 'plugins';
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
       const m = targetManager(req);
       if (!m) return cb(new Error('No active server.'));
-      const dir = m.pluginsDir();
+      const dir = m.addonsDir(addonKind(req));
       try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* noop */ }
       cb(null, dir);
     },
@@ -2379,12 +2567,13 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
 });
 
-app.get('/api/plugins', (req, res) => {
+app.get('/api/addons', (req, res) => {
+  const kind = addonKind(req);
   const m = targetManager(req);
-  if (!m) return res.json({ plugins: [] });
+  if (!m) return res.json({ kind, addons: [] });
   try {
-    const dir = m.pluginsDir();
-    if (!fs.existsSync(dir)) return res.json({ plugins: [] });
+    const dir = m.addonsDir(kind);
+    if (!fs.existsSync(dir)) return res.json({ kind, addons: [] });
     const files = fs.readdirSync(dir)
       .filter((f) => f.toLowerCase().endsWith('.jar'))
       .map((f) => {
@@ -2392,28 +2581,29 @@ app.get('/api/plugins', (req, res) => {
         return { name: f, size: st.size, mtime: st.mtimeMs };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-    res.json({ plugins: files });
+    res.json({ kind, addons: files });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/plugins/upload', upload.single('plugin'), (req, res) => {
+app.post('/api/addons/upload', upload.single('addon'), (req, res) => {
   const m = targetManager(req);
+  const label = addonKind(req) === 'mods' ? 'Mod' : 'Plugin';
   if (m && req.file && req.file.filename) {
-    addNotification('plugin_uploaded', 'Plugin Uploaded', `Plugin "${req.file.filename}" uploaded to "${m.name()}". Restart the server to apply.`, m.id);
+    addNotification('plugin_uploaded', `${label} Uploaded`, `${label} "${req.file.filename}" uploaded to "${m.name()}". Restart the server to apply.`, m.id);
   }
   res.json({ ok: true, name: req.file && req.file.filename, note: 'Restart the server to apply.' });
 }, (err, req, res, next) => {
   res.status(400).json({ error: tErr(req.user, err.message && err.message.includes('Only') ? 'errors.onlyJar' : 'errors.unknownAction') });
 });
 
-app.delete('/api/plugins/:name', (req, res) => {
+app.delete('/api/addons/:name', (req, res) => {
   const m = targetManager(req);
   if (!m) return res.status(400).json({ error: tErr(req.user, 'errors.noActiveServer') });
   const name = path.basename(req.params.name);
   if (!name.toLowerCase().endsWith('.jar')) return res.status(400).json({ error: tErr(req.user, 'errors.notAJar') });
-  const full = path.join(m.pluginsDir(), name);
+  const full = path.join(m.addonsDir(addonKind(req)), name);
   if (!fs.existsSync(full)) return res.status(404).json({ error: tErr(req.user, 'errors.fileDoesNotExist') });
   try {
     fs.unlinkSync(full);
@@ -2584,20 +2774,21 @@ function listBackups() {
     .map((f) => {
       const st = fs.statSync(path.join(backupsDir(), f));
       const meta = parseBackupName(f);
-      return { name: f, size: st.size, mtime: st.mtimeMs, slug: meta.slug };
+      const manifest = recovery.findManifest(f);
+      return { name: f, size: st.size, mtime: st.mtimeMs, slug: meta.slug, manifest, ...recovery.summaries(manifest) };
     })
     .sort((a, b) => b.mtime - a.mtime);
 }
 
 let backupInProgress = false;
 
-async function createBackup(m) {
+async function createBackup(m, { applyRetention = true } = {}) {
   if (!m || !m.dir()) throw new Error('No server selected.');
   if (backupInProgress) throw new Error('A backup is already in progress.');
   backupInProgress = true;
   ensureBackupsDir();
   const slug = slugify(m.name());
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 23);
   const outName = `${slug}__${stamp}.zip`;
   const outPath = path.join(backupsDir(), outName);
   const wasOnline = m.status === STATUS.ONLINE;
@@ -2631,7 +2822,7 @@ async function createBackup(m) {
     backupInProgress = false;
   }
 
-  pruneBackups(slug);
+  if (applyRetention) pruneBackups(slug);
   const st = fs.statSync(outPath);
   log(`Backup: done -> ${outName} (${(st.size / 1048576).toFixed(1)} MB)`);
   m.pushLine(`[Lodestone] Backup created: ${outName} (${(st.size / 1048576).toFixed(1)} MB)`, 'info');
@@ -2679,15 +2870,35 @@ function pruneBackups(slug) {
   }
 }
 
-app.get('/api/backups', (req, res) => {
+const backupServerId = (req) => (targetManager(req) || {}).id;
+function backupFile(name) {
+  const safe = path.basename(name);
+  if (safe !== name || !safe.toLowerCase().endsWith('.zip')) throw Object.assign(new Error('Invalid backup name.'), { status: 400 });
+  const file = path.join(backupsDir(), safe);
+  if (!fs.existsSync(file)) throw Object.assign(new Error('Backup does not exist.'), { status: 404 });
+  return { name: safe, file };
+}
+function recoveryArgs(req) {
+  const m = targetManager(req); if (!m) throw Object.assign(new Error('No server selected.'), { status: 400 });
+  const b = backupFile(req.params.name);
+  const known = recovery.findManifest(b.name);
+  const parsed = parseBackupName(b.name);
+  if ((known && known.serverId !== m.id) || (!known && parsed.slug && parsed.slug !== slugify(m.name()))) {
+    throw Object.assign(new Error('Backup does not belong to this server.'), { status: 404 });
+  }
+  return { ...b, filename: b.name, serverId: m.id, worlds: m.desc().worlds || ['world', 'world_nether', 'world_the_end'], createdAt: fs.statSync(b.file).mtimeMs, m };
+}
+
+app.get('/api/backups', requireCap(CAPABILITIES.BACKUPS_VIEW, { getServerId: backupServerId }), (req, res) => {
   try {
-    res.json({ backups: listBackups() });
+    const m = targetManager(req);
+    res.json({ backups: listBackups().filter((b) => (b.manifest ? b.manifest.serverId === m.id : b.slug === slugify(m.name()))) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/backups', async (req, res) => {
+app.post('/api/backups', requireCap(CAPABILITIES.BACKUPS_CREATE, { getServerId: backupServerId }), async (req, res) => {
   try {
     const r = await createBackup(targetManager(req));
     res.json({ ok: true, ...r });
@@ -2696,13 +2907,12 @@ app.post('/api/backups', async (req, res) => {
   }
 });
 
-app.delete('/api/backups/:name', (req, res) => {
-  const name = path.basename(req.params.name);
-  if (!name.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'Not a .zip' });
-  const full = path.join(backupsDir(), name);
-  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Does not exist' });
+app.delete('/api/backups/:name', requireCap(CAPABILITIES.BACKUPS_DELETE, { getServerId: backupServerId }), (req, res) => {
   try {
+    const owned = recoveryArgs(req); const name = owned.name; const full = owned.file;
     fs.unlinkSync(full);
+    const manifest = recovery.findManifest(name);
+    if (manifest) require('./lib/db.cjs').open().prepare('DELETE FROM backup_manifests WHERE id=?').run(manifest.id);
     addNotification('backup_deleted', 'Backup Deleted', `Backup "${name}" has been deleted.`);
     res.json({ ok: true });
   } catch (err) {
@@ -2710,11 +2920,70 @@ app.delete('/api/backups/:name', (req, res) => {
   }
 });
 
-app.get('/api/backups/:name/download', (req, res) => {
-  const name = path.basename(req.params.name);
-  const full = path.join(backupsDir(), name);
-  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Does not exist' });
-  res.download(full, name);
+app.get('/api/backups/:name/download', requireCap(CAPABILITIES.BACKUPS_VIEW, { getServerId: backupServerId }), (req, res) => {
+  try { const owned = recoveryArgs(req); res.download(owned.file, owned.name); }
+  catch (err) { res.status(err.status || 400).json({ error: err.message }); }
+});
+
+app.get('/api/backups/:name/contents', requireCap(CAPABILITIES.BACKUPS_VIEW, { getServerId: backupServerId }), async (req, res) => {
+  try { const a = recoveryArgs(req); const manifest = await recovery.ensureManifest(a); res.json({ ok: true, manifest }); }
+  catch (err) { res.status(err.status || 422).json({ error: err.message, code: err.code }); }
+});
+
+app.post('/api/backups/:name/verify', requireCap(CAPABILITIES.BACKUPS_VIEW, { getServerId: backupServerId }), async (req, res) => {
+  try { const result = await recovery.verify(recoveryArgs(req)); res.json({ ok: true, verification: result }); }
+  catch (err) { res.status(err.status || 422).json({ error: err.message, code: err.code || 'verification_failed' }); }
+});
+
+app.post('/api/backups/:name/impact', requireCap(CAPABILITIES.BACKUPS_RESTORE, { getServerId: backupServerId }), async (req, res) => {
+  try {
+    const a = recoveryArgs(req); const manifest = await recovery.ensureManifest(a);
+    const verification = recovery.summaries(manifest).verification;
+    if (verification.status !== 'verified') return res.status(409).json({ error: 'Verify this backup before restoring it.' });
+    const server = { id: a.m.id, dir: a.m.dir(), worlds: a.worlds };
+    res.json({ ok: true, impact: recovery.makeImpact({ manifest, server, actorId: req.user.id }) });
+  } catch (err) { res.status(err.status || 422).json({ error: err.message, code: err.code }); }
+});
+
+app.post('/api/backups/:name/drill', requireCap(CAPABILITIES.BACKUPS_RESTORE, { getServerId: backupServerId }), async (req, res) => {
+  let a; try { a = recoveryArgs(req); } catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  const op = foundationOperations.create({ kind: 'backup-drill', actorId: req.user.id, serverId: a.m.id, idempotencyKey: req.get('Idempotency-Key') || undefined, summary: { backup: a.name } });
+  res.status(202).json({ ok: true, operationId: op.id });
+  if (op.state !== foundationOperations.STATES.QUEUED) return;
+  setImmediate(async () => {
+    const manifest = await recovery.ensureManifest(a).catch(() => null); if (!manifest) return foundationOperations.fail(op.id, { code: 'invalid_archive', text: 'Backup could not be inspected.' });
+    const drillId = crypto.randomUUID(); const started = Date.now();
+    require('./lib/db.cjs').open().prepare('INSERT INTO backup_drills VALUES (?,?,?,?,?,?,?)').run(drillId, manifest.id, op.id, 'running', started, null, null);
+    const staging = path.join(a.m.dir(), '.lodestone', 'staging', op.id);
+    try { foundationOperations.start(op.id, { phase: 'extract-staging' }); const report = await recovery.extract(a.file, staging, a.worlds);
+      fs.rmSync(staging, { recursive: true, force: true }); require('./lib/db.cjs').open().prepare('UPDATE backup_drills SET status=?,completed_at=?,report_json=? WHERE id=?').run('succeeded', Date.now(), JSON.stringify(report), drillId); foundationOperations.finish(op.id, report);
+    } catch (err) { fs.rmSync(staging, { recursive: true, force: true }); require('./lib/db.cjs').open().prepare('UPDATE backup_drills SET status=?,completed_at=?,report_json=? WHERE id=?').run('failed', Date.now(), JSON.stringify({ error: err.code || 'drill_failed' }), drillId); foundationOperations.fail(op.id, { code: err.code || 'drill_failed', text: err.message }); }
+  });
+});
+
+app.post('/api/backups/:name/restore', requireCap(CAPABILITIES.BACKUPS_RESTORE, { getServerId: backupServerId }), async (req, res) => {
+  const idem = req.get('Idempotency-Key'); if (!idem) return res.status(400).json({ error: 'Idempotency-Key header is required.' });
+  let a, preview; try { a = recoveryArgs(req); preview = recovery.consumePreview({ token: req.body && req.body.token, actorId: req.user.id, server: { id: a.m.id, dir: a.m.dir(), worlds: a.worlds } }); }
+  catch (err) { return res.status(err.status || 409).json({ error: err.message }); }
+  const op = foundationOperations.create({ kind: 'backup-restore', actorId: req.user.id, serverId: a.m.id, idempotencyKey: idem, summary: { backup: a.name } });
+  res.status(202).json({ ok: true, operationId: op.id }); if (op.state !== foundationOperations.STATES.QUEUED) return;
+  setImmediate(async () => {
+    const staging = path.join(a.m.dir(), '.lodestone', 'staging', op.id); const rollback = path.join(a.m.dir(), '.lodestone', 'rollback', op.id); const moved = [];
+    try {
+      foundationOperations.start(op.id, { phase: 'verify' }); await recovery.verify({ ...a, operationId: op.id });
+      foundationOperations.heartbeat(op.id, { phase: 'pre-restore-backup', progress: .2 }); const snapshot = await createBackup(a.m, { applyRetention: false }); await recovery.verify({ file: path.join(backupsDir(), snapshot.name), filename: snapshot.name, serverId: a.m.id, worlds: a.worlds, operationId: op.id });
+      const disk = await new Promise((resolve) => fs.statfs(a.m.dir(), (e, s) => resolve(e ? null : s.bavail * s.bsize)));
+      if (disk != null && disk < preview.payload.requiredBytes * 1.1) throw Object.assign(new Error('Insufficient disk space for restore.'), { code: 'insufficient_disk' });
+      foundationOperations.heartbeat(op.id, { phase: 'extract-staging', progress: .4 }); await recovery.extract(a.file, staging, a.worlds);
+      foundationOperations.heartbeat(op.id, { phase: 'wait-offline', progress: .6 }); if (a.m.status !== STATUS.OFFLINE) throw Object.assign(new Error('Server must be offline before restore commit.'), { code: 'server_online' });
+      fs.mkdirSync(rollback, { recursive: true }); foundationOperations.heartbeat(op.id, { phase: 'commit', progress: .75 });
+      for (const root of preview.manifest.worldRoots) { if (a.m.status !== STATUS.OFFLINE) throw Object.assign(new Error('Server came online during restore.'), { code: 'server_online_race' }); const live = path.join(a.m.dir(), root); const old = path.join(rollback, root); const fresh = path.join(staging, root); if (fs.existsSync(live)) fs.renameSync(live, old); moved.push({ live, old }); fs.renameSync(fresh, live); }
+      fs.rmSync(staging, { recursive: true, force: true }); foundationOperations.finish(op.id, { backup: a.name, snapshot: snapshot.name, rollbackAvailable: true });
+    } catch (err) {
+      if (moved.length) foundationOperations.markRecoveryRequired(op.id, { code: err.code || 'commit_failed', text: err.message, recovery: { rollbackPath: rollback, roots: moved } });
+      else { fs.rmSync(staging, { recursive: true, force: true }); foundationOperations.fail(op.id, { code: err.code || 'restore_failed', text: err.message }); }
+    }
+  });
 });
 
 // --- Modrinth ---
@@ -2841,6 +3110,16 @@ app.post('/api/modrinth/install', async (req, res) => {
     fs.mkdirSync(pdir, { recursive: true });
     const dest = path.join(pdir, path.basename(file.filename));
     fs.writeFileSync(dest, buf);
+    updateCenter.recordModrinth({
+      serverId: m.id,
+      relativePath: path.relative(m.dir(), dest).split(path.sep).join('/'),
+      kind: compat.folder === 'mods' ? 'mod' : 'plugin',
+      projectId: version.project_id,
+      versionId: version.id,
+      mcVersion: compat.mcVersion,
+      loader: (version.loaders || []).find((l) => compat.loaders.includes(l)),
+      sha256: crypto.createHash('sha256').update(buf).digest('hex'),
+    });
     log(`Modrinth: installed ${file.filename} into ${compat.folder}/ for "${m.name()}"`);
     m.pushLine(`[Lodestone] Installed from Modrinth into ${compat.folder}/: ${file.filename}`, 'info');
     addNotification('plugin_installed', 'Plugin Installed', `"${file.filename}" installed into ${compat.folder}/ for "${m.name()}". Restart the server to apply.`, m.id);
@@ -2851,7 +3130,225 @@ app.post('/api/modrinth/install', async (req, res) => {
   }
 });
 
+app.use('/api/updates', updateCenter.router({
+  findServer,
+  getManager: (id) => managers.get(id),
+  detectCompat,
+}));
+
 // --- Modrinth modpack --------------------------------------------------------
+
+async function resolveLifecyclePack(versionId, worlds) {
+  const response = await fetch(`${MODRINTH}/version/${encodeURIComponent(versionId)}`, { headers: { 'User-Agent': UA } });
+  if (!response.ok) throw new Error(`Modrinth version lookup failed: HTTP ${response.status}`);
+  const version = await response.json();
+  const archive = (version.files || []).find((f) => f.primary) || (version.files || [])[0];
+  if (!archive) throw new Error('No version files found');
+  const archiveResponse = await fetch(archive.url, { headers: { 'User-Agent': UA } });
+  if (!archiveResponse.ok) throw new Error(`Download failed: HTTP ${archiveResponse.status}`);
+  const mrpack = Buffer.from(await archiveResponse.arrayBuffer());
+  const index = await readMrpackIndex(mrpack);
+  const spec = manifestToSpec(index);
+  if (spec.unsupported) throw new Error(spec.reason || 'Unsupported modpack');
+  const files = [];
+  for (const item of serverSideFiles(index)) {
+    const url = item.downloads && item.downloads[0];
+    if (!url || !item.path) continue;
+    const buffer = await downloadAndVerify(url, item.hashes, UA);
+    files.push({
+      relativePath: item.path,
+      sizeBytes: buffer.length,
+      sha256: modpackLifecycle.sha256(buffer),
+      sourceUrlHash: modpackLifecycle.sha256(url),
+      url,
+    });
+  }
+  const validated = modpackLifecycle.validateFiles(files, worlds);
+  return { version, index, spec, files: validated.accepted, excluded: validated.excluded };
+}
+
+async function lifecyclePreview(req, res, kind) {
+  try {
+    const m = targetManager(req);
+    if (!m || !m.dir()) return res.status(400).json({ error: 'No active server.' });
+    const versionId = String((req.body || {}).versionId || '');
+    if (!versionId) return res.status(400).json({ error: 'A version is required.' });
+    const server = m.desc();
+    const pack = await resolveLifecyclePack(versionId, server.worlds || []);
+    const compat = detectCompat(m);
+    if (!compat.loaders.includes(pack.spec.loaderType) || (compat.mcVersion && compat.mcVersion !== pack.spec.mcVersion)) {
+      return res.status(409).json({ error: 'This modpack is not compatible with the server.' });
+    }
+    const previous = modpackLifecycle.latest(m.id);
+    if (kind === 'update' && !previous) return res.status(409).json({ error: 'This server has no managed modpack.' });
+    const oldFiles = previous ? previous.files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256, sizeBytes: f.size_bytes })) : [];
+    const plan = modpackLifecycle.buildPlan({ root: m.dir(), oldFiles, newFiles: pack.files, worlds: server.worlds || [] });
+    const projectId = String(pack.version.project_id || (req.body || {}).projectId || '');
+    const previewId = modpackLifecycle.savePreview({ serverId: m.id, actorId: req.user.id, kind, projectId, versionId, mcVersion: pack.spec.mcVersion, loader: pack.spec.loaderType, previousManifestId: previous?.id || null, plan });
+    res.json({ ok: true, previewId, projectId, versionId, mcVersion: pack.spec.mcVersion, loader: pack.spec.loaderType, groups: plan.groups, inventoryHash: plan.inventoryHash, compatibility: { ok: true }, downtime: m.status !== STATUS.OFFLINE, snapshot: { required: true } });
+  } catch (err) {
+    log(`Modpack ${kind} preview failed: ${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+}
+
+async function lifecycleApply(req, res, kind) {
+  const body = req.body || {};
+  const loaded = modpackLifecycle.loadPreview(String(body.previewId || ''), req.user.id);
+  if (!loaded || loaded.data.kind !== kind) return res.status(409).json({ error: 'Preview expired. Create a new preview.' });
+  const m = getManager(loaded.data.serverId);
+  if (!m || !m.dir()) return res.status(404).json({ error: 'Server not found.' });
+  if (m.status !== STATUS.OFFLINE) return res.status(409).json({ error: 'The server must be offline.' });
+  const operation = foundationOperations.create({ kind: `modpack-${kind}`, actorId: req.user.id, serverId: m.id, idempotencyKey: req.get('Idempotency-Key') || null, summary: { versionId: loaded.data.versionId } });
+  if (operation.state !== foundationOperations.STATES.QUEUED) return res.status(202).json({ ok: true, operationId: operation.id });
+  try {
+    foundationOperations.start(operation.id, { phase: 'revalidate' });
+    const server = m.desc();
+    const pack = await resolveLifecyclePack(loaded.data.versionId, server.worlds || []);
+    const previous = modpackLifecycle.latest(m.id);
+    const oldFiles = previous ? previous.files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256, sizeBytes: f.size_bytes })) : [];
+    const plan = modpackLifecycle.buildPlan({ root: m.dir(), oldFiles, newFiles: pack.files, worlds: server.worlds || [] });
+    if (plan.inventoryHash !== loaded.row.inventory_hash) throw Object.assign(new Error('Server files changed after preview. Create a new preview.'), { status: 409 });
+    const decisions = body.decisions && typeof body.decisions === 'object' ? body.decisions : {};
+    for (const conflict of plan.groups.conflicts) {
+      if (!['keep_local', 'take_pack'].includes(decisions[conflict.relativePath])) throw Object.assign(new Error(`A decision is required for ${conflict.relativePath}.`), { status: 409 });
+    }
+    const snapshot = foundationSnapshots.take({ serverId: m.id, sourceDir: m.dir(), kind: 'modpack', reason: `${kind} ${loaded.data.versionId}` });
+    if (!foundationSnapshots.verify(snapshot.id).ok) throw new Error('Snapshot verification failed.');
+    const staging = path.join(m.dir(), '.lodestone', 'staging', operation.id);
+    fs.mkdirSync(staging, { recursive: true });
+    const incoming = new Map(pack.files.map((f) => [f.relativePath, f]));
+    for (const entry of plan.entries) {
+      const takePack = entry.state !== 'local_edit' && (entry.state !== 'conflict' || decisions[entry.relativePath] === 'take_pack');
+      if (!takePack) continue;
+      const item = incoming.get(entry.relativePath);
+      if (!item) continue;
+      const buffer = await downloadAndVerify(item.url, { sha256: item.sha256 }, UA);
+      if (modpackLifecycle.sha256(buffer) !== item.sha256) throw new Error(`SHA-256 mismatch for ${item.relativePath}`);
+      const staged = mrpackSafeResolve(staging, entry.relativePath);
+      fs.mkdirSync(path.dirname(staged), { recursive: true });
+      fs.writeFileSync(staged, buffer);
+    }
+    if (m.status !== STATUS.OFFLINE) throw Object.assign(new Error('Server started during update.'), { status: 409 });
+    const db = require('./lib/db.cjs').open();
+    const insertDecision = db.prepare('INSERT OR REPLACE INTO modpack_conflict_decisions VALUES (?,?,?,?)');
+    for (const [relativePath, decision] of Object.entries(decisions)) insertDecision.run(operation.id, relativePath, decision, req.user.id);
+    for (const entry of plan.entries) {
+      const takePack = entry.state !== 'local_edit' && (entry.state !== 'conflict' || decisions[entry.relativePath] === 'take_pack');
+      if (!takePack) continue;
+      const dest = mrpackSafeResolve(m.dir(), entry.relativePath);
+      const staged = mrpackSafeResolve(staging, entry.relativePath);
+      if (incoming.has(entry.relativePath)) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.renameSync(staged, dest);
+      } else if (entry.state === 'safe_removal' && fs.existsSync(dest)) fs.unlinkSync(dest);
+    }
+    const owned = pack.files.filter((f) => {
+      const e = plan.entries.find((x) => x.relativePath === f.relativePath);
+      return e && e.state !== 'local_edit' && (e.state !== 'conflict' || decisions[e.relativePath] === 'take_pack');
+    });
+    const manifest = modpackLifecycle.persistManifest({ serverId: m.id, projectId: loaded.data.projectId, versionId: loaded.data.versionId, mcVersion: loaded.data.mcVersion, loader: loaded.data.loader, operationId: operation.id, snapshotId: snapshot.id, previousManifestId: previous?.id || null }, owned);
+    fs.rmSync(staging, { recursive: true, force: true });
+    foundationOperations.finish(operation.id, { manifestId: manifest.id });
+    res.status(202).json({ ok: true, operationId: operation.id, manifestId: manifest.id });
+  } catch (err) {
+    foundationOperations.fail(operation.id, { code: 'modpack_apply_failed', text: err.message });
+    res.status(err.status || 500).json({ error: err.message, operationId: operation.id });
+  }
+}
+
+app.post('/api/modpacks/import/preview', (req, res) => lifecyclePreview(req, res, 'import'));
+app.post('/api/modpacks/import', (req, res) => lifecycleApply(req, res, 'import'));
+app.get('/api/modpacks/installed', async (req, res) => {
+  const m = targetManager(req);
+  if (!m) return res.status(400).json({ error: 'No active server.' });
+  const installed = modpackLifecycle.latest(m.id);
+  const history = modpackLifecycle.history(m.id);
+  const records = installed ? [installed, ...history] : history;
+  const metadata = new Map();
+  await Promise.all(records.map(async (record) => {
+    const key = `${record.project_id}:${record.version_id}`;
+    if (metadata.has(key)) return;
+    try {
+      const [projectResponse, versionResponse] = await Promise.all([
+        fetch(`${MODRINTH}/project/${encodeURIComponent(record.project_id)}`, { headers: { 'User-Agent': UA } }),
+        fetch(`${MODRINTH}/version/${encodeURIComponent(record.version_id)}`, { headers: { 'User-Agent': UA } }),
+      ]);
+      if (!projectResponse.ok || !versionResponse.ok) return;
+      const [project, version] = await Promise.all([projectResponse.json(), versionResponse.json()]);
+      metadata.set(key, {
+        projectName: project.title || project.slug,
+        projectSlug: project.slug,
+        iconUrl: project.icon_url || null,
+        versionName: version.name || version.version_number,
+        versionNumber: version.version_number,
+      });
+    } catch (_) { /* Stored identifiers remain available when Modrinth is unavailable. */ }
+  }));
+  const enrich = (record) => record ? {
+    ...record,
+    file_count: record.file_count ?? record.files?.length ?? 0,
+    ...(metadata.get(`${record.project_id}:${record.version_id}`) || {}),
+  } : null;
+  res.json({ installed: enrich(installed), history: history.map(enrich) });
+});
+app.post('/api/modpacks/update/preview', (req, res) => lifecyclePreview(req, res, 'update'));
+app.post('/api/modpacks/update', (req, res) => lifecycleApply(req, res, 'update'));
+
+app.post('/api/modpacks/clone', (req, res) => {
+  const body = req.body || {};
+  const source = targetManager(req);
+  const name = String(body.name || '').trim();
+  const parentDir = String(body.parentDir || '').trim();
+  if (!source || !source.dir()) return res.status(400).json({ error: 'No active server.' });
+  if (!name || !parentDir || !fs.existsSync(parentDir)) return res.status(400).json({ error: 'A name and existing parent folder are required.' });
+  const finalDir = path.join(parentDir, slugify(name));
+  if (fs.existsSync(finalDir)) return res.status(409).json({ error: 'The clone folder already exists.' });
+  const staging = `${finalDir}.lodestone-${crypto.randomUUID()}.staging`;
+  const sourceConfig = source.desc();
+  try {
+    const worlds = sourceConfig.worlds || [];
+    function copyClone(src, dest, rel = '') {
+      fs.mkdirSync(dest, { recursive: true });
+      for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+        if (modpackLifecycle.exclusionReason(childRel, worlds)) continue;
+        const from = path.join(src, entry.name);
+        const to = path.join(dest, entry.name);
+        if (entry.isDirectory()) copyClone(from, to, childRel);
+        else if (entry.isFile()) fs.copyFileSync(from, to);
+      }
+    }
+    copyClone(source.dir(), staging);
+    fs.renameSync(staging, finalDir);
+    const entry = { ...sourceConfig, id: genId(), name, dir: finalDir, worlds: [...worlds] };
+    config.servers.push(entry);
+    saveConfig(config);
+    getManager(entry.id);
+    const prior = modpackLifecycle.latest(source.id);
+    if (prior) {
+      const files = prior.files.filter((f) => fs.existsSync(mrpackSafeResolve(finalDir, f.relative_path))).map((f) => ({ relativePath: f.relative_path, sha256: f.sha256, sizeBytes: f.size_bytes, sourceUrlHash: f.source_url_hash }));
+      modpackLifecycle.persistManifest({ serverId: entry.id, projectId: prior.project_id, versionId: prior.version_id, mcVersion: prior.mc_version, loader: prior.loader, operationId: crypto.randomUUID() }, files);
+    }
+    res.status(201).json({ ok: true, server: serverWithStatus(entry) });
+  } catch (err) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/modpacks/history/:id/rollback', (req, res) => {
+  const manifest = modpackLifecycle.getManifest(req.params.id);
+  if (!manifest || !manifest.snapshot_id) return res.status(404).json({ error: 'Rollback snapshot not found.' });
+  const m = getManager(manifest.server_id);
+  if (!m || m.status !== STATUS.OFFLINE) return res.status(409).json({ error: 'The server must be offline.' });
+  const result = foundationSnapshots.restore({ id: manifest.snapshot_id, targetDir: m.dir() });
+  if (!result.ok) return res.status(500).json({ error: 'Snapshot restore verification failed.' });
+  const op = foundationOperations.create({ kind: 'modpack-rollback', actorId: req.user.id, serverId: m.id, idempotencyKey: req.get('Idempotency-Key') || null });
+  foundationOperations.start(op.id, { phase: 'restore' });
+  foundationOperations.finish(op.id, { manifestId: manifest.id });
+  res.status(202).json({ ok: true, operationId: op.id, manifestId: manifest.id });
+});
 
 app.get('/api/modrinth/modpack/versions/:projectId', async (req, res) => {
   const m = targetManager(req);
@@ -2929,6 +3426,8 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
     const sFiles = serverSideFiles(index);
     let targetDir;
     let serverName;
+    let targetServerId;
+    let targetWorlds = [];
 
     if (mode === 'create') {
       const createName = String(body.name || spec.name || index.name || 'Modpack Server').trim();
@@ -2995,6 +3494,8 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
       if (!config.activeServerId) config.activeServerId = entry.id;
       saveConfig(config);
       getManager(entry.id);
+      targetServerId = entry.id;
+      targetWorlds = entry.worlds;
       addNotification('server_created', 'Modpack Server Created', `Server "${createName}" (${type}, MC ${mcVersion}) created from modpack.`, entry.id);
       log(`Created ${type} server "${createName}" (${mcVersion}) from modpack at ${dir}`);
     } else {
@@ -3008,11 +3509,14 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
       }
       targetDir = m.dir();
       serverName = m.name();
+      targetServerId = m.id;
+      targetWorlds = m.desc().worlds || [];
     }
 
     fs.mkdirSync(targetDir, { recursive: true });
 
     let installed = 0;
+    const managedFiles = [];
     for (const f of sFiles) {
       const url = f.downloads && f.downloads[0];
       if (!url) continue;
@@ -3026,10 +3530,27 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
       }
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, buf);
+      managedFiles.push({
+        relativePath: f.path,
+        sizeBytes: buf.length,
+        sha256: modpackLifecycle.sha256(buf),
+        sourceUrlHash: modpackLifecycle.sha256(url),
+      });
       installed++;
     }
 
     const overridesExtracted = await extractOverrides(mrpack, targetDir);
+    const trackedFiles = modpackLifecycle.validateFiles(managedFiles, targetWorlds).accepted;
+    const previous = modpackLifecycle.latest(targetServerId);
+    modpackLifecycle.persistManifest({
+      serverId: targetServerId,
+      projectId: String(version.project_id || ''),
+      versionId,
+      mcVersion: spec.mcVersion,
+      loader: spec.loaderType,
+      operationId: crypto.randomUUID(),
+      previousManifestId: previous?.id || null,
+    }, trackedFiles);
 
     log(`Modpack: installed ${installed} files + ${overridesExtracted} overrides into "${serverName}"`);
     if (mode === 'existing') {
@@ -3045,6 +3566,8 @@ app.post('/api/modrinth/modpack/install', async (req, res) => {
     res.json({
       ok: true,
       name: spec.name || version.name || '',
+      serverId: targetServerId,
+      server: config.servers.find((server) => server.id === targetServerId) || null,
       fileCount: installed,
       overrides: overridesExtracted,
       mode,

@@ -7,6 +7,10 @@ config.json
 # runtime data
 metrics.json
 
+# SQLite database and database snapshots (created by the platform foundation;
+# contains audit, operations, capability grants, etc.)
+data/
+
 # tracked child PIDs, so a restarted panel can re-attach to still-running servers
 running.json
 
@@ -24,6 +28,10 @@ Thumbs.db
 
 # one-off debug scripts with hardcoded local paths
 smoke-test.mjs
+
+# local planning notes - not part of the shipped repo
+docs/roadmap/
+FEATURE_IDEAS.txt
 
 # CodeGraph index (local build artifact)
 .codegraph/
