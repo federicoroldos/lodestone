@@ -42,6 +42,10 @@ npm start       :: node server.js
 Leave the window open while the panel runs. `Ctrl+C` stops the panel, not your Minecraft
 servers. Those keep running, so restarting the panel doesn't drop anyone who's online.
 
+Long-running file operations are tracked and recoverable. Lodestone keeps operational state,
+the audit trail and safety snapshots in a local SQLite database; no external database or
+account is required.
+
 ## What's in the panel
 
 The sidebar is grouped by what you're doing.
@@ -51,6 +55,8 @@ The sidebar is grouped by what you're doing.
 - Servers: register a folder you already have, or create a new server (it downloads the jar
   and the matching Java). Each one has Start/Stop/Restart and a Set active toggle.
 - Metrics: history graphs for the last hour, 6 hours, day or week.
+- Health: preflight checks, crash diagnostics, compatibility warnings and actionable fixes for
+  the active server.
 
 **Operate**
 - Console: live output over WebSocket, colour-coded, with a command box.
@@ -60,9 +66,10 @@ The sidebar is grouped by what you're doing.
 
 **Content**
 - Plugins: upload or delete jars.
-- Mods (Modrinth + CurseForge): search and install plugins or mods from Modrinth, with a
-  CurseForge browser alongside it. Modrinth installs check the result's loader and Minecraft
-  version against your server before writing it.
+- Mods: search Modrinth and install compatible plugins, mods or `.mrpack` modpacks. Installs
+  check the loader and Minecraft version before writing anything to the server.
+- Worlds: import, export, duplicate, rename, activate and safely delete worlds, with automatic
+  snapshots around destructive operations.
 - Files: a file manager for the active server's folder.
 - Configs: a quick editor for `server.properties`, `.yml`/`.yaml`, and Paper's config files.
   It saves a timestamped `.bak` before overwriting.
@@ -70,9 +77,11 @@ The sidebar is grouped by what you're doing.
 **Maintenance**
 - Backups: zip your worlds on demand or on a schedule, with retention and download.
 - Schedules: per-server cron jobs that run a command, restart, or back up.
+- Updates: inspect and apply supported server, plugin and mod updates with compatibility checks.
 
 **Settings**
 - Users: add, edit and remove who can log in, and set each account's role.
+- Audit: review security-relevant and administrative activity recorded by the panel.
 
 Most views act on the active server (the one highlighted on the Servers tab, and shown in the
 dropdown on the floating control dock). Set active to switch which one they target.
@@ -264,11 +273,14 @@ On Linux, open the port with your firewall tool (e.g. `sudo ufw allow 2121/tcp`)
 config.json          all settings, registered servers and users (git-ignored, has secrets)
 config.example.json  template copied on first run
 metrics.json         rolling 7-day metrics history (git-ignored)
+data/lodestone.db    operations, snapshots and audit history (git-ignored)
 server.js            Node backend: REST API, WebSocket, per-server process manager
+lib/                 backend services and route modules
 i18n.json            UI translations
 start-panel.bat      Windows launcher (installs deps, builds, then starts)
 start-panel.sh       Linux/macOS launcher (checks deps, installs, builds, then starts)
 runtimes/            managed Temurin JREs downloaded per Java major (git-ignored)
 src/                 React + Vite frontend source
 public/              built frontend served by the backend (npm run build)
+test/                Node.js test suite (npm test)
 ```

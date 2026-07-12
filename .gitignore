@@ -59,6 +59,8 @@ Thumbs.db
 .idea/
 
 # local AI assistant state and private planning artifacts
+AGENTS.md
+CLAUDE.md
 .planning/
 .claude/
 .agents/
