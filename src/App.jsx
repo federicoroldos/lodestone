@@ -12,23 +12,27 @@ import { LoginView } from '@/views/LoginView';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { ControlBar } from '@/components/layout/ControlBar';
+import { Page } from '@/components/layout/Page';
 import { FirstStartDialog } from '@/components/shared/FirstStartDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { SettingsDialog } from '@/components/shared/SettingsDialog';
 import { OnboardingTour } from '@/components/shared/OnboardingTour';
 import { DashboardView } from '@/views/DashboardView';
 import { ServersView } from '@/views/ServersView';
-import { MetricsView } from '@/views/MetricsView';
+import { HealthView } from '@/views/HealthView';
 import { ConsoleView } from '@/views/ConsoleView';
 import { PlayersView } from '@/views/PlayersView';
 import { MapView } from '@/views/MapView';
-import { PluginsView } from '@/views/PluginsView';
+import { AddonsView } from '@/views/AddonsView';
 import { ModrinthView } from '@/views/ModrinthView';
 import { FileManagerView } from '@/views/FileManagerView';
 import { ConfigsView } from '@/views/ConfigsView';
+import { WorldsView } from '@/views/WorldsView';
 import { BackupsView } from '@/views/BackupsView';
+import { UpdatesView } from '@/views/UpdatesView';
 import { TasksView } from '@/views/TasksView';
 import { UsersView } from '@/views/UsersView';
+import { AuditView } from '@/views/AuditView';
 import { viewToPath, pathToView } from '@/lib/routes';
 import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -37,19 +41,54 @@ import { cn } from '@/lib/utils';
 // Navigating into any of them while the active server has never been started
 // triggers the "Start the server first" prompt so mods/plugins install into a
 // fully generated folder tree instead of a half-empty one.
-const CONTENT_VIEWS = ['plugins', 'modrinth', 'files', 'configs'];
+const CONTENT_VIEWS = ['addons', 'modrinth', 'files', 'configs'];
 
 // Views that are meaningless without at least one registered server: every one
 // of them reads a server's status, files, or config. With zero servers they are
 // blocked (the sidebar greys them out and direct URLs bounce to Servers).
 const SERVER_REQUIRED_VIEWS = new Set([
-  'metrics', 'console', 'players', 'map',
-  'plugins', 'modrinth', 'files', 'configs',
+  'health', 'console', 'players', 'map',
+  'addons', 'modrinth', 'files', 'configs', 'worlds',
   'backups', 'tasks',
+  'updates',
 ]);
 
-// Views only admins may open.
-const ADMIN_VIEWS = new Set(['users']);
+// Views that need a capability to open. Admins always pass; everyone else is
+// bounced to the dashboard, so a typed URL cannot reach a view whose API calls
+// would all come back 403 anyway.
+const VIEW_CAPABILITIES = { users: 'users.manage', audit: 'audit.view', worlds: 'worlds.view' };
+const CONSOLE_DUPLICATE_WINDOW_MS = 1500;
+const CONSOLE_ANSI_ESCAPE_RE = /[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~])/g;
+const CONSOLE_MC_TIMESTAMP_RE = /^\[\d{2}:\d{2}:\d{2}(?:\s+\w+)?\](?:\s*\[[^\]]*\])?:\s*/;
+
+function consoleLineKey(line) {
+  return String(line?.text || '')
+    .replace(CONSOLE_ANSI_ESCAPE_RE, '')
+    .replace(/\r/g, '')
+    .replace(CONSOLE_MC_TIMESTAMP_RE, '');
+}
+
+function isRecentConsoleDuplicate(lines, line) {
+  if (!line || line.level === 'cmd') return false;
+  const timestamp = line.ts || 0;
+  const key = consoleLineKey(line);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const previous = lines[i];
+    const delta = Math.abs(timestamp - (previous.ts || 0));
+    if (delta > CONSOLE_DUPLICATE_WINDOW_MS && (previous.ts || 0) <= timestamp) break;
+    if (previous.level !== 'cmd' && consoleLineKey(previous) === key && delta <= CONSOLE_DUPLICATE_WINDOW_MS) return true;
+  }
+  return false;
+}
+
+function appendConsoleFrame(lines, line) {
+  if (isRecentConsoleDuplicate(lines, line)) return lines;
+  return [...lines, line].slice(-1200);
+}
+
+function dedupeConsoleHistory(lines) {
+  return (Array.isArray(lines) ? lines : []).reduce((result, line) => appendConsoleFrame(result, line), []);
+}
 
 function initialView() {
   return pathToView(window.location.pathname) || 'dashboard';
@@ -87,7 +126,7 @@ function markDismissed(serverId) {
 }
 
 function AppShell({ onLoggedIn }) {
-  const { token, user, setUser, isLoggedIn } = useAuth();
+  const { token, user, setUser, isLoggedIn, hasCapability } = useAuth();
   const { servers, setServers, activeServerId, setActiveServerId, getServerStatus, updateStatus, wsRef } = useServer();
   const api = useApi();
   const t = useT();
@@ -151,7 +190,7 @@ function AppShell({ onLoggedIn }) {
       return;
     }
     // Block admin-only sections for non-admins.
-    if (ADMIN_VIEWS.has(view) && user && !isAdmin) {
+    if (VIEW_CAPABILITIES[view] && user && !isAdmin && !hasCapability(VIEW_CAPABILITIES[view])) {
       setCurrentView('dashboard');
       syncUrl('dashboard', true);
       return;
@@ -171,7 +210,7 @@ function AppShell({ onLoggedIn }) {
     }
     setCurrentView(view);
     syncUrl(view, fromHistory);
-  }, [serversLoaded, servers, activeServerId, user, isAdmin, getServerStatus, syncUrl, t]);
+  }, [serversLoaded, servers, activeServerId, user, isAdmin, hasCapability, getServerStatus, syncUrl, t]);
 
   const navigate = useCallback((view) => goTo(view), [goTo]);
 
@@ -204,11 +243,11 @@ function AppShell({ onLoggedIn }) {
     if (SERVER_REQUIRED_VIEWS.has(currentView) && servers.length === 0) {
       setCurrentView('servers');
       syncUrl('servers', true);
-    } else if (ADMIN_VIEWS.has(currentView) && user && !isAdmin) {
+    } else if (VIEW_CAPABILITIES[currentView] && user && !isAdmin && !hasCapability(VIEW_CAPABILITIES[currentView])) {
       setCurrentView('dashboard');
       syncUrl('dashboard', true);
     }
-  }, [serversLoaded, servers, currentView, user, isAdmin, syncUrl]);
+  }, [serversLoaded, servers, currentView, user, isAdmin, hasCapability, syncUrl]);
 
   // Boot: load /api/me if we have a token but no user yet
   useEffect(() => {
@@ -244,11 +283,11 @@ function AppShell({ onLoggedIn }) {
   const { sendMessage } = useWebSocket({
     onLine: useCallback((msg) => {
       if (msg.serverId !== activeServerId) return;
-      setConsoleLines(prev => [...prev, msg.line].slice(-1200));
+      setConsoleLines(prev => appendConsoleFrame(prev, msg.line));
     }, [activeServerId]),
     onHistory: useCallback((msg) => {
       if (msg.serverId !== activeServerId) return;
-      setConsoleLines(msg.lines || []);
+      setConsoleLines(dedupeConsoleHistory(msg.lines));
     }, [activeServerId]),
     onStatus: useCallback((msg) => {
       if (!msg) return;
@@ -265,13 +304,18 @@ function AppShell({ onLoggedIn }) {
       if (window.__dashOnStats) window.__dashOnStats(stats);
     }, []),
     onNotification: useCallback((n) => {
-      // Live-pushed events surface as a toast; the bell keeps the full history.
-      const title = n.titleKey ? t(n.titleKey, n.titleVars) : n.title;
-      const message = n.messageKey ? t(n.messageKey, n.messageVars) : n.message;
+      // Routine mutations already show a specific success toast at their call
+      // site. Keep those events in the bell without showing them a second time.
+      const liveToastTypes = new Set(['server_crashed', 'watchdog_limit', 'watchdog_restart']);
+      if (!liveToastTypes.has(n.type)) return;
+      const serverName = servers.find((server) => server.id === n.serverId)?.name || '';
+      const fallbackKey = `notifications.${n.type}`;
+      const title = n.titleKey ? t(n.titleKey, n.titleVars) : t(`${fallbackKey}Title`, { name: serverName });
+      const message = n.messageKey ? t(n.messageKey, n.messageVars) : t(`${fallbackKey}Message`, { name: serverName });
       const opts = message ? { description: message } : undefined;
       if (n.type === 'server_crashed' || n.type === 'watchdog_limit') toast.error(title, opts);
       else toast(title, opts);
-    }, [t]),
+    }, [servers, t]),
     onConnChange: setConnState,
   });
 
@@ -345,17 +389,20 @@ function AppShell({ onLoggedIn }) {
   const views = {
     dashboard: <DashboardView active={currentView === 'dashboard'} onNavigate={navigate} />,
     servers:   <ServersView onSetActive={handleSetActive} onRefresh={loadServers} />,
-    metrics:   <MetricsView />,
+    health:    <HealthView />,
     console:   <ConsoleView lines={consoleLines} onCommand={handleCommand} />,
     players:   <PlayersView />,
     map:       <MapView />,
-    plugins:   <PluginsView />,
+    addons:    <AddonsView />,
     modrinth:  <ModrinthView />,
     files:     <FileManagerView />,
     configs:   <ConfigsView />,
+    worlds:    <WorldsView />,
     backups:   <BackupsView />,
+    updates:   <UpdatesView />,
     tasks:     <TasksView />,
     users:     <UsersView />,
+    audit:     <AuditView />,
   };
 
   const connBanner = connState === 'connecting' ? {
@@ -421,7 +468,7 @@ function AppShell({ onLoggedIn }) {
                   <Skeleton className="h-32 rounded-lg" />
                 </div>
               ) : (
-                views[currentView] || null
+                <Page>{views[currentView] || null}</Page>
               )}
             </div>
           </main>

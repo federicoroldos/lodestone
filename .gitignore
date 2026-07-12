@@ -4,8 +4,29 @@ node_modules/
 # local config - contains secrets (jwtSecret, password hashes) and machine paths
 config.json
 
+# environment files and local secrets (keep documented templates)
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+
 # runtime data
 metrics.json
+*.pid
+*.pid.lock
+*.seed
+
+# SQLite database and database snapshots (created by the platform foundation;
+# contains audit, operations, capability grants, etc.)
+data/
 
 # tracked child PIDs, so a restarted panel can re-attach to still-running servers
 running.json
@@ -15,6 +36,21 @@ runtimes/
 
 # logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# test, coverage, cache, and temporary output
+coverage/
+.nyc_output/
+.cache/
+.parcel-cache/
+.eslintcache
+*.tmp
+*.temp
+*.swp
+*.swo
 
 # OS / editor cruft
 .DS_Store
@@ -22,8 +58,20 @@ Thumbs.db
 .vscode/
 .idea/
 
+# local AI assistant state and private planning artifacts
+AGENTS.md
+CLAUDE.md
+.planning/
+.claude/
+.agents/
+.codex/
+
 # one-off debug scripts with hardcoded local paths
 smoke-test.mjs
+
+# local planning notes - not part of the shipped repo
+docs/roadmap/
+FEATURE_IDEAS.txt
 
 # CodeGraph index (local build artifact)
 .codegraph/

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Play, Square, RotateCcw, Star, Pencil, Trash2, FolderOpen, Plus, Server, Package, Search } from 'lucide-react';
 import { TableSkeleton, ModrinthResultSkeleton } from '@/components/shared/Skeletons';
+import { showModpackProgressToast } from '@/components/shared/ModpackProgressToast';
 import { cn } from '@/lib/utils';
 import { SERVER_NAME_MAX_LENGTH } from '@/lib/limits';
 
@@ -118,16 +119,31 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
     }
   }, [open, server]);
 
-  async function loadJars(dir) {
+  // Fill the form from a chosen folder: remember it, name the server after it
+  // if the user hasn't typed a name, and preselect the most likely jar.
+  function applyDir(dir, j) {
+    setForm(f => ({
+      ...f,
+      dir,
+      name: f.name || dir.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || f.name,
+      jar: j.length ? (j.find(x => /spigot|paper|server|bukkit|fabric|forge/i.test(x)) || j[0]) : f.jar,
+    }));
+    setJars(j);
+  }
+
+  async function pickFolder() {
     try {
-      const data = await api(`/api/fs?path=${encodeURIComponent(dir)}`);
-      const j = data.jars || [];
-      setJars(j);
-      if (j.length) {
-        const guess = j.find(x => /spigot|paper|server|bukkit|fabric|forge/i.test(x)) || j[0];
-        setForm(f => ({ ...f, jar: guess }));
-      }
-    } catch (_) {}
+      const data = await api(`/api/pick-folder?defaultPath=${encodeURIComponent(form.dir)}`);
+      if (!data?.path) return;
+      let j = [];
+      try {
+        const listing = await api(`/api/fs?path=${encodeURIComponent(data.path)}`);
+        j = listing.jars || [];
+      } catch (_) {}
+      applyDir(data.path, j);
+    } catch {
+      setFsOpen(true);
+    }
   }
 
   async function save() {
@@ -157,7 +173,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
               <Label>{t('servers.fieldFolder')}</Label>
               <div className="flex gap-2">
                 <Input value={form.dir} onChange={f('dir')} placeholder={t('servers.folderPlaceholder', { path: osExamplePath('server') })} className="flex-1" />
-                <Button variant="glass" size="sm" type="button" onClick={() => setFsOpen(true)}>
+                <Button variant="glass" size="sm" type="button" onClick={pickFolder}>
                   <FolderOpen className="h-3.5 w-3.5" />
                   {t('servers.browse')}
                 </Button>
@@ -210,18 +226,7 @@ function ServerModal({ open, onOpenChange, server, onSaved, servers: allServers 
         open={fsOpen}
         onOpenChange={setFsOpen}
         initial={form.dir}
-        onSelect={(dir, j) => {
-          setForm(f => ({
-            ...f,
-            dir,
-            name: f.name || dir.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || f.name,
-          }));
-          setJars(j);
-          if (j.length) {
-            const guess = j.find(x => /spigot|paper|server|bukkit|fabric|forge/i.test(x)) || j[0];
-            setForm(f => ({ ...f, jar: guess }));
-          }
-        }}
+        onSelect={(dir, j) => applyDir(dir, j || [])}
       />
     </>
   );
@@ -490,15 +495,19 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
     if (!name.trim()) { toast.error(t('modrinth.modpackCreateName')); return; }
     if (!parentDir.trim()) { toast.error(t('modrinth.modpackCreateFolder')); return; }
     setInstalling(true);
+    let progressToast;
     try {
+      progressToast = showModpackProgressToast(t);
       const r = await api('/api/modrinth/modpack/install', {
         method: 'POST',
         body: { versionId: preview.versionId, mode: 'create', name, parentDir },
       });
+      toast.dismiss(progressToast);
       toast.success(t('modrinth.modpackCreated', { name: name || r.name }));
       onOpenChange(false);
       onCreated?.();
     } catch (e) {
+      if (progressToast) toast.dismiss(progressToast);
       toast.error(e.message);
     }
     setInstalling(false);
@@ -506,8 +515,8 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
 
   return (
     <>
-    <Dialog open={open} onOpenChange={(v) => { if (!installing) onOpenChange(v); }}>
-      <DialogContent className="max-w-lg" onPointerDownOutside={(e) => { if (installing) e.preventDefault(); }} onEscapeKeyDown={(e) => { if (installing) e.preventDefault(); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>{t('servers.createFromModpack')}</DialogTitle></DialogHeader>
         <div className="px-5 py-4 space-y-4">
           {!selected ? (
@@ -622,9 +631,12 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
                     </div>
                   </div>
                   {installing && (
-                    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-secondary/30 px-3 py-2.5 text-xs text-foreground/90">
-                      <Package className="h-3.5 w-3.5 animate-pulse" />
-                      {t('modrinth.modpackProgress')}
+                    <div className="rounded-md border border-border/60 bg-secondary/30 px-3 py-2.5 text-xs text-foreground/90">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-3.5 w-3.5 animate-pulse" />
+                        {t('modrinth.modpackProgress')}
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-muted-foreground">{t('modrinth.modpackProgressBackground')}</p>
                     </div>
                   )}
                 </>
@@ -633,7 +645,7 @@ function CreateFromModpackModal({ open, onOpenChange, onCreated }) {
           )}
         </div>
         <DialogFooter>
-          <Button variant="glass" onClick={() => onOpenChange(false)} disabled={installing}>{t('common.cancel')}</Button>
+          <Button variant="glass" onClick={() => onOpenChange(false)}>{installing ? t('common.close') : t('common.cancel')}</Button>
           {selected && preview && !preview.unsupported && (
             <Button variant="default" onClick={create} disabled={installing || !name.trim() || !parentDir.trim()}>
               {installing ? t('modrinth.installing') : t('servers.createFromModpack')}

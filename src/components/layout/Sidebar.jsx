@@ -8,7 +8,9 @@ import { useT } from '@/context/I18nContext';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Server, BarChart2, Terminal, Users, User, Map,
-  Puzzle, Package, FolderOpen, FileText, Database, Clock,
+  Puzzle, Package, FolderOpen, FileText, Database, Clock, Globe2,
+  RefreshCw,
+  ShieldCheck,
   ChevronDown, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 
@@ -18,7 +20,7 @@ const NAV_GROUPS = [
     items: [
       { view: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
       { view: 'servers',   labelKey: 'nav.servers',   icon: Server },
-      { view: 'metrics',   labelKey: 'nav.metrics',   icon: BarChart2, requiresServer: true },
+      { view: 'health',    labelKey: 'nav.health',    icon: BarChart2, requiresServer: true },
     ],
   },
   {
@@ -32,15 +34,17 @@ const NAV_GROUPS = [
   {
     key: 'nav.groupContent',
     items: [
-      { view: 'plugins',  labelKey: 'nav.plugins',  icon: Puzzle, requiresServer: true },
+      { view: 'addons',   labelKey: 'nav.addons',   icon: Puzzle, requiresServer: true },
       { view: 'modrinth', labelKey: 'nav.modrinth', icon: Package, requiresServer: true },
       { view: 'files',    labelKey: 'nav.files',    icon: FolderOpen, requiresServer: true },
       { view: 'configs',  labelKey: 'nav.configs',  icon: FileText, requiresServer: true },
+      { view: 'worlds',   labelKey: 'nav.worlds',   icon: Globe2, requiresServer: true, capability: 'worlds.view' },
     ],
   },
   {
     key: 'nav.groupMaintenance',
     items: [
+      { view: 'updates', labelKey: 'nav.updates', icon: RefreshCw, requiresServer: true },
       { view: 'backups', labelKey: 'nav.backups',   icon: Database, requiresServer: true },
       { view: 'tasks',   labelKey: 'nav.schedules', icon: Clock, requiresServer: true },
     ],
@@ -48,7 +52,8 @@ const NAV_GROUPS = [
   {
     key: 'nav.groupSettings',
     items: [
-      { view: 'users', labelKey: 'nav.users', icon: User, adminOnly: true },
+      { view: 'users', labelKey: 'nav.users', icon: User, capability: 'users.manage' },
+      { view: 'audit', labelKey: 'nav.audit', icon: ShieldCheck, capability: 'audit.view' },
     ],
   },
 ];
@@ -72,7 +77,7 @@ function getInitialMode() {
 }
 
 export function Sidebar({ currentView, onNavigate }) {
-  const { user } = useAuth();
+  const { user, hasCapability } = useAuth();
   const { servers } = useServer();
   const t = useT();
   const isAdmin = user?.role === 'admin';
@@ -145,7 +150,7 @@ export function Sidebar({ currentView, onNavigate }) {
 
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((it) => !(it.adminOnly && !isAdmin));
+          const items = group.items.filter((it) => !(it.adminOnly && !isAdmin) && !(it.capability && !hasCapability(it.capability)));
           if (items.length === 0) return null;
           return (
           <div key={group.key} className="mb-1">

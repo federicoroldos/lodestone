@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-Guidance for Codex (and any AI assistant) working in this repository.
+Guidance for Claude Code (and any AI assistant) working in this repository.
 
 ## What this is
 
@@ -24,8 +24,8 @@ Default URL: `http://localhost:2121`. Node **18+** required (uses the global `fe
 
 1. **English only.** All UI text, code comments, logs, and docs are in English. The app was
    migrated from Spanish - do **not** reintroduce Spanish anywhere.
-2. **Git attribution: never co-author as Codex.** Commit and push **only** under the user's
-   identity (`Federico Roldos <fede212yt@gmail.com>`). Do **not** add `Co-Authored-By: Codex`
+2. **Git attribution: never co-author as Claude.** Commit and push **only** under the user's
+   identity (`Federico Roldos <fede212yt@gmail.com>`). Do **not** add `Co-Authored-By: Claude`
    trailers or any AI attribution to commits or PRs in this repo. (This overrides the global
    default.)
 3. **Zero-config principle.** The core app must work with **zero** user setup beyond a
@@ -100,7 +100,7 @@ There are **no tests and no linter**. "Verify" means: start the panel, open
 | Active-server control | `GET /status`, `POST /server/{start,stop,restart}`, `POST /command` |
 | Players | `GET /players`, `POST /players/:action`, `GET /playerlists`, `POST /whitelist/toggle`, `POST /playerlists/:kind/:op` |
 | Metrics | `GET /metrics?serverId=&range=` |
-| Plugins | `GET /plugins`, `POST /plugins/upload`, `DELETE /plugins/:name` |
+| Addons (plugins + mods) | `GET /addons?kind=`, `POST /addons/upload?kind=`, `DELETE /addons/:name?kind=` (`kind` = `plugins` \| `mods`) |
 | Configs editor | `GET /configs`, `GET/PUT /configs/:name` |
 | File manager | `GET /files`, `GET /files/read`, `PUT /files/write`, `POST /files/{mkdir,rename,upload}`, `DELETE /files`, `GET /files/download` |
 | Backups | `GET/POST /backups`, `DELETE /backups/:name`, `GET /backups/:name/download` |
@@ -115,7 +115,7 @@ Edit the React source under `src/`, never the built `public/assets/*` (see "Run 
 
 - **`src/main.jsx` / `src/App.jsx`** bootstrap the SPA and route between views via the sidebar.
   One file per view in **`src/views/*`** (`DashboardView, ServersView, MetricsView, ConsoleView,
-  PlayersView, MapView, PluginsView, ModrinthView, FileManagerView, ConfigsView, BackupsView,
+  PlayersView, MapView, AddonsView, ModrinthView, FileManagerView, ConfigsView, BackupsView,
   TasksView (Schedules), UsersView, LoginView`).
 - **State/context** lives in `src/context/*` (`AuthContext`, `ServerContext`, `I18nContext`)
   and **`src/hooks/*`** (`useApi`, `useApiStream`, `useWebSocket`): the token sits in
@@ -191,6 +191,6 @@ version scheme, mirror the algorithm the project's own site/API uses rather than
 ## User memory
 
 Persistent notes live in
-`C:\Users\fedew\.Codex\projects\C--Users-fedew-Desktop-Minecraft-Server-Dashboard\memory\`
+`C:\Users\fedew\.claude\projects\C--Users-fedew-Desktop-Minecraft-Server-Dashboard\memory\`
 (`MEMORY.md` is the index). Check it for standing decisions; the rules in this file
 (English-only, git attribution, zero-config) mirror what's recorded there.
