@@ -1,4 +1,8 @@
-# Lodestone
+# Lodestone (Archived)
+
+> **This project is no longer maintained here.** It was merged into
+> **[Riloox/hostkind-open](https://github.com/Riloox/hostkind-open)**, where development continues.
+> This repository is archived and kept for history; the docs below describe the last version.
 
 A web panel for running Minecraft servers on Windows, Linux or macOS. It's one Node.js
 process that serves a REST API, a WebSocket, and a single-page UI. You point it at a server
